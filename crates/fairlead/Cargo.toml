@@ -1,0 +1,19 @@
+[package]
+name = "fairlead"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description.workspace = true
+readme = "../../README.md"
+keywords = ["agents", "ci", "testing", "guardrails", "hooks"]
+categories = ["command-line-utilities", "development-tools"]
+
+[[bin]]
+name = "fairlead"
+path = "src/main.rs"
+
+[dependencies]
+clap = { version = "4", features = ["derive"] }
