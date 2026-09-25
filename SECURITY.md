@@ -11,8 +11,9 @@ Please do not open a public issue. You'll get an answer within a few days.
 - Release artifacts carry checksums and GitHub build attestations, and the
   installer verifies the checksum.
 - Publishing to npm uses npm trusted publishing: npm accepts a publish only
-  from `publish-npm.yml` running in the `release` environment, so there is no
-  npm token to leak, and each version carries a provenance attestation. That
+  from `release.yml` (which calls `publish-npm.yml`) in the `release`
+  environment, so there is no npm token to leak, and each version carries a
+  provenance attestation. That
   environment requires a maintainer's approval. The GitHub Release is created
   before the approval, so the tag is its gate: rulesets let only admins create
   `v*` tags and nobody move or delete one.
