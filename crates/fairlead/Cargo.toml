@@ -17,3 +17,6 @@ path = "src/main.rs"
 
 [dependencies]
 clap = { version = "4", features = ["derive"] }
+fairlead-core = { version = "0.1.0", path = "../fairlead-core" }
+serde_json = "1.0.151"
+toml = "1.1.6"
