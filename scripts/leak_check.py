@@ -9,6 +9,7 @@ only the file and line: CI logs on a public repository are public too.
     python3 scripts/leak_check.py --add      # append names read from stdin
 """
 import hashlib
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -58,6 +59,8 @@ def hits(data: bytes, by_length: dict[int, set[str]]) -> list[int]:
 
 def check() -> int:
     by_length = load(DENYLIST.read_text())
+    if not by_length:
+        print(f"leak-check: {DENYLIST} has no entries; nothing was checked", file=sys.stderr)
     tracked = subprocess.run(["git", "ls-files", "-z"], capture_output=True, check=True).stdout
     failed = False
     for name in filter(None, tracked.decode().split("\0")):
@@ -82,4 +85,6 @@ def add() -> int:
 
 
 if __name__ == "__main__":
+    root = subprocess.run(["git", "rev-parse", "--show-toplevel"], capture_output=True, text=True, check=True)
+    os.chdir(root.stdout.strip())
     sys.exit(add() if sys.argv[1:] == ["--add"] else check())

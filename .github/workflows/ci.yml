@@ -83,6 +83,8 @@ jobs:
         with:
           persist-credentials: false
       - name: release.yml is exactly what dist generates
+        shell: bash
         run: |
+          set -euo pipefail
           curl --proto '=https' --tlsv1.2 -LsSf https://github.com/axodotdev/cargo-dist/releases/download/v0.32.0/cargo-dist-installer.sh | sh
           dist generate --check

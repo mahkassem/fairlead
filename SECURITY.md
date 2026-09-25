@@ -10,10 +10,11 @@ Please do not open a public issue. You'll get an answer within a few days.
 
 - Release artifacts carry checksums and GitHub build attestations, and the
   installer verifies the checksum.
-- Publishing to npm runs in the `release` environment, which requires a
-  maintainer's approval and is the only place the npm token lives. The GitHub
-  Release itself is created before that approval, so the tag is the gate for
-  it: a ruleset lets only maintainers create, move or delete `v*` tags, once
+- Publishing to npm runs in the `release` environment, the only place the
+  npm token lives; once the repository settings give that environment a
+  required reviewer, nothing reaches npm without a maintainer's approval. The
+  GitHub Release itself is created before that approval, so the tag is its
+  gate: a ruleset lets only maintainers create, move or delete `v*` tags, once
   the repository settings enable it.
 - CI checks every workflow with zizmor, keeps `release.yml` identical to what
   `dist` generates, audits dependencies with `cargo deny`, and scans for
