@@ -1,0 +1,49 @@
+# Run by hand. Finds out whether this workflow's token can read other public
+# repositories' failed runs, annotations and job logs, which replay needs, and
+# keeps short failure-line excerpts as extractor fixtures.
+name: log-probe
+
+on:
+  workflow_dispatch:
+    inputs:
+      repos:
+        description: Public repositories, owner/name, space-separated
+        default: "Effect-TS/effect pnpm/pnpm vitest-dev/vitest"
+        required: false
+      count:
+        description: Failed pull request runs to list per repository (1 to 50)
+        default: "10"
+        required: false
+
+permissions: {}
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+    env:
+      REPOS: ${{ inputs.repos }}
+      COUNT: ${{ inputs.count }}
+      BENCH_TOKEN: ${{ secrets.BENCH_READ_TOKEN }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: With the workflow token
+        env:
+          GH_TOKEN: ${{ github.token }}
+          OUT: out/workflow-token
+        run: python3 scripts/probe_logs.py
+      - name: With the read-only token, if one is set
+        if: env.BENCH_TOKEN != ''
+        env:
+          GH_TOKEN: ${{ env.BENCH_TOKEN }}
+          OUT: out/read-token
+        run: python3 scripts/probe_logs.py
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: log-probe
+          path: out/
+          retention-days: 7
+          if-no-files-found: ignore
