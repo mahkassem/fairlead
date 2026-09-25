@@ -15,8 +15,9 @@ targets = ["aarch64-apple-darwin", "aarch64-unknown-linux-gnu", "x86_64-apple-da
 install-path = "CARGO_HOME"
 # Whether to install an updater program
 install-updater = false
-# Publish the npm installer package on release (needs the NPM_TOKEN secret)
-publish-jobs = ["npm"]
+# Publish the npm package through .github/workflows/publish-npm.yml, which
+# runs in the approval-gated `release` environment that holds NPM_TOKEN
+publish-jobs = ["./publish-npm"]
 # Attest every build artifact with GitHub's build provenance
 github-attestations = true
 # Plan (don't build) on pull requests
