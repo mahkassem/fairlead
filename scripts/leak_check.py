@@ -112,8 +112,8 @@ def add() -> int:
 
 
 if __name__ == "__main__":
-    root = subprocess.run(["git", "rev-parse", "--show-toplevel"], capture_output=True, text=True, check=True)
-    os.chdir(root.stdout.strip())
+    # The script's own checkout, not the caller's directory, so --text works anywhere.
+    os.chdir(Path(__file__).resolve().parent.parent)
     args = sys.argv[1:]
     if args == ["--add"]:
         sys.exit(add())
