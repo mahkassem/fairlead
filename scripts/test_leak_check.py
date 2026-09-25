@@ -33,9 +33,10 @@ class LeakCheck(unittest.TestCase):
         self.assertNotIn("example", entry(ANY_NAME))
         self.assertTrue(entry(ANY_NAME).startswith("14:"))
 
-    def test_event_text_reads_titles_and_bodies_of_every_kind(self):
+    def test_event_text_reads_every_kind_and_skips_empty_bodies(self):
         event = {
             "issue": {"title": "a title", "body": "an issue body", "number": 1},
+            "pull_request": {"title": "a pull request", "body": 0},
             "comment": {"body": "a comment"},
             "review": {"body": None},
         }
@@ -46,7 +47,15 @@ class LeakCheck(unittest.TestCase):
                 found = dict(event_text())
         finally:
             os.unlink(f.name)
-        self.assertEqual(found, {"issue title": b"a title", "issue body": b"an issue body", "comment body": b"a comment"})
+        self.assertEqual(
+            found,
+            {
+                "issue title": b"a title",
+                "issue body": b"an issue body",
+                "pull_request title": b"a pull request",
+                "comment body": b"a comment",
+            },
+        )
 
 
 if __name__ == "__main__":

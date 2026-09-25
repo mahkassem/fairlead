@@ -82,7 +82,10 @@ def tracked_files() -> list[tuple[str, bytes]]:
 
 def event_text() -> list[tuple[str, bytes]]:
     event = json.loads(Path(os.environ["GITHUB_EVENT_PATH"]).read_text())
-    fields = [(kind, part) for kind in ("issue", "pull_request", "comment", "review") for part in ("title", "body")]
+    kinds = ("issue", "pull_request", "comment", "review")
+    if not any(isinstance(event.get(kind), dict) for kind in kinds):
+        print("leak-check: the event carries no issue, pull request, comment or review", file=sys.stderr)
+    fields = [(kind, part) for kind in kinds for part in ("title", "body")]
     return [
         (f"{kind} {part}", str(event[kind][part]).encode())
         for kind, part in fields

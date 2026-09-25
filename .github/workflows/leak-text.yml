@@ -1,6 +1,7 @@
 # Runs the leak check over public text: issue, pull request, review and
 # comment titles and bodies when posted or edited, and a pull request's commit
-# messages. Only the location of a hit is printed, never the text.
+# messages. Only the location of a hit is printed, never the text; a hit also
+# labels the issue or pull request, since a failed run notifies only its actor.
 name: leak-text
 
 on:
@@ -26,10 +27,28 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-          fetch-depth: 0
+          fetch-depth: ${{ github.event_name == 'pull_request' && '0' || '1' }}
       - run: python3 scripts/leak_check.py --event
       - if: github.event_name == 'pull_request'
         env:
           BASE: ${{ github.event.pull_request.base.sha }}
           HEAD: ${{ github.event.pull_request.head.sha }}
         run: python3 scripts/leak_check.py --commits "$BASE" "$HEAD"
+
+  flag:
+    needs: text
+    if: failure()
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+      pull-requests: write
+    steps:
+      # A fork's token is read-only, so labelling may fail; the failed check stays.
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          NUMBER: ${{ github.event.issue.number || github.event.pull_request.number }}
+        run: |
+          gh label create private-name --repo "$REPO" --color B60205 \
+            --description "Names a private project; see the leak-text run" --force || true
+          gh issue edit "$NUMBER" --repo "$REPO" --add-label private-name || true
