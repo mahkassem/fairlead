@@ -85,8 +85,10 @@ fn error(source: &str, key: Option<String>, message: impl Into<String>) -> Confi
     }
 }
 
-/// The nearest directory holding a project file, walking up from `start`.
-/// Two project files in one directory is an error.
+/// The nearest directory holding a project file, walking up from `start`
+/// and stopping at the repository root (the first directory with `.git`),
+/// so a config outside the repository is never read. Two project files in
+/// one directory is an error.
 pub fn find_config(start: &Path) -> Result<Option<PathBuf>, ConfigError> {
     for dir in start.ancestors() {
         let found: Vec<PathBuf> = PROJECT_NAMES
@@ -95,6 +97,7 @@ pub fn find_config(start: &Path) -> Result<Option<PathBuf>, ConfigError> {
             .filter(|p| p.is_file())
             .collect();
         match found.len() {
+            0 if dir.join(".git").exists() => return Ok(None),
             0 => continue,
             1 => return Ok(found.into_iter().next()),
             _ => {
@@ -135,7 +138,9 @@ pub fn load(start: &Path, opts: &LoadOptions) -> Result<Loaded, ConfigError> {
             files.push(path);
         }
     }
-    for (name, raw) in &opts.env {
+    let mut env: Vec<&(String, String)> = opts.env.iter().collect();
+    env.sort();
+    for (name, raw) in env {
         if let Some(key) = env_key(name) {
             layers.push((format!("env {name}"), nested(&key, parse_scalar(raw))));
         }
@@ -224,11 +229,13 @@ fn env_key(name: &str) -> Option<String> {
     )
 }
 
-/// A TOML literal when it parses as one (`true`, `3`, `["a"]`), else a string.
+/// A TOML boolean, number or array when it parses as one (`true`, `3`,
+/// `["a"]`), else a string; a date stays a string.
 fn parse_scalar(raw: &str) -> Value {
     toml::from_str::<toml::Table>(&format!("v = {raw}"))
         .ok()
         .and_then(|t| t.get("v").cloned())
+        .filter(|v| !matches!(v, toml::Value::Datetime(_) | toml::Value::Table(_)))
         .and_then(|v| serde_json::to_value(v).ok())
         .unwrap_or_else(|| Value::String(raw.to_string()))
 }
@@ -334,6 +341,7 @@ mod tests {
         assert_eq!(parse_scalar("30"), json!(30));
         assert_eq!(parse_scalar("[\"a\", \"b\"]"), json!(["a", "b"]));
         assert_eq!(parse_scalar("all"), json!("all"));
+        assert_eq!(parse_scalar("2024-01-01"), json!("2024-01-01"));
     }
 
     #[test]

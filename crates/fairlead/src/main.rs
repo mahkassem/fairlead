@@ -186,6 +186,7 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("fairlead-test-{name}-{}", std::process::id()));
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(dir.join("a/b")).unwrap();
+        fs::create_dir_all(dir.join(".git")).unwrap();
         dir
     }
 

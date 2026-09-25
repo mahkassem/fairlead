@@ -14,12 +14,12 @@ fairlead config schema         # JSON Schema, for editor autocomplete
 Later layers override earlier ones:
 
 1. Built-in defaults.
-2. The project file: `fairlead.toml` or `fairlead.yaml`, found by walking up from the current directory. Two in the same directory is an error.
+2. The project file: `fairlead.toml` or `fairlead.yaml`, found by walking up from the current directory, never past the repository root (the first directory holding `.git`). Two in the same directory is an error.
 3. The local file, `fairlead.local.toml` (or `.yaml`), next to the project file. Keep it out of git. It's ignored when the `CI` environment variable is set.
 4. Environment variables: `FAIRLEAD_` followed by the key path, with sections separated by a double underscore. So `FAIRLEAD_TESTS__UNREACHED=all` sets `tests.unreached`.
 5. `--set key=value`, for one run: `fairlead config show --set tests.unreached=all`.
 
-For environment variables and `--set`, a value that parses as a TOML literal (`true`, `30`, `["a", "b"]`) is used as that type; anything else is a string.
+For environment variables and `--set`, a value that parses as a TOML boolean, number or array (`true`, `30`, `["a", "b"]`) is used as that type; anything else, dates included, is a string. Environment variables apply in name order.
 
 ## Lists
 
@@ -49,7 +49,7 @@ fairlead.toml: tests.unreachd: unknown field `unreachd`, expected one of ...
 | `graph.type_imports` | `true` | Count `import type` as an edge |
 | `graph.unresolved` | `"warn"` | `warn` or `fail` on imports that don't resolve |
 | `graph.conditions` | `["import", "node", "default"]` | Package `exports` conditions, in order |
-| `tests.match` | `**/*.{test,spec}.*` | Test files |
+| `tests.match` | `**/*.{test,spec}.{ts,tsx,js,jsx,mjs,cjs,mts,cts}` | Test files |
 | `tests.exclude` | `**/node_modules/**` | Paths that are never test files |
 | `tests.unreached` | `"module"` | What a changed file nothing reaches selects: `module`, `all` or `warn` |
 | `tests.runners` | `[]` | `id`, `match`, `invoke` (`once` or `per-module`), `cwd`, `command` |
@@ -57,6 +57,7 @@ fairlead.toml: tests.unreachd: unknown field `unreachd`, expected one of ...
 | `tests.classes` | `[]` | `class` (`unit`, `own`, `demand`, `canary`) for a `match` |
 | `checks` | `[]` | Steps that aren't tests: `id`, `command`, `paths`, `modules`, `files` |
 | `plan.run_all` | lockfiles, root manifests, tsconfig, runner and CI config | A changed path matching one selects everything |
+| `replay.provider` | `"github"` | Where CI history comes from |
 | `replay.window_days` | `90` | How far back replay looks |
 | `replay.min_failures` | `30` | Failures needed before a replay result counts |
 | `replay.failures` | `[]` | `runner`, `extractor` (`vitest`, `jest`, `regex`), `job`, `pattern` |
@@ -64,4 +65,4 @@ fairlead.toml: tests.unreachd: unknown field `unreachd`, expected one of ...
 
 Commands are always argv arrays, never shell strings, and `{files}` expands to one argument per file. In `tests.runners.cwd`, `{module}` is the module's root path and `{module.id}` its id.
 
-The planner and replay that use most of these keys arrive in later 0.2 releases; `config check` validates all of them today.
+`config check` validates every key's type, the ids, placeholders and references between sections today. Checks that need the repository's files, such as every test file mapping to exactly one runner, arrive with the planner. In `tests.owners`, a placeholder used in `covers` must be captured in `match`.

@@ -25,18 +25,21 @@ fn doctor_runs_and_names_the_platform() {
 }
 
 fn fairlead_in(dir: &std::path::Path, args: &[&str]) -> std::process::Output {
-    Command::new(env!("CARGO_BIN_EXE_fairlead"))
-        .args(args)
-        .current_dir(dir)
-        .env_remove("CI")
-        .output()
-        .unwrap()
+    // A clean environment, so a developer's FAIRLEAD_* or CI variables can't leak in.
+    let mut cmd = Command::new(env!("CARGO_BIN_EXE_fairlead"));
+    cmd.args(args).current_dir(dir).env_clear();
+    for keep in ["PATH", "SYSTEMROOT"] {
+        if let Some(value) = std::env::var_os(keep) {
+            cmd.env(keep, value);
+        }
+    }
+    cmd.output().unwrap()
 }
 
 fn scratch(name: &str) -> std::path::PathBuf {
     let dir = std::env::temp_dir().join(format!("fairlead-cli-{name}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
-    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::create_dir_all(dir.join(".git")).unwrap();
     dir
 }
 

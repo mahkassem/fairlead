@@ -13,7 +13,8 @@ use serde::{Deserialize, Serialize};
 /// A list that appends to the layers below it, or replaces them when written
 /// as `{ replace = [...] }`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
-#[serde(untagged)]
+#[serde(untagged, expecting = "a list, or { replace = [...] }")]
+#[schemars(rename = "List_of_{T}")]
 pub enum List<T> {
     Items(Vec<T>),
     Replace(Replace<T>),
@@ -21,6 +22,7 @@ pub enum List<T> {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
+#[schemars(rename = "Replace_of_{T}")]
 pub struct Replace<T> {
     pub replace: Vec<T>,
 }

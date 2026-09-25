@@ -11,6 +11,8 @@ fn scratch(name: &str) -> PathBuf {
     let dir = std::env::temp_dir().join(format!("fairlead-config-{name}-{}", std::process::id()));
     let _ = fs::remove_dir_all(&dir);
     fs::create_dir_all(dir.join("nested/deeper")).unwrap();
+    // A repository root, so discovery never climbs into the temp directory's parents.
+    fs::create_dir_all(dir.join(".git")).unwrap();
     dir
 }
 
@@ -238,4 +240,37 @@ extractor = "regex"
     ] {
         assert!(keys.contains(&expected), "missing {expected} in {keys:?}");
     }
+}
+
+#[test]
+fn discovery_stops_at_the_repository_root() {
+    let outer = scratch("outside-repo");
+    fs::write(
+        outer.join("fairlead.toml"),
+        "[[checks]]\nid = \"x\"\ncommand = [\"y\"]\npaths = [\"**\"]\n",
+    )
+    .unwrap();
+    let repo = outer.join("nested");
+    fs::remove_dir_all(outer.join(".git")).unwrap();
+    fs::create_dir_all(repo.join(".git")).unwrap();
+    let loaded = load(&repo.join("deeper"), &LoadOptions::default()).unwrap();
+    assert!(
+        loaded.files.is_empty(),
+        "read {:?} from outside the repository",
+        loaded.files
+    );
+}
+
+#[test]
+fn a_value_that_should_be_a_list_says_so() {
+    let dir = repo_with(
+        "list-error",
+        &[("fairlead.toml", "[plan]\nrun_all = \"x\"\n")],
+    );
+    let err = load(&dir, &LoadOptions::default()).unwrap_err();
+    assert_eq!(err.key.as_deref(), Some("plan.run_all"));
+    assert!(
+        err.message.contains("a list, or { replace = [...] }"),
+        "{err}"
+    );
 }
