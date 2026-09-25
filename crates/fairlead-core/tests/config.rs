@@ -26,8 +26,10 @@ fn load_at(dir: &Path, opts: &LoadOptions) -> Config {
     load(dir, opts).unwrap().config
 }
 
-fn copy_fixture(name: &str, into: &str) -> PathBuf {
-    let dir = scratch(&format!("fixture-{name}").replace('.', "-"));
+/// Each test names its own directory: tests run in parallel, and a shared
+/// one gets removed under another test's feet.
+fn copy_fixture(test: &str, name: &str, into: &str) -> PathBuf {
+    let dir = scratch(test);
     fs::copy(Path::new(FIXTURES).join(name), dir.join(into)).unwrap();
     dir
 }
@@ -35,11 +37,11 @@ fn copy_fixture(name: &str, into: &str) -> PathBuf {
 #[test]
 fn toml_and_yaml_fixtures_load_to_the_same_config() {
     let toml = load_at(
-        &copy_fixture("full.toml", "fairlead.toml"),
+        &copy_fixture("same-toml", "full.toml", "fairlead.toml"),
         &LoadOptions::default(),
     );
     let yaml = load_at(
-        &copy_fixture("full.yaml", "fairlead.yaml"),
+        &copy_fixture("same-yaml", "full.yaml", "fairlead.yaml"),
         &LoadOptions::default(),
     );
     assert_eq!(toml, yaml);
@@ -52,7 +54,7 @@ fn toml_and_yaml_fixtures_load_to_the_same_config() {
 #[test]
 fn a_loaded_config_serializes_back_to_toml_and_yaml_unchanged() {
     let config = load_at(
-        &copy_fixture("full.toml", "fairlead.toml"),
+        &copy_fixture("round-trip", "full.toml", "fairlead.toml"),
         &LoadOptions::default(),
     );
     let as_toml: Config = toml::from_str(&toml::to_string(&config).unwrap()).unwrap();
@@ -65,7 +67,7 @@ fn a_loaded_config_serializes_back_to_toml_and_yaml_unchanged() {
 #[test]
 fn project_lists_append_to_defaults_and_replace_replaces() {
     let config = load_at(
-        &copy_fixture("full.toml", "fairlead.toml"),
+        &copy_fixture("lists", "full.toml", "fairlead.toml"),
         &LoadOptions::default(),
     );
     let run_all = config.plan.run_all.items();
