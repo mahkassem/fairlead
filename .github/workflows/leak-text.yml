@@ -1,0 +1,35 @@
+# Runs the leak check over public text: issue, pull request, review and
+# comment titles and bodies when posted or edited, and a pull request's commit
+# messages. Only the location of a hit is printed, never the text.
+name: leak-text
+
+on:
+  issues:
+    types: [opened, edited]
+  issue_comment:
+    types: [created, edited]
+  pull_request:
+    types: [opened, edited, reopened, synchronize]
+  pull_request_review:
+    types: [submitted, edited]
+  pull_request_review_comment:
+    types: [created, edited]
+
+permissions: {}
+
+jobs:
+  text:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - run: python3 scripts/leak_check.py --event
+      - if: github.event_name == 'pull_request'
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+        run: python3 scripts/leak_check.py --commits "$BASE" "$HEAD"
