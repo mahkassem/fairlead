@@ -57,13 +57,11 @@ def job_log(repo: str, job_id: int, token: str | None) -> tuple[int, str]:
 
 def excerpt(log: str) -> list[str]:
     lines = [TIMESTAMP.sub("", ANSI.sub("", line)) for line in log.splitlines()]
-    keep: list[str] = []
+    kept: set[int] = set()
     for i, line in enumerate(lines):
         if FAIL.search(line):
-            keep.extend(lines[i : i + 1 + LINES_AFTER_FAIL])
-        if len(keep) >= MAX_EXCERPT_LINES:
-            break
-    return keep[:MAX_EXCERPT_LINES]
+            kept.update(range(i, min(i + 1 + LINES_AFTER_FAIL, len(lines))))
+    return [lines[i] for i in sorted(kept)][:MAX_EXCERPT_LINES]
 
 
 def probe(repo: str, count: int, token: str | None, out: Path) -> list[str]:
@@ -83,14 +81,16 @@ def probe(repo: str, count: int, token: str | None, out: Path) -> list[str]:
                 target.parent.mkdir(parents=True, exist_ok=True)
                 notes_text = [f"{n.get('path')}:{n.get('start_line')}: {n.get('title') or ''}" for n in (notes or [])]
                 target.write_text("\n".join([f"# run {run['id']} job {job['id']} ({job['name']})", *notes_text, "---", *lines]) + "\n")
-            rows.append(f"| {repo} | {run['id']} | {job['name']} | annotations {a_status} ({len(notes or [])}) | log {l_status} ({len(lines)} FAIL lines) |")
+            name = job["name"].replace("|", "\\|")
+            rows.append(f"| {repo} | {run['id']} | {name} | annotations {a_status} ({len(notes or [])}) | log {l_status} ({len(lines)} FAIL lines) |")
     return rows or [f"| {repo} | no failed PR runs listed | | | |"]
 
 
 def main() -> int:
     token = os.environ.get("GH_TOKEN") or None
     repos = os.environ.get("REPOS", "").split()
-    count = int(os.environ.get("COUNT", "10"))
+    raw_count = os.environ.get("COUNT", "10")
+    count = int(raw_count) if raw_count.isdigit() else 0
     out = Path(os.environ.get("OUT", "out"))
     if not 1 <= count <= MAX_COUNT or not repos or not all(REPO.match(r) for r in repos):
         print("REPOS must be owner/name entries and COUNT 1 to 50", file=sys.stderr)

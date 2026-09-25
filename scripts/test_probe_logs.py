@@ -21,6 +21,9 @@ class Excerpt(unittest.TestCase):
             [" FAIL  src/a.test.ts > adds", "AssertionError: expected 1", "  at src/a.test.ts:3:5"],
         )
 
+    def test_overlapping_failures_keep_each_line_once(self):
+        self.assertEqual(excerpt("FAIL a\nFAIL b\nx\ny\nz"), ["FAIL a", "FAIL b", "x", "y"])
+
     def test_caps_the_excerpt(self):
         log = "\n".join(f"FAIL test/{i}.test.ts" for i in range(200))
         self.assertEqual(len(excerpt(log)), MAX_EXCERPT_LINES)
