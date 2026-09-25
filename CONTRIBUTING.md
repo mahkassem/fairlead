@@ -13,7 +13,9 @@ Thanks for helping. A few rules keep the project small and trustworthy.
   `dist-workspace.toml` to the same SHA and regenerate, or the `dist` job fails.
 - **Tests:** anything with a branch, a loop or a rule gets a test. Integration
   tests drive the built binary (`tests/`).
-- **No project-specific logic.** Fairlead must work in any repository.
+- **No project-specific logic.** Fairlead must work in any repository, so
+  issues, pull requests and commit messages stay generic too (the `leak-text`
+  workflow checks them).
   Anything specific to one project belongs in that project's `fairlead.toml`,
   never here. Fixtures are synthetic.
 - **Dependencies:** say why in the PR. Every new crate must pass `cargo deny`.

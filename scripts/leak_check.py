@@ -1,13 +1,17 @@
 #!/usr/bin/env python3
-"""Fails when a tracked file names anything on the hashed denylist.
+"""Fails when tracked files or public text name anything on the hashed denylist.
 
 The denylist holds `<length>:<sha256>` of each private name, normalized to
 ASCII [a-z0-9], so the names themselves are never published. A hit prints
-only the file and line: CI logs on a public repository are public too.
+only where it is: CI logs on a public repository are public too.
 
-    python3 scripts/leak_check.py            # check every tracked file
-    python3 scripts/leak_check.py --add      # append names read from stdin
+    python3 scripts/leak_check.py                     # every tracked file
+    python3 scripts/leak_check.py --text < draft.md   # text before posting it
+    python3 scripts/leak_check.py --event             # the GitHub event's text
+    python3 scripts/leak_check.py --commits BASE HEAD # commit messages
+    python3 scripts/leak_check.py --add               # append names from stdin
 """
+import json
 import hashlib
 import os
 import subprocess
@@ -57,21 +61,44 @@ def hits(data: bytes, by_length: dict[int, set[str]]) -> list[int]:
     return sorted(found)
 
 
-def check() -> int:
+def report(sources: list[tuple[str, bytes]]) -> int:
     by_length = load(DENYLIST.read_text())
     if not by_length:
         print(f"leak-check: {DENYLIST} has no entries; nothing was checked", file=sys.stderr)
-    tracked = subprocess.run(["git", "ls-files", "-z"], capture_output=True, check=True).stdout
     failed = False
-    for name in filter(None, tracked.decode().split("\0")):
-        path = Path(name)
-        if path == DENYLIST or not path.is_file():
-            continue
-        for line in hits(path.read_bytes(), by_length):
-            print(f"{name}:{line}: names a private project; rephrase this line", file=sys.stderr)
+    for where, data in sources:
+        for line in hits(data, by_length):
+            print(f"{where}:{line}: names a private project; rephrase this line", file=sys.stderr)
             failed = True
     print("leak-check: private names found" if failed else "leak-check: clean")
     return 1 if failed else 0
+
+
+def tracked_files() -> list[tuple[str, bytes]]:
+    listed = subprocess.run(["git", "ls-files", "-z"], capture_output=True, check=True).stdout
+    paths = (Path(n) for n in filter(None, listed.decode().split("\0")))
+    return [(str(p), p.read_bytes()) for p in paths if p != DENYLIST and p.is_file()]
+
+
+def event_text() -> list[tuple[str, bytes]]:
+    event = json.loads(Path(os.environ["GITHUB_EVENT_PATH"]).read_text())
+    kinds = ("issue", "pull_request", "comment", "review")
+    if not any(isinstance(event.get(kind), dict) for kind in kinds):
+        print("leak-check: the event carries no issue, pull request, comment or review", file=sys.stderr)
+    fields = [(kind, part) for kind in kinds for part in ("title", "body")]
+    return [
+        (f"{kind} {part}", str(event[kind][part]).encode())
+        for kind, part in fields
+        if isinstance(event.get(kind), dict) and event[kind].get(part)
+    ]
+
+
+def commit_messages(base: str, head: str) -> list[tuple[str, bytes]]:
+    shas = subprocess.run(["git", "rev-list", f"{base}..{head}"], capture_output=True, text=True, check=True)
+    return [
+        (f"commit {sha[:7]}", subprocess.run(["git", "log", "-1", "--format=%B", sha], capture_output=True, check=True).stdout)
+        for sha in shas.stdout.split()
+    ]
 
 
 def add() -> int:
@@ -87,4 +114,13 @@ def add() -> int:
 if __name__ == "__main__":
     root = subprocess.run(["git", "rev-parse", "--show-toplevel"], capture_output=True, text=True, check=True)
     os.chdir(root.stdout.strip())
-    sys.exit(add() if sys.argv[1:] == ["--add"] else check())
+    args = sys.argv[1:]
+    if args == ["--add"]:
+        sys.exit(add())
+    if args == ["--text"]:
+        sys.exit(report([("text", sys.stdin.buffer.read())]))
+    if args == ["--event"]:
+        sys.exit(report(event_text()))
+    if len(args) == 3 and args[0] == "--commits":
+        sys.exit(report(commit_messages(args[1], args[2])))
+    sys.exit(report(tracked_files()))
