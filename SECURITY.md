@@ -10,6 +10,6 @@ Please do not open a public issue. You'll get an answer within a few days.
 
 - Release artifacts carry checksums and GitHub build attestations, and the
   installer verifies the checksum.
-- Releases run from a protected environment that requires approval.
+- Only maintainers can push the version tags that start a release.
 - Pin the GitHub Action by commit SHA in production workflows.
 - Fairlead never sends data anywhere unless a project configures it to.

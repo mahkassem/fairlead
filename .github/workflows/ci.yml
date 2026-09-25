@@ -46,6 +46,8 @@ jobs:
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
       - run: sh scripts/leak-check.sh
+        env:
+          LEAK_DENYLIST: ${{ vars.LEAK_DENYLIST }}
 
   docs:
     runs-on: ubuntu-latest
