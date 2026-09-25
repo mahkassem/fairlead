@@ -1,0 +1,22 @@
+# New releases wait a week before a pull request, so a compromised one is
+# usually pulled before it reaches us.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    groups:
+      actions:
+        patterns: ["*"]
+  - package-ecosystem: cargo
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    groups:
+      crates:
+        patterns: ["*"]

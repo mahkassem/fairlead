@@ -1,0 +1,7 @@
+# <length>:<sha256> of each private name, lowercased and stripped to [a-z0-9].
+# Append with `python3 scripts/leak_check.py --add` and the names on stdin.
+10:38bcdb5858eb6399e5dcca3abf313145bccf8e4cf49b363e1e8395c753b5915d
+14:53d44644667ba8fe30fe1ad1e84d18d39f8f0409f5697089b8d1cbd935db2415
+11:1612de8ea0ee8d3de45fd683994ff153a23b16360a9fe2af685c83bc93856ece
+10:175051ff831a60612541a910ed53a45c54fd08bca6285787bd6b5be9988c1777
+10:dc28504e0fe73c957f7549dc99e3624dfb34a58d72ba9db0f38d98c398e01a42
