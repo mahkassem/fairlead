@@ -1,0 +1,33 @@
+name: Fairlead
+description: Install Fairlead and run one of its commands.
+branding:
+  icon: anchor
+  color: blue
+inputs:
+  command:
+    description: The fairlead arguments to run, for example `doctor` or `ci plan`.
+    required: false
+    default: doctor
+  version:
+    description: A release tag such as v0.1.0, or `latest`.
+    required: false
+    default: latest
+runs:
+  using: composite
+  steps:
+    - name: Install fairlead
+      shell: bash
+      env:
+        FAIRLEAD_VERSION: ${{ inputs.version }}
+      run: |
+        set -euo pipefail
+        if [ "$FAIRLEAD_VERSION" = "latest" ]; then base="https://github.com/mahkassem/fairlead/releases/latest/download"
+        else base="https://github.com/mahkassem/fairlead/releases/download/$FAIRLEAD_VERSION"; fi
+        curl -fsSL "$base/fairlead-installer.sh" | sh
+        echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+    - name: Run fairlead
+      shell: bash
+      env:
+        FAIRLEAD_ARGS: ${{ inputs.command }}
+      # Word-split on purpose; the value is never re-evaluated by the shell.
+      run: fairlead $FAIRLEAD_ARGS

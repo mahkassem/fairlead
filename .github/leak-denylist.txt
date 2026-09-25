@@ -1,0 +1,8 @@
+# One case-insensitive extended regex per line. Fairlead's code, docs and
+# fixtures must never name a private project, company domain or data store.
+vastpeople
+vast-people
+vast_attendance
+vastgroupsa
+@vast/domain
+timedoctor

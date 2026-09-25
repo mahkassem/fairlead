@@ -1,0 +1,22 @@
+[workspace]
+resolver = "2"
+members = ["crates/fairlead"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.85"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/mahkassem/fairlead"
+homepage = "https://github.com/mahkassem/fairlead"
+description = "Guardrails and a guided path for coding agents: rules enforced as the agent works, tests scoped to what a change can reach, capped project memory, and KPIs."
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = true
+
+# The profile that 'dist' will build with
+[profile.dist]
+inherits = "release"
+lto = "thin"
