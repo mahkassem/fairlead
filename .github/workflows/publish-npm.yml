@@ -1,6 +1,6 @@
 # Called by release.yml (dist's custom publish job). The `release`
-# environment holds NPM_TOKEN and requires a reviewer, so nothing reaches npm
-# until the owner approves the run.
+# environment requires a reviewer. npm trusted publishing checks the calling
+# workflow, so npm's trust config names release.yml and this environment.
 name: publish-npm
 
 on:
@@ -16,8 +16,12 @@ jobs:
   publish:
     runs-on: ubuntu-22.04
     environment: release
+    permissions:
+      id-token: write
     env:
       PLAN: ${{ inputs.plan }}
+      # Trusted publishing needs npm 11.5.1 or later.
+      NPM_VERSION: "11.20.0"
     steps:
       - name: Fetch npm packages
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
@@ -25,14 +29,12 @@ jobs:
           pattern: artifacts-*
           path: npm/
           merge-multiple: true
-      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: "22.x"
-          registry-url: "https://registry.npmjs.org"
+          node-version: "24.x"
+      - run: npm install --global "npm@${NPM_VERSION}"
       - run: |
           for release in $(echo "$PLAN" | jq --compact-output '.releases[] | select([.artifacts[] | endswith("-npm-package.tar.gz")] | any)'); do
             pkg=$(echo "$release" | jq '.artifacts[] | select(endswith("-npm-package.tar.gz"))' --raw-output)
             npm publish --access public "./npm/${pkg}"
           done
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
