@@ -33,7 +33,7 @@ from = "apps/api/test/api/{area}{,-*}.test.ts"
 to = ["apps/api/src/{area}/**"]
 ```
 
-Each file matching `from` depends on every file its `to` globs match. A `{name}` stands for one path segment, with the same value on both sides, so `orders.test.ts` and `orders-refunds.test.ts` depend on `src/orders/`. Its value is read from the side where it's a whole segment: `{area}*` alone would also take `orders-refunds` as the name. `config check` refuses a `{name}` that is never a whole segment, or that only one side uses. `graph stats` counts rule edges, and names any rule that linked no file.
+Each file matching `from` depends on every file its `to` globs match. A `{name}` stands for one path segment, with the same value on both sides, so `orders.test.ts` and `orders-refunds.test.ts` depend on `src/orders/`. Its value is read from the side where it's a whole segment: `{area}*` alone would also take `orders-refunds` as the name. `config check` refuses a `{name}` that is never a whole segment, or a `to` glob that names different ones than `from` (a `to` with none links to the same files for every match). `graph stats` counts rule edges, and names any rule that linked no file.
 
 ## Barriers
 

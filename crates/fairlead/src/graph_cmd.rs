@@ -92,7 +92,7 @@ fn stats(scan: &Scan, seconds: f64, json: bool, cache_off: &str) -> ExitCode {
             "files": s.files, "sources": sources, "edges": s.edges, "edges_by_kind": by_kind,
             "package_edges": s.package_edges, "packages": s.packages, "unresolved": s.unresolved,
             "unknown_dynamic": s.unknown, "tsconfig_fallbacks": s.tsconfig_fallbacks, "seconds": seconds,
-            "rules": { "edges": scan.rules.edges, "unmatched": scan.rules.unmatched, "barrier": scan.graph.barrier.len() },
+            "rules": { "edges": scan.rules.edges, "unmatched": scan.rules.unmatched, "large": scan.rules.large, "barrier": scan.graph.barrier.len() },
             "cache": { "enabled": scan.cache.enabled, "hits": scan.cache.hits, "misses": scan.cache.misses },
         });
         println!(
@@ -158,11 +158,12 @@ fn why(scan: &Scan, from: &str, to: &str) -> ExitCode {
     };
     match scan.graph.why(a, b) {
         Some(chain) => {
-            // The planner walks from `to` towards `from`, and stops at a barrier
-            // before going past it, so any barrier but `from` itself cuts the chain.
+            // The planner walks from `to` towards `from` and stops at the first
+            // barrier it meets, so any barrier but `from` itself cuts the chain.
             let stop = chain
                 .iter()
                 .skip(1)
+                .rev()
                 .find(|(f, _)| scan.graph.id(f).is_some_and(|id| scan.graph.is_barrier(id)));
             for (i, (file, kind)) in chain.iter().enumerate() {
                 let via = kind

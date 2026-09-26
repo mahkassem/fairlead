@@ -37,8 +37,8 @@ fn dependencies(scan: &Scan, id: u32) -> HashMap<u32, u32> {
     seen
 }
 
-/// The first barrier on the way from `test` to `changed`, other than `test`:
-/// the file where the planner's walk stops before reaching the test.
+/// The first barrier on the way from `changed` to `test`, other than `test`:
+/// the file where the planner's walk, which starts at the change, stops.
 fn barrier_between(scan: &Scan, deps: &HashMap<u32, u32>, test: u32, changed: u32) -> Option<u32> {
     let mut path = vec![changed];
     let mut at = changed;
@@ -46,10 +46,8 @@ fn barrier_between(scan: &Scan, deps: &HashMap<u32, u32>, test: u32, changed: u3
         at = *deps.get(&at)?;
         path.push(at);
     }
-    path.into_iter()
-        .rev()
-        .skip(1)
-        .find(|&f| scan.graph.is_barrier(f))
+    path.pop();
+    path.into_iter().find(|&f| scan.graph.is_barrier(f))
 }
 
 pub fn explain(plan: &Plan, scan: &Scan, config: &Config, target: &str) -> Result<String, String> {
