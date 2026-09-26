@@ -475,6 +475,15 @@ fn an_owner_rule_can_take_a_run_all_path_it_covers() {
         "a rule that claims no test for the path doesn't take it"
     );
 
+    let demand = config(&format!(
+        "{VITEST}\n{rule}overrides_run_all = true\n[[tests.classes]]\nclass = \"demand\"\nmatch = [\"test/cli/**\"]\n"
+    ));
+    let only_demand = run(&dir, &demand, vec![modified("test/cli/vitest.config.ts")]);
+    assert!(
+        only_demand.all,
+        "a claim on demand tests alone selects nothing, so it doesn't take the path"
+    );
+
     let root = run(&dir, &cfg, vec![modified("vitest.config.ts")]);
     assert!(
         root.all,

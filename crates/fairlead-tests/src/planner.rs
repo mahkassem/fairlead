@@ -4,7 +4,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use fairlead_core::config::{Config, LockfileMode, Unresolved};
+use fairlead_core::config::{Config, LockfileMode, TestClass, Unresolved};
 use fairlead_core::plan::{Change, Plan, Reason, Status, Warning, VERSION};
 use fairlead_lang::deleted::attach_deleted;
 use fairlead_lang::tree::{parent, Tree};
@@ -157,7 +157,13 @@ pub fn plan(scan: &mut Scan, config: &Config, input: Input) -> Result<Plan, Stri
         lockfile,
     };
     let run_all = patterns(config.plan.run_all.items())?;
-    let test_paths: Vec<&str> = cx.tests.iter().map(|t| t.path.as_str()).collect();
+    // Only tests a claim selects count: `demand` never runs on a claim.
+    let test_paths: Vec<&str> = cx
+        .tests
+        .iter()
+        .filter(|t| matches!(t.class, TestClass::Unit | TestClass::Own))
+        .map(|t| t.path.as_str())
+        .collect();
     let mut trigger = None;
     for path in &cx.changed {
         let scoped = cx.lockfile.is_some() && path == LOCKFILE;
