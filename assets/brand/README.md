@@ -45,5 +45,5 @@ The SVGs are the source; the PNGs are rendered from them.
 ## Where it's used
 
 - The README header (light and dark versions).
-- The documentation site's favicon and introduction page.
+- The documentation site's title bar and favicon.
 - The GitHub App that publishes the benchmarks, and the repository's social preview.
