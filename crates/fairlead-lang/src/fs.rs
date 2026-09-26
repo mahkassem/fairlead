@@ -53,7 +53,10 @@ impl WorkspaceFs {
 
     pub fn with_phantoms(mut self, root: &Path, phantoms: &[String]) -> WorkspaceFs {
         for rel in phantoms {
-            let path = root.join(rel);
+            // Segment by segment, so the separators match the resolver's paths on Windows.
+            let path = rel
+                .split('/')
+                .fold(root.to_path_buf(), |p, part| p.join(part));
             let mut dir = path.parent();
             while let Some(d) = dir.filter(|d| d.starts_with(root) && *d != root) {
                 self.phantom_dirs.insert(d.to_path_buf());
