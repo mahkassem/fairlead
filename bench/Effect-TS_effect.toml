@@ -116,3 +116,25 @@ check = "docgen"
 job = "^(Test \\(Documentation\\)|Documentation Tests)$"
 step = "^Test Documentation$"
 check = "doctest"
+
+# Database tests that time out waiting on their container or engine, on pull
+# requests that touch neither. Each entry applies only while the replay
+# confirms it: three or more pull requests, and no failure in another job.
+
+[[replay.quarantine]]
+path = "packages/sql/mysql2/test/Persistence.test.ts"
+job = "^Test \\(1/2, (Node|Deno)\\)$"
+reason = "Times out after 30 s waiting on MySQL, on changes that touch neither: failed in 13 pull requests in July, only in the first test shard. Two of them broke the build instead (a transform error, a missing import)."
+until = "2026-12-31"
+
+[[replay.quarantine]]
+path = "packages/sql/mysql2/test/KeyValueStore.test.ts"
+job = "^Test \\(2/2, (Node|Deno)\\)$"
+reason = "Its setup hook times out after 30 s waiting on MySQL: failed in 8 pull requests in July, only in the second test shard. Two of them broke the build instead (a transform error, a missing import)."
+until = "2026-12-31"
+
+[[replay.quarantine]]
+path = "packages/sql/d1/test/Resolver.test.ts"
+job = "^Test \\(2/2, Node\\)$"
+reason = "Times out after 5 s against the local D1 engine: failed in 7 pull requests in July, only in the second Node test shard."
+until = "2026-12-31"
