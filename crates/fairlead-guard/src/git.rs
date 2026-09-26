@@ -195,7 +195,7 @@ mod tests {
         std::fs::create_dir_all(base.join("repo/src/deep")).unwrap();
         std::fs::create_dir_all(base.join("wt/src")).unwrap();
         std::fs::write(base.join("wt/.git"), "gitdir: ../repo/.git/worktrees/w\n").unwrap();
-        let real = |p: &str| std::fs::canonicalize(base.join(p)).unwrap();
+        let real = |p: &str| plain(std::fs::canonicalize(base.join(p)).unwrap());
         assert_eq!(
             git_dir(&base.join("repo/src/deep")),
             Some(real("repo/.git"))
