@@ -229,13 +229,13 @@ fn env_key(name: &str) -> Option<String> {
     )
 }
 
-/// A TOML boolean, number or array when it parses as one (`true`, `3`,
-/// `["a"]`), else a string; a date stays a string.
+/// A TOML literal when it parses as one (`true`, `3`, `["a"]`,
+/// `{ replace = ["a"] }`), else a string; a date stays a string.
 fn parse_scalar(raw: &str) -> Value {
     toml::from_str::<toml::Table>(&format!("v = {raw}"))
         .ok()
         .and_then(|t| t.get("v").cloned())
-        .filter(|v| !matches!(v, toml::Value::Datetime(_) | toml::Value::Table(_)))
+        .filter(|v| !matches!(v, toml::Value::Datetime(_)))
         .and_then(|v| serde_json::to_value(v).ok())
         .unwrap_or_else(|| Value::String(raw.to_string()))
 }

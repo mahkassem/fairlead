@@ -274,3 +274,17 @@ fn a_value_that_should_be_a_list_says_so() {
         "{err}"
     );
 }
+
+#[test]
+fn a_set_can_replace_a_list() {
+    let dir = repo_with(
+        "set-replace",
+        &[("fairlead.toml", "[plan]\nrun_all = [\"ci/**\"]\n")],
+    );
+    let opts = LoadOptions {
+        sets: vec!["plan.run_all={ replace = [\"only/**\"] }".into()],
+        ..LoadOptions::default()
+    };
+    let config = load(&dir, &opts).unwrap().config;
+    assert_eq!(config.plan.run_all.items(), ["only/**".to_string()]);
+}
