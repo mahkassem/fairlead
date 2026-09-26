@@ -9,3 +9,8 @@ rules:
     ignore: [release.yml]
   unpinned-images:
     ignore: [release.yml]
+  # install-smoke.yml runs on the release workflow's completion because dist
+  # creates releases with the workflow token, which starts no `release` event.
+  # It checks nothing out, holds no permissions and checks the tag's shape.
+  dangerous-triggers:
+    ignore: [install-smoke.yml]

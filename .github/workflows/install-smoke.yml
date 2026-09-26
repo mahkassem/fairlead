@@ -1,11 +1,14 @@
-# Installs a published release through each installer on each OS and checks
-# the version it prints. Runs when a release is published, or by hand for any
-# tag. npm publishing waits for an approval, so the npm legs wait for it too.
+# Installs a released tag through each installer on each OS and checks the
+# version it prints. Runs when the release workflow finishes a tag, or by hand
+# for any tag. The release is created with the workflow token, which starts no
+# `release` event, hence `workflow_run`. npm publishing waits for an approval,
+# so the npm legs wait for the package too.
 name: install-smoke
 
 on:
-  release:
-    types: [published]
+  workflow_run:
+    workflows: [Release]
+    types: [completed]
   workflow_dispatch:
     inputs:
       tag:
@@ -17,6 +20,11 @@ permissions: {}
 jobs:
   install:
     name: ${{ matrix.installer }} (${{ matrix.os }})
+    # A tag push that released, not the release workflow's pull request plan.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.event == 'push' &&
+       github.event.workflow_run.conclusion == 'success')
     strategy:
       fail-fast: false
       matrix:
@@ -30,7 +38,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     timeout-minutes: 75
     env:
-      TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.event.release.tag_name }}
+      TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.event.workflow_run.head_branch }}
       BASE: https://github.com/mahkassem/fairlead/releases/download
     steps:
       - name: Check the tag
@@ -55,6 +63,11 @@ jobs:
         shell: bash
         run: |
           version="${TAG#v}"
+          if [[ "$version" == *-* ]]; then
+            echo "prereleases aren't published to npm"
+            echo "fairlead $version" > version.txt
+            exit 0
+          fi
           for _ in $(seq 60); do
             npm view "fairlead@$version" version >/dev/null 2>&1 && break
             echo "fairlead@$version isn't on npm yet; waiting for the publish approval"
@@ -65,4 +78,4 @@ jobs:
         shell: bash
         run: |
           version="${TAG#v}"
-          grep -qx "fairlead $version" <(tr -d '\r' < version.txt) || { echo "expected fairlead $version"; exit 1; }
+          grep -qxF "fairlead $version" <(tr -d '\r' < version.txt) || { echo "expected fairlead $version"; exit 1; }
