@@ -487,6 +487,24 @@ fn a_deleted_file_is_joined_back_to_everything_that_referred_to_it() {
         "tools/gone-cli.mjs".to_string(),
         "packages/lib/src/index.ts".to_string(),
     ];
+    let resolver = fairlead_lang::resolve::Resolver::with_phantoms(
+        &s.tree.root,
+        &s.packages,
+        &Config::default().graph,
+        &deleted,
+    );
+    let seen: Vec<String> = s
+        .graph
+        .failed
+        .iter()
+        .map(|(from, spec, _)| {
+            let file = &s.graph.files[*from as usize];
+            format!(
+                "{file} {spec} -> {:?}",
+                resolver.resolve_path(&s.tree, file, spec)
+            )
+        })
+        .collect();
     let ids = fairlead_lang::deleted::attach_deleted(&mut s, &Config::default().graph, &deleted);
     let importers = |id: u32| -> Vec<String> {
         let mut v: Vec<String> = s
@@ -498,7 +516,12 @@ fn a_deleted_file_is_joined_back_to_everything_that_referred_to_it() {
         v.sort();
         v
     };
-    assert_eq!(importers(ids[0]), ["app/alias.ts", "app/relative.ts"]);
+    assert_eq!(
+        importers(ids[0]),
+        ["app/alias.ts", "app/relative.ts"],
+        "root {:?}; failed specifiers and where they resolve with the phantoms: {seen:#?}",
+        s.tree.root
+    );
     assert_eq!(importers(ids[1]), ["app/spawn.test.ts"]);
     assert_eq!(
         importers(ids[2]),
