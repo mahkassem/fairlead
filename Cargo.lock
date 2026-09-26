@@ -343,6 +343,7 @@ version = "0.3.0"
 dependencies = [
  "clap",
  "fairlead-core",
+ "fairlead-guard",
  "fairlead-lang",
  "fairlead-replay",
  "fairlead-tests",
@@ -361,6 +362,16 @@ dependencies = [
  "serde_json",
  "serde_path_to_error",
  "toml",
+]
+
+[[package]]
+name = "fairlead-guard"
+version = "0.3.0"
+dependencies = [
+ "fairlead-core",
+ "fairlead-lang",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

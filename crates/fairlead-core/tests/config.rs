@@ -360,3 +360,27 @@ to = []
         ]
     );
 }
+
+#[test]
+fn a_guard_preset_needs_files_valid_globs_and_a_limit() {
+    let problems = |text: &str| -> Vec<String> {
+        let config: Config = toml::from_str(text).unwrap();
+        validate(&config).into_iter().map(|p| p.key).collect()
+    };
+    assert!(problems("[guard.size]\nfiles = [\"src/**\"]\nfile_lines = 1000\n").is_empty());
+    assert_eq!(
+        problems("[guard.size]\n"),
+        ["guard.size.files", "guard.size"]
+    );
+    assert_eq!(
+        problems("[guard]\nbaseline = \"\"\nexclude = [\"a{\"]\n[guard.size]\nfiles = [\"src/**\"]\nfile_lines = 0\n"),
+        ["guard.baseline", "guard.exclude[0]", "guard.size.file_lines"]
+    );
+}
+
+#[test]
+fn guard_presets_are_off_until_configured() {
+    let config: Config = toml::from_str("").unwrap();
+    assert!(config.guard.size.is_none());
+    assert_eq!(config.guard.baseline, "fairlead-baseline.json");
+}

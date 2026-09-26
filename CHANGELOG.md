@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### New
+
+- `fairlead guard check` checks the project's own rules over every tracked file, with a ratchet: `--write-baseline` records today's counts for ratcheted rules and the check fails only when one rises. `--staged` is the commit stage, failing only on findings the staged change adds, compared by what each finding is about rather than its line. The first rule is `file-length` (`[guard.size]`). `guard.findings = "all"` counts every finding in a touched file instead, and `guard.on_finding = "warn"` shows the findings without stopping the commit. Commit-stage runs are recorded in `.git/fairlead/events.jsonl`, with rule ids and timings and never file contents; `guard.events = "off"` turns that off. See [Guard rules](https://mahkassem.github.io/fairlead/docs/guard.html).
+
 ## 0.3.0 (2026-09-26)
 
 ### New
