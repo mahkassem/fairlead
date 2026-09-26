@@ -5,14 +5,18 @@
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
 
-use crate::extract::Extracted;
+use crate::extract::{self, Extracted};
 
-/// Bumped whenever extraction changes what it returns for the same bytes.
+/// Bumped when extraction code changes what it returns for the same bytes;
+/// query, limit and grammar changes are covered by `extract::fingerprint`.
 const EXTRACTOR: u32 = 1;
 const FILE: &str = "parse-cache.json";
+/// A temp file this old was left by a process that died mid-write.
+const STALE_TMP: Duration = Duration::from_secs(600);
 
 #[derive(Serialize, Deserialize)]
 struct Stored {
@@ -23,6 +27,7 @@ struct Stored {
 #[derive(Debug, Default)]
 pub struct ParseCache {
     dir: Option<PathBuf>,
+    version: String,
     entries: HashMap<String, Extracted>,
 }
 
@@ -34,7 +39,11 @@ pub struct CacheStats {
 }
 
 fn version() -> String {
-    format!("{}+{EXTRACTOR}", env!("CARGO_PKG_VERSION"))
+    format!(
+        "{}+{EXTRACTOR}+{}",
+        env!("CARGO_PKG_VERSION"),
+        extract::fingerprint()
+    )
 }
 
 /// `git hash-object` for these bytes.
@@ -72,14 +81,16 @@ impl ParseCache {
         let Some(dir) = dir_for(root) else {
             return ParseCache::disabled();
         };
+        let version = version();
         let entries = std::fs::read(dir.join(FILE))
             .ok()
             .and_then(|bytes| serde_json::from_slice::<Stored>(&bytes).ok())
-            .filter(|stored| stored.version == version())
+            .filter(|stored| stored.version == version)
             .map(|stored| stored.entries)
             .unwrap_or_default();
         ParseCache {
             dir: Some(dir),
+            version,
             entries,
         }
     }
@@ -93,13 +104,20 @@ impl ParseCache {
     }
 
     /// Writes `entries`, the ones this run used, replacing what was there so
-    /// files no longer in the tree drop out. A failed write is ignored.
+    /// files no longer in the tree drop out. Nothing is written when they're
+    /// exactly what was read, and a failed write is ignored.
     pub fn save(&self, entries: HashMap<String, Extracted>) {
         let Some(dir) = &self.dir else {
             return;
         };
+        let unchanged = entries.len() == self.entries.len()
+            && entries.keys().all(|k| self.entries.contains_key(k));
+        if unchanged {
+            return;
+        }
+        remove_stale_temps(dir);
         let stored = Stored {
-            version: version(),
+            version: self.version.clone(),
             entries,
         };
         let Ok(bytes) = serde_json::to_vec(&stored) else {
@@ -111,6 +129,25 @@ impl ParseCache {
             .and_then(|()| std::fs::rename(&tmp, dir.join(FILE)));
         if written.is_err() {
             let _ = std::fs::remove_file(&tmp);
+        }
+    }
+}
+
+fn remove_stale_temps(dir: &Path) {
+    let Ok(listing) = std::fs::read_dir(dir) else {
+        return;
+    };
+    for entry in listing.flatten() {
+        let name = entry.file_name();
+        let name = name.to_string_lossy();
+        let stale = entry
+            .metadata()
+            .and_then(|m| m.modified())
+            .ok()
+            .and_then(|t| t.elapsed().ok())
+            .is_some_and(|age| age > STALE_TMP);
+        if name.starts_with(FILE) && name.ends_with(".tmp") && stale {
+            let _ = std::fs::remove_file(entry.path());
         }
     }
 }

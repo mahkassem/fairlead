@@ -61,6 +61,14 @@ fn grammar(rel: &str) -> Option<Grammar> {
     }
 }
 
+fn language(g: Grammar) -> Language {
+    match g {
+        Grammar::TypeScript => tree_sitter_typescript::LANGUAGE_TYPESCRIPT.into(),
+        Grammar::Tsx => tree_sitter_typescript::LANGUAGE_TSX.into(),
+        Grammar::JavaScript => tree_sitter_javascript::LANGUAGE.into(),
+    }
+}
+
 fn compiled(g: Grammar) -> &'static (Language, Query) {
     static QUERIES: OnceLock<[(Language, Query); 3]> = OnceLock::new();
     let all = QUERIES.get_or_init(|| {
@@ -74,12 +82,33 @@ fn compiled(g: Grammar) -> &'static (Language, Query) {
             (language, query)
         };
         [
-            build(tree_sitter_typescript::LANGUAGE_TYPESCRIPT.into(), true),
-            build(tree_sitter_typescript::LANGUAGE_TSX.into(), true),
-            build(tree_sitter_javascript::LANGUAGE.into(), false),
+            build(language(Grammar::TypeScript), true),
+            build(language(Grammar::Tsx), true),
+            build(language(Grammar::JavaScript), false),
         ]
     });
     &all[g as usize]
+}
+
+/// What besides a file's bytes and extension decides what `extract`
+/// returns: the queries, the size limits and each grammar's shape. The
+/// parse cache is keyed on it, so none of these can serve a stale entry.
+pub fn fingerprint() -> String {
+    let mut hasher = sha1_smol::Sha1::new();
+    hasher.update(COMMON.as_bytes());
+    hasher.update(TYPESCRIPT_ONLY.as_bytes());
+    hasher.update(format!("{LEXICAL_ABOVE_BYTES}/{MAX_LITERAL_LEN}").as_bytes());
+    for g in [Grammar::TypeScript, Grammar::Tsx, Grammar::JavaScript] {
+        let language = language(g);
+        let shape = format!(
+            "/{}/{}/{}",
+            language.abi_version(),
+            language.node_kind_count(),
+            language.field_count()
+        );
+        hasher.update(shape.as_bytes());
+    }
+    hasher.digest().to_string()
 }
 
 pub fn extract(rel: &str, source: &[u8]) -> Extracted {

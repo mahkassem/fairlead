@@ -21,8 +21,14 @@ struct FileResult {
     unresolved: Vec<String>,
     unknown: bool,
     fell_back: bool,
-    /// The cache key and extraction result, and whether it was a hit.
-    parsed: Option<(String, Extracted, bool)>,
+    parsed: Option<Parsed>,
+}
+
+/// A file's extraction, with its cache key when the cache is on.
+struct Parsed {
+    extracted: Extracted,
+    key: Option<String>,
+    hit: bool,
 }
 
 pub struct Scan {
@@ -67,7 +73,12 @@ pub fn build(root: &Path, config: &Config) -> std::io::Result<Scan> {
     };
     let mut used = HashMap::new();
     for (_, result) in &mut results {
-        if let Some((key, extracted, hit)) = result.parsed.take() {
+        if let Some(Parsed {
+            extracted,
+            key: Some(key),
+            hit,
+        }) = result.parsed.take()
+        {
             if hit {
                 stats.hits += 1;
             } else {
@@ -106,14 +117,20 @@ pub fn build(root: &Path, config: &Config) -> std::io::Result<Scan> {
 }
 
 /// The file's extraction, from the cache when its bytes haven't changed.
-fn parse(cache: &ParseCache, file: &str, source: &[u8]) -> (Extracted, Option<(String, bool)>) {
+fn parse(cache: &ParseCache, file: &str, source: &[u8]) -> Parsed {
     if !cache.enabled() {
-        return (extract(file, source), None);
+        return Parsed {
+            extracted: extract(file, source),
+            key: None,
+            hit: false,
+        };
     }
     let key = cache::key(file, source);
-    match cache.get(&key) {
-        Some(hit) => (hit.clone(), Some((key, true))),
-        None => (extract(file, source), Some((key, false))),
+    let cached = cache.get(&key).cloned();
+    Parsed {
+        hit: cached.is_some(),
+        extracted: cached.unwrap_or_else(|| extract(file, source)),
+        key: Some(key),
     }
 }
 
@@ -127,7 +144,8 @@ fn scan_file(
     let Ok(source) = std::fs::read(tree.abs(file)) else {
         return FileResult::default();
     };
-    let (extracted, keyed) = parse(cache, file, &source);
+    let parsed = parse(cache, file, &source);
+    let extracted = &parsed.extracted;
     let mut result = FileResult {
         unknown: extracted.unknown_dynamic,
         ..FileResult::default()
@@ -156,7 +174,7 @@ fn scan_file(
             result.edges.push((to, EdgeKind::PathLiteral));
         }
     }
-    result.parsed = keyed.map(|(key, hit)| (key, extracted, hit));
+    result.parsed = Some(parsed);
     result
 }
 

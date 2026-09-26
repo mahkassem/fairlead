@@ -397,6 +397,16 @@ fn an_unreadable_cache_is_rebuilt_and_a_disabled_one_is_never_written() {
     assert_eq!(deps(&s, "a.ts"), vec![("b.ts".into(), EdgeKind::Import)]);
     assert_eq!(scan(&dir).cache.hits, 2, "rewritten after the bad read");
 
+    let path = dir.join(".git/fairlead/parse-cache.json");
+    let mut stored: serde_json::Value = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
+    stored["version"] = "an older build".into();
+    fs::write(&path, serde_json::to_vec(&stored).unwrap()).unwrap();
+    assert_eq!(
+        scan(&dir).cache.hits,
+        0,
+        "another version's entries aren't used"
+    );
+
     let off = repo("cache-off", &[("a.ts", "")]);
     let mut config = Config::default();
     config.graph.cache = false;

@@ -62,7 +62,14 @@ pub fn run(action: GraphAction, sets: Vec<String>, cwd: &Path) -> ExitCode {
     };
     let elapsed = started.elapsed();
     match action {
-        GraphAction::Stats { json } => stats(&scan, elapsed.as_secs_f64(), json),
+        GraphAction::Stats { json } => {
+            let cache_off = if loaded.config.graph.cache {
+                "off (no git directory to keep it in)"
+            } else {
+                "off (graph.cache = false)"
+            };
+            stats(&scan, elapsed.as_secs_f64(), json, cache_off)
+        }
         GraphAction::Why { from, to } => why(
             &scan,
             &relative_to(&root, cwd, &from),
@@ -72,7 +79,7 @@ pub fn run(action: GraphAction, sets: Vec<String>, cwd: &Path) -> ExitCode {
     }
 }
 
-fn stats(scan: &Scan, seconds: f64, json: bool) -> ExitCode {
+fn stats(scan: &Scan, seconds: f64, json: bool, cache_off: &str) -> ExitCode {
     let s = scan.graph.stats();
     let sources = scan.tree.sources().count();
     if json {
@@ -113,7 +120,7 @@ fn stats(scan: &Scan, seconds: f64, json: bool) -> ExitCode {
                 scan.cache.hits, scan.cache.misses
             );
         } else {
-            println!("parse cache: off");
+            println!("parse cache: {cache_off}");
         }
         println!("built in {seconds:.2} s");
     }
