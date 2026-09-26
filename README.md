@@ -18,43 +18,72 @@ doesn't chafe, tangle or pull off course. Fairlead does that for an agent
 working in your repository. It is one Rust binary with no project-specific
 logic: everything about your repository lives in your own `fairlead.toml`.
 
+## Why Fairlead
+
+Join a good team and you don't start from zero. Someone tells you which module
+never to touch without running the migration check first, which test lies on
+Windows, and which "quick fix" broke production last spring. That knowledge is
+why a new teammate is useful in week two instead of month six.
+
+A coding agent gets none of it. It opens your repository cold every time,
+reads the same code again, makes the mistake your team already paid for, and
+finds out in CI that it was an old lesson nobody told it. Fairlead exists so an
+agent works like a member of the team, not a stranger trying things.
+
+- **Every repository has a memory.** The hard lessons from past work live with
+  the code, per module, where the agent meets them before it acts. A lesson is
+  kept short, reviewed on a date, and turned into a check when it can be, so
+  the memory stays true instead of growing into noise.
+  *Today:* owner rules record which tests guard which code, and a quarantined
+  test applies only while the evidence holds and until its date.
+- **Set up once, then work like a teammate.** The agent's first job is to learn
+  the repository: its modules, test runners, rules, and the commands that prove
+  a change is right. That goes into one checked config, so every session starts
+  where the last one left off.
+  *Today:* `fairlead config check` validates every layer, and `show --origin`
+  says where each value came from.
+- **The right tool, not the nearest one.** The agent asks what applies to the
+  files in front of it and gets the rule, the command and the next step for
+  exactly those files.
+  *Today:* `fairlead plan` names the tests and checks a change can reach, and
+  `test --explain` says why each one is in or out.
+- **The right skills for the code in front of it.** A frontend change
+  shouldn't come with database advice. Fairlead picks the skills that apply to
+  what a change reaches, just as it picks tests, and checks the agent used them.
+  *Coming in K4* ([#43](https://github.com/mahkassem/fairlead/issues/43)).
+- **Measured, not guessed.** Good and bad are numbers: whether the plan would
+  have caught real CI failures, rework, escaped defects, tokens and cost.
+  *Today:* `fairlead replay` re-plans real failures from a repository's CI
+  history, and the [benchmarks](https://mahkassem.github.io/fairlead/benchmarks.html)
+  measure that recall every week.
+- **Fast because it remembers.** No rereading the codebase to rediscover what
+  was learned last week. The graph, the plan and the lessons are already there.
+  *Today:* the import graph is built without installing dependencies and
+  cached between runs.
+- **It learns where it's blind.** When a change reaches no test, Fairlead says
+  so and points at the rule that's missing, so the team's knowledge grows
+  exactly where it was thin.
+  *Today:* `fairlead plan` lists every file no test depends on, and replay
+  suggests the owner rule or check path that would have caught a miss.
+- **Stopped before the mistake, not after.** Your rules run as the agent
+  works, catching a wrong move in seconds instead of minutes later in CI.
+  *Coming in K2.*
+
 ## What it does today
 
-- **Tests smart.** `fairlead plan` builds your repository's import graph
-  without an install and selects the tests a change can reach, plus canaries,
-  owner rules and checks. `fairlead test --explain` says why a test is in the
-  plan or isn't.
-- **Runs in CI.** `fairlead ci plan` writes the plan for a pull request and
-  `fairlead ci run` runs it, from the CLI or through the GitHub Action.
-- **Proves its recall.** `fairlead replay` re-plans real CI failures from a
-  repository's history and reports how many the plan would have caught. The
-  [benchmarks](https://mahkassem.github.io/fairlead/benchmarks.html) run it
-  every week on Effect, pnpm and vitest.
-- **One config, checked.** `fairlead config check`, `show --origin` and
-  `schema`, with layers from built-in defaults to `--set`, and every error
-  naming its file and key.
-
-## Where it's going
-
-- **Guards:** your project's rules run as hooks on every edit and command,
-  so a wrong move is stopped with the right command instead of failing CI
-  minutes later.
-- **Guides:** the agent asks what applies to the files in front of it and
-  what its next step is, instead of reading pages of instructions.
-- **Remembers, within limits:** small per-module memory with caps and review
-  dates. A lesson becomes a check or it expires.
-- **Measures:** speed, rework, escaped defects, tokens and cost, as counts
-  only. It never phones home.
-
-Claude Code comes first, then Codex. The [roadmap](https://mahkassem.github.io/fairlead/roadmap.html)
-has milestones K0 to K6, each an [issue](https://github.com/mahkassem/fairlead/issues)
-with its exit criteria.
+The test plan (`plan`, `test --explain`), plans in CI (`ci plan`, `ci run` and
+the GitHub Action), `replay`, the import graph (`graph`), and the config
+commands. The [quick start](#quick-start) shows them, and the
+[book](https://mahkassem.github.io/fairlead/) covers each one.
 
 ## Status
 
 Pre-alpha. The latest release, v0.1.1, ships the config commands. The test
 plan, the CI commands and action, and replay are on `main`, and ship in v0.2.0
 once the benchmarks meet its recall bar ([#20](https://github.com/mahkassem/fairlead/issues/20)).
+Claude Code comes first, then Codex. The [roadmap](https://mahkassem.github.io/fairlead/roadmap.html)
+has milestones K0 to K6, each an [issue](https://github.com/mahkassem/fairlead/issues)
+with its exit criteria.
 
 ## Install
 
