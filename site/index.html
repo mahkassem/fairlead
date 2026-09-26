@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fairlead: guardrails and a guided path for coding agents</title>
+<meta name="description" content="Fairlead gives every repository its own memory, so your coding agent starts where your team left off: the tests a change can reach, the rules and lessons that apply, and numbers that say whether it worked.">
+<meta property="og:title" content="Fairlead">
+<meta property="og:description" content="Guardrails and a guided path for coding agents.">
+<meta property="og:image" content="https://mahkassem.github.io/fairlead/brand/png/fairlead-social-preview-1280x640.png">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" href="brand/fairlead-app-icon-square.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700&family=Public+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="site.css">
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="mark" viewBox="0 0 120 117"><path class="r" d="M20 30 C22 12 35 0 52 0 H120 C116 14 107 23 93 24 H47 C40 24 36 26 34 30 Z"/><path class="g" d="M6 38 H113 C110 49 102 55 91 55 H0 V45 C0 41 2 38 6 38 Z"/><path class="r" d="M43 61 H113 V66 C113 78 105 85 93 85 H55 C47 85 42 90 42 98 V117 H16 V88 C16 73 28 61 43 61 Z"/></symbol>
+</svg>
+
+<header class="hero">
+  <nav class="nav wrap">
+    <a class="logo" href="./"><img src="brand/fairlead-reversed-horizontal-dark.svg" alt="Fairlead" width="148" height="35"></a>
+    <div class="links">
+      <a href="docs/">Docs</a>
+      <a href="docs/benchmarks.html">Benchmarks</a>
+      <a href="docs/roadmap.html">Roadmap</a>
+      <a href="https://github.com/mahkassem/fairlead">GitHub</a>
+      <a class="btn ghost" href="#install">Install</a>
+    </div>
+  </nav>
+  <div class="rails" aria-hidden="true"><svg viewBox="0 0 120 117"><use href="#mark"/></svg></div>
+  <div class="hero-body wrap">
+    <h1>Give every repository its own memory. <span>So your agent never gets lost.</span></h1>
+    <p class="lede">Fairlead keeps a coding agent on course in your repository: the lessons your team already paid for, the tests a change can reach, and numbers that say whether it worked.</p>
+    <div class="install" id="install">
+      <div class="tabs" role="tablist" aria-label="Install with">
+        <button type="button" role="tab" aria-selected="true" data-cmd="curl -fsSL https://github.com/mahkassem/fairlead/releases/latest/download/fairlead-installer.sh | sh">macOS and Linux</button>
+        <button type="button" role="tab" aria-selected="false" data-cmd='powershell -c "irm https://github.com/mahkassem/fairlead/releases/latest/download/fairlead-installer.ps1 | iex"'>Windows</button>
+        <button type="button" role="tab" aria-selected="false" data-cmd="npm i -D fairlead">npm</button>
+      </div>
+      <div class="cmd"><code><span class="dollar">$ </span><span id="cmd-text">curl -fsSL https://github.com/mahkassem/fairlead/releases/latest/download/fairlead-installer.sh | sh</span></code><button type="button" class="copy" id="copy">Copy</button></div>
+    </div>
+    <div class="cta"><a class="btn primary" href="docs/">Read the docs</a><a class="btn ghost" href="docs/benchmarks.html">See the benchmarks</a></div>
+  </div>
+</header>
+
+<main>
+  <section class="why wrap" aria-labelledby="why">
+    <div class="section-head">
+      <h2 id="why">Why Fairlead</h2>
+      <p>Join a good team and someone tells you which module never to touch without the migration check, and which test lies on Windows. A coding agent gets none of that. Fairlead gives it the team's knowledge before it acts.</p>
+    </div>
+    <div class="grid">
+      <article><h3>A memory for every repository</h3><p>Hard lessons live with the code, per module, short and dated, and turn into checks when they can.</p><span class="tag">today: owner rules, quarantine with expiry</span></article>
+      <article><h3>Set up once, never start cold</h3><p>The agent learns the repository into one checked config, so each session starts where the last one ended.</p><span class="tag">today: config check, show --origin</span></article>
+      <article><h3>The right tool, not the nearest one</h3><p>The rule, the command and the next step for exactly the files in front of it.</p><span class="tag">today: plan, test --explain</span></article>
+      <article><h3>Plans the change, not just the tests</h3><p>Before an edit: what it touches, what depends on it, the rules and lessons there, and what has to pass.</p><span class="soon">coming in K3</span></article>
+      <article><h3>The right skills for the code</h3><p>A frontend change shouldn't come with database advice. Skills are picked by what a change reaches.</p><span class="soon">coming in K4</span></article>
+      <article><h3>Measured, not guessed</h3><p>Recall on real CI failures, rework, escaped defects, tokens and cost, as numbers.</p><span class="tag">today: replay, weekly benchmarks</span></article>
+      <article><h3>Fast because it remembers</h3><p>No rereading the codebase to rediscover last week's lesson. The graph and the plan are already there.</p><span class="tag">today: graph without an install, cached</span></article>
+      <article><h3>It learns where it's blind</h3><p>A change that reaches no test is flagged, with the rule that would have caught it.</p><span class="tag">today: unreached files, suggested rules</span></article>
+      <article><h3>Stopped before the mistake</h3><p>Your rules run as the agent works, in seconds instead of minutes later in CI.</p><span class="soon">coming in K2</span></article>
+    </div>
+  </section>
+
+  <section class="works wrap" aria-labelledby="works">
+    <div class="section-head">
+      <h2 id="works">Works with the stack you have</h2>
+      <p>No plugins and no new CI. Fairlead reads your code and runs the tools already in your repository.</p>
+    </div>
+    <div>
+      <div class="chips" aria-label="Supported tools">
+        <span class="chip k">Vitest</span><span class="chip k">Jest</span><span class="chip k">Playwright</span><span class="chip k">node --test</span><span class="chip k">Bun</span>
+        <span class="chip">pnpm</span><span class="chip">npm</span><span class="chip">yarn</span><span class="chip">bun workspaces</span>
+        <span class="chip">GitHub Actions</span><span class="chip">any CI via JSON</span>
+        <span class="chip">Linux</span><span class="chip">macOS</span><span class="chip">Windows</span>
+      </div>
+      <div class="facts">
+        <div><h3>Any test runner</h3><p>A runner is one command in your config, so your stack never waits for a plugin.</p></div>
+        <div><h3>Monorepos, precisely</h3><p>A pnpm lockfile change runs only the packages whose dependencies changed.</p></div>
+        <div><h3>No install to read your code</h3><p>The TypeScript and JavaScript graph comes from source alone, cached, in a fraction of a second.</p></div>
+        <div><h3>Private by default</h3><p>The CLI sends nothing you didn't ask for: no telemetry, and it never phones home.</p></div>
+      </div>
+      <p class="limits">Reads JavaScript and TypeScript today. More languages, framework packs and folders of several repositories are on the <a href="https://github.com/mahkassem/fairlead/issues/47">roadmap</a>; Vue, Svelte and Astro files fall back to broader test selection until then.</p>
+    </div>
+  </section>
+
+  <section class="proof wrap" aria-labelledby="proof">
+    <div class="section-head">
+      <h2 id="proof">Recall on real CI failures</h2>
+      <p>The share of failed tests the plan would have selected, replayed from each project's CI history every week.</p>
+    </div>
+    <div class="stats" id="stats">
+      <p class="fallback">The latest numbers are on the <a href="docs/benchmarks.html">benchmarks page</a>.</p>
+    </div>
+    <p class="note" id="stats-note"></p>
+  </section>
+</main>
+
+<footer class="foot wrap">
+  <span>Fairlead · MIT or Apache-2.0</span>
+  <span class="foot-links"><a href="docs/">Docs</a><a href="docs/benchmarks.html">Benchmarks</a><a href="https://github.com/mahkassem/fairlead">GitHub</a><a href="https://github.com/mahkassem/fairlead/tree/main/assets/brand">Brand</a></span>
+</footer>
+<script src="site.js"></script>
+</body>
+</html>

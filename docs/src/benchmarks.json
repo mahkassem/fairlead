@@ -1,0 +1,36 @@
+{
+  "fairlead": "0.1.1",
+  "commit": "346943dbb521",
+  "repos": [
+    {
+      "repo": "Effect-TS/effect",
+      "from": "2026-05-02",
+      "until": "2026-07-30",
+      "recall": 0.984,
+      "judged": 823,
+      "raw_recall": 0.984,
+      "raw_judged": 823,
+      "gate_met": true
+    },
+    {
+      "repo": "pnpm/pnpm",
+      "from": "2026-04-18",
+      "until": "2026-07-16",
+      "recall": 0.991,
+      "judged": 234,
+      "raw_recall": 0.991,
+      "raw_judged": 234,
+      "gate_met": true
+    },
+    {
+      "repo": "vitest-dev/vitest",
+      "from": "2026-05-30",
+      "until": "2026-08-27",
+      "recall": 0.928,
+      "judged": 195,
+      "raw_recall": 0.928,
+      "raw_judged": 195,
+      "gate_met": true
+    }
+  ]
+}

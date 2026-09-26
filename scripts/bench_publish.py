@@ -124,6 +124,20 @@ def repo_section(slug, report, rows, fetch_line):
     return lines
 
 
+def repo_summary(report):
+    judged = report["hits"] + len(report["misses"])
+    return {
+        "repo": report["repo"],
+        "from": report["from"],
+        "until": report["until"],
+        "recall": report["recall"],
+        "judged": judged,
+        "raw_recall": report.get("raw_recall", report["recall"]),
+        "raw_judged": report.get("raw_judged", judged),
+        "gate_met": judged >= report["min_failures"],
+    }
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser()
     parser.add_argument("artifacts", type=pathlib.Path)
@@ -141,6 +155,7 @@ def main(argv=None):
         "",
         f"Planned with Fairlead {version}{commit}.",
     ]
+    summary = []
     for config in sorted((root / "bench").glob("*.toml")):
         slug = config.stem
         folder = args.artifacts / f"bench-{slug}"
@@ -154,7 +169,13 @@ def main(argv=None):
         report = json.loads(report_path.read_text(encoding="utf-8"))
         fetch = (folder / "fetch.txt").read_text(encoding="utf-8").strip().splitlines() if (folder / "fetch.txt").exists() else []
         out += [""] + repo_section(slug, report, read_rows(data), fetch[-1] if fetch else "not run")
+        summary.append(repo_summary(report))
     (root / "docs" / "src" / "benchmarks.md").write_text("\n".join(out) + "\n", encoding="utf-8")
+    # The site's landing page reads the headline numbers from here.
+    (root / "docs" / "src" / "benchmarks.json").write_text(
+        json.dumps({"fairlead": version, "commit": args.commit[:12], "repos": summary}, indent=2) + "\n",
+        encoding="utf-8",
+    )
     return 0
 
 

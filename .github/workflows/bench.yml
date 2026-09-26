@@ -179,7 +179,7 @@ jobs:
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           fi
           git checkout -B bench-data
-          git add bench/data docs/src/benchmarks.md
+          git add bench/data docs/src/benchmarks.md docs/src/benchmarks.json
           if git diff --cached --quiet; then echo "nothing new"; exit 0; fi
           git commit --quiet -m "chore: record benchmark runs and results"
           # The credential reaches git through its environment, never argv.

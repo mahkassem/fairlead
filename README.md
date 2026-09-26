@@ -10,7 +10,7 @@
 <p align="center">
   <a href="https://github.com/mahkassem/fairlead/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/mahkassem/fairlead/actions/workflows/ci.yml/badge.svg"></a>
   <a href="https://github.com/mahkassem/fairlead/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/mahkassem/fairlead?color=008F67"></a>
-  <a href="https://mahkassem.github.io/fairlead/"><img alt="Docs" src="https://img.shields.io/badge/docs-book-0B1618"></a>
+  <a href="https://mahkassem.github.io/fairlead/docs/"><img alt="Docs" src="https://img.shields.io/badge/docs-book-0B1618"></a>
 </p>
 
 A fairlead is the fitting on a boat that keeps a line running true, so it
@@ -60,7 +60,7 @@ of trying things like a stranger.
 - **Measured, not guessed.** Good and bad are numbers: whether the plan would
   have caught real CI failures, rework, escaped defects, tokens and cost.
   *Today:* `fairlead replay` re-plans real failures from a repository's CI
-  history, and the [benchmarks](https://mahkassem.github.io/fairlead/benchmarks.html)
+  history, and the [benchmarks](https://mahkassem.github.io/fairlead/docs/benchmarks.html)
   measure that recall every week.
 - **Fast because it remembers.** No rereading the codebase to rediscover what
   was learned last week. The graph, the plan and the lessons are already there.
@@ -75,19 +75,42 @@ of trying things like a stranger.
   works, catching a wrong move in seconds instead of minutes later in CI.
   *Coming in K2.*
 
+## Works with
+
+- **Any test runner.** Vitest, Jest, Playwright, `node --test`, Bun: a runner is
+  one command in your config, so Fairlead never needs a plugin for your stack.
+- **Monorepos, precisely.** pnpm, npm, yarn and bun workspaces. A pnpm lockfile
+  change runs only the packages whose dependencies actually changed.
+- **No install needed to read your code.** The JavaScript and TypeScript import
+  graph comes from source alone, with tsconfig paths resolved and parsed files
+  cached, so a plan takes a fraction of a second.
+- **Your CI, not a new one.** A GitHub Action and `ci plan --format github` for
+  Actions, and a JSON plan with a published schema for any other CI.
+- **Proven on real projects.** Recall is replayed from the CI history of Effect,
+  pnpm and vitest every week, and published.
+- **Private by default.** The CLI sends nothing you didn't ask for: no
+  telemetry, and it never phones home.
+- **One binary, everywhere.** Linux, macOS and Windows, installed with a shell
+  script, PowerShell or npm.
+
+*It reads JavaScript and TypeScript today. More languages, framework packs and
+folders of several repositories are on the way
+([#47](https://github.com/mahkassem/fairlead/issues/47)); Vue, Svelte and Astro
+files fall back to broader test selection until then.*
+
 ## What it does today
 
 The test plan (`plan`, `test --explain`), plans in CI (`ci plan`, `ci run` and
 the GitHub Action), `replay`, the import graph (`graph`), and the config
 commands. The [quick start](#quick-start) shows them, and the
-[book](https://mahkassem.github.io/fairlead/) covers each one.
+[book](https://mahkassem.github.io/fairlead/docs/) covers each one.
 
 ## Status
 
 Pre-alpha. The latest release, v0.1.1, ships the config commands. The test
 plan, the CI commands and action, and replay are on `main`, and ship in v0.2.0
 once the benchmarks meet its recall bar ([#20](https://github.com/mahkassem/fairlead/issues/20)).
-Claude Code comes first, then Codex. The [roadmap](https://mahkassem.github.io/fairlead/roadmap.html)
+Claude Code comes first, then Codex. The [roadmap](https://mahkassem.github.io/fairlead/docs/roadmap.html)
 has milestones K0 to K6, each an [issue](https://github.com/mahkassem/fairlead/issues)
 with its exit criteria.
 
@@ -117,7 +140,7 @@ fairlead graph why src/a.test.ts src/util.ts # how one file depends on another
 
 ## Documentation
 
-The book is at [mahkassem.github.io/fairlead](https://mahkassem.github.io/fairlead/):
+The site is [mahkassem.github.io/fairlead](https://mahkassem.github.io/fairlead/), and [the book](https://mahkassem.github.io/fairlead/docs/) covers
 install, configuration, the import graph, the test plan, plans in CI, replay
 and the benchmarks. Its source is in `docs/`.
 
