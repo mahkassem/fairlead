@@ -340,8 +340,37 @@ fn an_ignored_location_never_swallows_a_source_file() {
 #[test]
 fn deleting_a_test_or_changing_a_manifest_is_not_reported_unreached() {
     let dir = repo("not-unreached", WORKSPACE);
-    let gone = run(&dir, &config(VITEST), vec![deleted("packages/core/test/gone.test.ts")]);
-    assert!(gone.unreached.is_empty() && !gone.all, "{:?}", gone.unreached);
-    let manifest = run(&dir, &config(VITEST), vec![modified("packages/docs/package.json")]);
+    let gone = run(
+        &dir,
+        &config(VITEST),
+        vec![deleted("packages/core/test/gone.test.ts")],
+    );
+    assert!(
+        gone.unreached.is_empty() && !gone.all,
+        "{:?}",
+        gone.unreached
+    );
+    let manifest = run(
+        &dir,
+        &config(VITEST),
+        vec![modified("packages/docs/package.json")],
+    );
     assert!(manifest.unreached.is_empty(), "{:?}", manifest.unreached);
+}
+
+#[test]
+fn a_manifest_whose_package_has_no_files_is_still_unreached() {
+    let mut files = WORKSPACE.to_vec();
+    files.push((
+        "packages/prebuilt/package.json",
+        r#"{ "name": "prebuilt" }"#,
+    ));
+    let dir = repo("manifest-only", &files);
+    let plan = run(
+        &dir,
+        &config(VITEST),
+        vec![modified("packages/prebuilt/package.json")],
+    );
+    assert_eq!(plan.unreached[0].path, "packages/prebuilt/package.json");
+    assert!(plan.all);
 }

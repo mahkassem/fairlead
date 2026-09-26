@@ -156,7 +156,10 @@ fn config_check_names_test_files_no_runner_matches() {
 #[test]
 fn explicit_files_resolve_dot_dot_and_expand_directories() {
     let dir = project("files-norm");
-    let up = fairlead_in(&dir.join("test"), &["plan", "--files", "../src/a.ts", "--json"]);
+    let up = fairlead_in(
+        &dir.join("test"),
+        &["plan", "--files", "../src/a.ts", "--json"],
+    );
     let plan: serde_json::Value = serde_json::from_slice(&up.stdout).unwrap();
     assert_eq!(plan["changed"][0]["path"], "src/a.ts");
     assert_eq!(plan["tests"][0]["path"], "test/a.test.ts");
@@ -166,4 +169,7 @@ fn explicit_files_resolve_dot_dot_and_expand_directories() {
     assert_eq!(plan["tests"].as_array().unwrap().len(), 2);
     let outside = fairlead_in(&dir, &["plan", "--files", "../../elsewhere.ts"]);
     assert_eq!(outside.status.code(), Some(2));
+    let everything = fairlead_in(&dir, &["plan", "--files", ".", "--json"]);
+    let plan: serde_json::Value = serde_json::from_slice(&everything.stdout).unwrap();
+    assert!(plan["changed"].as_array().unwrap().len() >= 5);
 }

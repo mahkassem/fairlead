@@ -44,6 +44,16 @@ fn explicit(root: &Path, cwd: &Path, tree: &Tree, files: &[String]) -> Result<Ve
         } else {
             fairlead_lang::tree::normalize(&base, &f.replace('\\', "/"))
         };
+        let whole_tree =
+            rel.is_none() && std::fs::canonicalize(cwd.join(f)).ok().as_deref() == Some(root);
+        if whole_tree {
+            changes.extend(tree.files.iter().map(|p| Change {
+                path: p.clone(),
+                status: Status::Modified,
+                from: None,
+            }));
+            continue;
+        }
         let rel = rel.ok_or_else(|| format!("{f} is outside the repository"))?;
         let prefix = format!("{rel}/");
         let under: Vec<&String> = tree

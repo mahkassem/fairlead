@@ -108,6 +108,17 @@ pub fn select(
     Ok((chosen.into_values().collect(), unreached, all_reason))
 }
 
+/// A manifest stands for its package only when the package has files for
+/// the walk to start from; a package of prebuilt output alone doesn't.
+fn package_has_files(cx: &Context, manifest: &str) -> bool {
+    let prefix = format!("{}/", fairlead_lang::tree::parent(manifest));
+    cx.scan
+        .graph
+        .files
+        .iter()
+        .any(|f| f.starts_with(&prefix) && f != manifest)
+}
+
 /// Whether any test is in `path`'s reverse closure.
 fn reaches_a_test(cx: &Context, path: &str, tests: &HashSet<u32>) -> bool {
     let graph = &cx.scan.graph;
@@ -132,7 +143,7 @@ fn unreached(
     // A deleted test has nothing left to run, and a manifest already stands for its package.
     let skip = |p: &str| {
         (cx.deleted.contains(p) && test_globs.iter().any(|g| g.is_match(p)))
-            || crate::planner::is_manifest(cx, p)
+            || (crate::planner::is_manifest(cx, p) && package_has_files(cx, p))
     };
     let mut out = Vec::new();
     let mut all_reason = None;
