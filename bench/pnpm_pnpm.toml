@@ -1,0 +1,42 @@
+# pnpm/pnpm's TypeScript CI (`TS CI`): Jest in each workspace package, run
+# from the package's directory, plus the compile-and-lint pipeline. The Rust
+# workspace (pacquet, pnpr) has its own CI and isn't measured here.
+
+[tests]
+match = { replace = ["**/test/**/*.{ts,tsx,js,jsx}", "**/src/**/*.test.ts"] }
+exclude = [
+  "**/node_modules/**",
+  "**/fixtures/**",
+  "**/__fixtures__/**",
+  "**/test/utils/**",
+  "**/test/**/utils/**",
+  "pnpm/**",
+]
+
+[[tests.runners]]
+id = "jest"
+match = ["**"]
+invoke = "per-module"
+cwd = "{module}"
+command = ["pnpm", "exec", "jest", "{files}"]
+
+[[checks]]
+id = "ts-check"
+command = ["pn", "pipeline", "ts-check", "--include-workspace-root", "--full", "--no-cache"]
+paths = ["**/*.{ts,tsx,js,mjs,cjs,json}"]
+
+[replay]
+window_days = 90
+min_failures = 30
+# Aggregation, change detection and the Rust binary build, not tests.
+ignore = ["^TS CI / Success$", "^TS CI / Detect Changes$", "^TS CI / Build pnpr"]
+
+[[replay.failures]]
+runner = "jest"
+extractor = "jest"
+job = "^TS CI / Test / "
+
+[[replay.checks]]
+job = "^TS CI / Compile & Lint$"
+step = "^Compile and lint TypeScript$"
+check = "ts-check"

@@ -3,7 +3,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Mutex;
 
-use fairlead_replay::fetch::{fetch, merge_queue_branch, Options};
+use fairlead_replay::fetch::{fetch, merge_queue_branch, Options, Stop};
 use fairlead_replay::github::Http;
 use serde_json::{json, Value};
 
@@ -88,14 +88,9 @@ fn api() -> Recorded {
 #[test]
 fn every_attempt_is_a_row_with_its_failures_pull_request_and_base() {
     let http = api();
-    let opts = Options {
-        repo: "o/r",
-        since: "2026-09-01",
-        clone: None,
-        limit: None,
-    };
-    let (rows, error) = fetch(&http, &opts, &BTreeSet::new());
-    assert!(error.is_none(), "{error:?}");
+    let opts = opts(None);
+    let (rows, stop) = fetch(&http, &opts, &BTreeSet::new());
+    assert_eq!(stop, Stop::Complete);
     // The runs listing ignores the event filter in this recording, so the
     // pull request run is listed under both events but recorded once.
     let mut keys: Vec<(u64, u32)> = rows.iter().map(|r| (r.run_id, r.attempt)).collect();
@@ -126,12 +121,7 @@ fn every_attempt_is_a_row_with_its_failures_pull_request_and_base() {
 #[test]
 fn rows_already_recorded_are_skipped_before_their_jobs_are_fetched() {
     let http = api();
-    let opts = Options {
-        repo: "o/r",
-        since: "2026-09-01",
-        clone: None,
-        limit: None,
-    };
+    let opts = opts(None);
     let seen: BTreeSet<(u64, u32)> = [(11, 1), (11, 2)].into_iter().collect();
     let (rows, _) = fetch(&http, &opts, &seen);
     assert!(rows.iter().all(|r| r.run_id != 11));
@@ -162,6 +152,8 @@ fn opts(limit: Option<usize>) -> Options<'static> {
         since: "2026-09-01",
         clone: None,
         limit,
+        workflows: Vec::new(),
+        until: Some("2026-09-30"),
     }
 }
 
@@ -170,8 +162,8 @@ fn a_purged_check_run_reads_as_no_annotations() {
     let mut http = api();
     http.status
         .insert("/repos/o/r/check-runs/101/annotations".into(), 404);
-    let (rows, error) = fetch(&http, &opts(None), &BTreeSet::new());
-    assert!(error.is_none(), "{error:?}");
+    let (rows, stop) = fetch(&http, &opts(None), &BTreeSet::new());
+    assert_eq!(stop, Stop::Complete);
     let first = rows
         .iter()
         .find(|r| r.run_id == 11 && r.attempt == 1)
@@ -186,8 +178,8 @@ fn a_rate_limit_stops_the_fetch_before_writing_a_row_without_its_pull_request() 
     let mut http = api();
     http.status
         .insert("/repos/o/r/commits/aaa/pulls".into(), 403);
-    let (rows, error) = fetch(&http, &opts(None), &BTreeSet::new());
-    assert!(error.unwrap().contains("403"));
+    let (rows, stop) = fetch(&http, &opts(None), &BTreeSet::new());
+    assert!(matches!(stop, Stop::Error(e) if e.contains("403")));
     assert!(rows
         .iter()
         .all(|r| r.pr.is_some() || r.event == "merge_group"));
@@ -195,7 +187,61 @@ fn a_rate_limit_stops_the_fetch_before_writing_a_row_without_its_pull_request() 
 
 #[test]
 fn a_limit_stops_after_that_many_attempts() {
-    let (rows, error) = fetch(&api(), &opts(Some(1)), &BTreeSet::new());
-    assert!(error.is_none());
+    let (rows, stop) = fetch(&api(), &opts(Some(1)), &BTreeSet::new());
+    assert_eq!(stop, Stop::Limit);
     assert_eq!(rows.len(), 1);
+}
+
+#[test]
+fn the_window_is_listed_a_week_at_a_time() {
+    let http = api();
+    let _ = fetch(&http, &opts(None), &BTreeSet::new());
+    let asked = http.asked.lock().unwrap();
+    let ranges: BTreeSet<&str> = asked
+        .iter()
+        .filter(|p| p.contains("event=pull_request"))
+        .filter_map(|p| p.split("created=").nth(1))
+        .map(|rest| rest.split('&').next().unwrap())
+        .collect();
+    let expected: BTreeSet<&str> = [
+        "2026-09-01..2026-09-07",
+        "2026-09-08..2026-09-14",
+        "2026-09-15..2026-09-21",
+        "2026-09-22..2026-09-28",
+        "2026-09-29..2026-09-30",
+    ]
+    .into_iter()
+    .collect();
+    assert_eq!(ranges, expected);
+}
+
+#[test]
+fn only_named_workflows_and_runs_that_ran_are_recorded() {
+    let mut http = api();
+    http.responses.insert(
+        "/repos/o/r/actions/workflows/ci.yml/runs".into(),
+        json!({ "total_count": 2, "workflow_runs": [
+            { "id": 11, "name": "ci", "head_sha": "aaa", "head_branch": "feature", "run_attempt": 2, "created_at": "2026-09-20T10:00:00Z", "conclusion": "success" },
+            { "id": 31, "name": "ci", "head_sha": "ccc", "head_branch": "feature", "run_attempt": 1, "created_at": "2026-09-20T11:00:00Z", "conclusion": "cancelled" }
+        ]}),
+    );
+    let mut o = opts(None);
+    o.workflows = vec!["ci.yml".into()];
+    let (rows, stop) = fetch(&http, &o, &BTreeSet::new());
+    assert_eq!(stop, Stop::Complete);
+    let ids: BTreeSet<u64> = rows.iter().map(|r| r.run_id).collect();
+    assert_eq!(ids, [11].into_iter().collect());
+    let asked = http.asked.lock().unwrap();
+    assert!(
+        asked
+            .iter()
+            .all(|p| !p.starts_with("/repos/o/r/actions/runs?")),
+        "the repository-wide listing isn't used"
+    );
+    drop(asked);
+    o.workflows = vec!["../x".into()];
+    assert!(matches!(
+        fetch(&http, &o, &BTreeSet::new()).1,
+        Stop::Error(_)
+    ));
 }

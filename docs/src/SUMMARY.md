@@ -8,4 +8,5 @@
 - [Test plan](plan.md)
 - [Plans in CI](ci.md)
 - [Replay](replay.md)
+- [Benchmarks](benchmarks.md)
 - [Roadmap](roadmap.md)

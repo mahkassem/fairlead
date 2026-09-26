@@ -32,6 +32,13 @@ fn civil(z: i64) -> (i64, i64, i64) {
     (y, m, d)
 }
 
+/// `YYYY-MM-DD` shifted by `by` days.
+pub fn add_days(date: &str, by: i64) -> Option<String> {
+    let (y, m, d) = parse(date)?;
+    let (y, m, d) = civil(days(y, m, d) + by);
+    Some(format!("{y:04}-{m:02}-{d:02}"))
+}
+
 fn parse(date: &str) -> Option<(i64, i64, i64)> {
     let mut parts = date.get(..10)?.split('-').map(|p| p.parse::<i64>().ok());
     Some((parts.next()??, parts.next()??, parts.next()??))

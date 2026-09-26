@@ -1,0 +1,89 @@
+# Effect-TS/effect, as its `Check` workflow runs it: one Vitest config at the
+# root with a project per package, and whole-repository static checks.
+
+[tests]
+match = { replace = ["packages/**/test/**/*.test.{ts,tsx}"] }
+exclude = [
+  "**/dist/**",
+  "**/benchmark/**",
+  "**/bundle/**",
+  "**/typetest/**",
+  "**/test/utils/**",
+  "**/test/cluster-integration/**",
+]
+
+[[tests.runners]]
+id = "vitest"
+match = ["**"]
+command = ["pnpm", "vitest", "run", "{files}"]
+
+[[checks]]
+id = "lint"
+command = ["pnpm", "lint"]
+paths = ["**/*.{ts,tsx,js,mjs,json,md}"]
+
+[[checks]]
+id = "circular"
+command = ["pnpm", "circular"]
+paths = ["packages/**/src/**"]
+
+[[checks]]
+id = "typecheck"
+command = ["pnpm", "check"]
+paths = ["**/*.{ts,tsx}", "**/tsconfig*.json", "**/package.json"]
+
+[[checks]]
+id = "type-tests"
+command = ["pnpm", "test-types", "--target", ">=5.9"]
+paths = ["**/*.{ts,tsx}", "**/tsconfig*.json"]
+
+[[checks]]
+id = "build"
+command = ["pnpm", "build"]
+paths = ["packages/**", "scripts/**", "tsconfig*.json"]
+
+[[checks]]
+id = "doctest"
+command = ["pnpm", "doctest"]
+paths = ["packages/*/src/**/*.ts", "packages/*/*/src/**/*.ts"]
+
+[replay]
+window_days = 90
+min_failures = 30
+# Bundle compares build output sizes; it runs no tests or checks.
+ignore = ["^Bundle$"]
+
+[[replay.failures]]
+runner = "vitest"
+extractor = "vitest"
+job = "^Test \\((Node|Deno|Bun)( [0-9]+/[0-9]+)?\\)$"
+
+[[replay.checks]]
+job = "^(Static|Lint)$"
+step = "^(Lint|Run pnpm lint)$"
+check = "lint"
+
+[[replay.checks]]
+job = "^Static$"
+step = "^Check circular dependencies$"
+check = "circular"
+
+[[replay.checks]]
+job = "^Types$"
+step = "^Run pnpm check$"
+check = "typecheck"
+
+[[replay.checks]]
+job = "^Types$"
+step = "tstyche|test-types"
+check = "type-tests"
+
+[[replay.checks]]
+job = "^Build$"
+step = "^Run pnpm (build|check-dist-types)$"
+check = "build"
+
+[[replay.checks]]
+job = "^Test \\(Documentation\\)$"
+step = "^Test Documentation$"
+check = "doctest"

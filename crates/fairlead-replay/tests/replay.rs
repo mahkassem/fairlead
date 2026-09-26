@@ -141,6 +141,9 @@ command = ["playwright", "test", "{files}"]
 runner = "vitest"
 extractor = "vitest"
 job = "^test$"
+
+[replay]
+ignore = ["^all-green$"]
 "#;
 
 #[test]
@@ -192,7 +195,11 @@ fn a_synthetic_history_replays_to_the_expected_outcomes() {
             &h.c,
             &h.base,
             13,
-            vec![job("test", "failure", &[fail_b])],
+            vec![
+                job("test", "failure", &[fail_b]),
+                job("docs", "failure", &[]),
+                job("all-green", "failure", &[]),
+            ],
         ),
         row(
             6,
@@ -265,12 +272,28 @@ fn a_synthetic_history_replays_to_the_expected_outcomes() {
     assert_eq!(r.flaky, 1, "run 2 passed on its second attempt");
     assert_eq!(
         r.unconfirmed, 1,
-        "run 1's b passed at run 4, whose change reaches nothing"
+        "run 1's b passed when the same head ran again in run 2"
     );
     assert_eq!(r.unavailable, 1, "run 6's commit isn't in the clone");
     assert_eq!(r.unattributed, 1, "run 7 names no file");
     assert_eq!(r.errors, 1, "run 10's commit has a test two runners match");
     assert_eq!(r.recall, Some(0.5));
+    assert_eq!(r.hits_selected, 1);
+    assert_eq!(
+        r.strict_recall,
+        Some(1.0 / 3.0),
+        "unconfirmed counts as a miss"
+    );
+    assert_eq!(
+        r.unwatched.get("docs"),
+        Some(&1),
+        "no rule names the docs job"
+    );
+    assert_eq!(r.unwatched.len(), 2, "{:?}", r.unwatched);
+    assert_eq!(r.ignored, 1, "replay.ignore names all-green");
+    let pr = &r.by_event["pull_request"];
+    assert_eq!((pr.hits, pr.misses, pr.unconfirmed), (1, 1, 1));
+    assert!(r.first_plan_seconds.is_some() && r.p90_plan_seconds.is_some());
 }
 
 #[test]
@@ -354,7 +377,140 @@ job = "^test2?$"
     let a = replayed.failures.iter().find(|f| f.job == "test").unwrap();
     assert_eq!(
         format!("{:?}", a.outcome),
-        "Unconfirmed",
-        "the probe checked out the later head"
+        "Miss",
+        "the later head passed with a different change"
     );
+}
+
+#[test]
+fn a_rebased_head_that_passed_leaves_the_failure_unconfirmed() {
+    let dir = std::env::temp_dir().join(format!("fairlead-replay-rebase-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    git(&dir, &["init", "-q", "-b", "main"]);
+    write(&dir, "src/b.ts", "export const b = 1;\n");
+    write(&dir, "src/c.ts", "export const c = 1;\n");
+    write(&dir, "test/a.test.ts", "it('a works', () => {});\n");
+    write(&dir, "test/b.test.ts", "import { b } from '../src/b';\n");
+    write(&dir, "test/c.test.ts", "import { c } from '../src/c';\n");
+    let base = commit(&dir, "base");
+    git(&dir, &["checkout", "-q", "-b", "pr12"]);
+    write(&dir, "src/b.ts", "export const b = 2;\n");
+    let first = commit(&dir, "pr12: change b");
+    git(&dir, &["checkout", "-q", "main"]);
+    write(&dir, "src/c.ts", "export const c = 2;\n");
+    let newer = commit(&dir, "main moves on");
+    git(&dir, &["checkout", "-q", "-b", "pr12-rebased"]);
+    git(&dir, &["cherry-pick", &first]);
+    let rebased = git(&dir, &["rev-parse", "HEAD"]);
+    git(&dir, &["checkout", "-q", "main"]);
+    let fail = || vec![job("test", "failure", &[" FAIL  test/a.test.ts > a works"])];
+    let rows = vec![
+        row(1, 1, 12, &first, &base, 10, fail()),
+        row(
+            2,
+            1,
+            12,
+            &rebased,
+            &newer,
+            11,
+            vec![job("test", "success", &[])],
+        ),
+    ];
+    let mut config: Config = toml::from_str(CONFIG).unwrap();
+    config.graph.cache = false;
+    let wt_path =
+        std::env::temp_dir().join(format!("fairlead-replay-rebase-wt-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&wt_path);
+    let replayer = Replayer {
+        clone: &dir,
+        worktree: Worktree::open(&dir, &wt_path, &base).unwrap(),
+        config: &config,
+        sources: Sources::new(&config).unwrap(),
+    };
+    let replayed = replay(&replayer, &rows, &Window::ending("2026-09-11", 7).unwrap());
+    let outcomes: Vec<String> = replayed
+        .failures
+        .iter()
+        .map(|f| format!("{:?}", f.outcome))
+        .collect();
+    assert_eq!(outcomes, ["Unconfirmed"]);
+}
+
+#[test]
+fn a_hit_in_a_plan_that_selects_everything_counts_as_run_all() {
+    let dir = std::env::temp_dir().join(format!("fairlead-replay-all-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    git(&dir, &["init", "-q", "-b", "main"]);
+    write(&dir, "package.json", "{ \"name\": \"root\" }\n");
+    write(&dir, "test/a.test.ts", "it('a works', () => {});\n");
+    let base = commit(&dir, "base");
+    write(
+        &dir,
+        "package.json",
+        "{ \"name\": \"root\", \"private\": true }\n",
+    );
+    let head = commit(&dir, "change the root manifest");
+    let rows = vec![row(
+        1,
+        1,
+        13,
+        &head,
+        &base,
+        10,
+        vec![job("test", "failure", &[" FAIL  test/a.test.ts > a works"])],
+    )];
+    let mut config: Config = toml::from_str(CONFIG).unwrap();
+    config.graph.cache = false;
+    let wt_path =
+        std::env::temp_dir().join(format!("fairlead-replay-all-wt-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&wt_path);
+    let replayer = Replayer {
+        clone: &dir,
+        worktree: Worktree::open(&dir, &wt_path, &base).unwrap(),
+        config: &config,
+        sources: Sources::new(&config).unwrap(),
+    };
+    let replayed = replay(&replayer, &rows, &Window::ending("2026-09-11", 7).unwrap());
+    let r = report(
+        "example/repo",
+        &Window::ending("2026-09-11", 7).unwrap(),
+        30,
+        &replayed,
+    );
+    assert_eq!((r.hits, r.hits_run_all, r.hits_selected), (1, 1, 0));
+}
+
+#[test]
+fn a_commit_the_remote_lost_doesnt_keep_the_rest_of_its_batch_out() {
+    let origin =
+        std::env::temp_dir().join(format!("fairlead-replay-origin-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&origin);
+    std::fs::create_dir_all(&origin).unwrap();
+    git(&origin, &["init", "-q", "-b", "main"]);
+    write(&origin, "a.txt", "a\n");
+    commit(&origin, "a");
+    let clone = std::env::temp_dir().join(format!("fairlead-replay-lost-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&clone);
+    git(
+        std::env::temp_dir().as_path(),
+        &[
+            "clone",
+            "-q",
+            origin.to_str().unwrap(),
+            clone.to_str().unwrap(),
+        ],
+    );
+    git(&origin, &["checkout", "-q", "-b", "later"]);
+    write(&origin, "b.txt", "b\n");
+    let later = commit(&origin, "b");
+    git(
+        &origin,
+        &["config", "uploadpack.allowAnySHA1InWant", "true"],
+    );
+    let gone = "0123456789abcdef0123456789abcdef01234567".to_string();
+    let missing = fairlead_replay::git::fetch_missing(&clone, &[gone, later.clone()]);
+    assert_eq!(missing, 1, "only the lost commit is still missing");
+    assert!(fairlead_replay::git::has_commit(&clone, &later));
 }

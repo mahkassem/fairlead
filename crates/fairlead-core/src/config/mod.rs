@@ -294,6 +294,8 @@ pub struct Replay {
     pub min_failures: u32,
     pub failures: List<FailureSource>,
     pub checks: List<CheckStep>,
+    /// CI job names (regexes) whose failures replay leaves out on purpose.
+    pub ignore: List<String>,
 }
 
 impl Default for Replay {
@@ -304,6 +306,7 @@ impl Default for Replay {
             min_failures: 30,
             failures: List::default(),
             checks: List::default(),
+            ignore: List::default(),
         }
     }
 }
