@@ -124,23 +124,17 @@ check = "doctest"
 [[replay.quarantine]]
 path = "packages/sql/mysql2/test/Persistence.test.ts"
 job = "^Test \\(1/2, (Node|Deno)\\)$"
-reason = "Times out after 30 s waiting on MySQL, on changes that touch neither: failed in 13 pull requests from May to July, only in the first test shard."
+reason = "Times out after 30 s waiting on MySQL, on changes that touch neither: failed in 13 pull requests in July, only in the first test shard. Two of them broke the build instead (a transform error, a missing import)."
 until = "2026-12-31"
 
 [[replay.quarantine]]
 path = "packages/sql/mysql2/test/KeyValueStore.test.ts"
 job = "^Test \\(2/2, (Node|Deno)\\)$"
-reason = "Its setup hook times out after 30 s waiting on MySQL: failed in 8 pull requests from May to July, only in the second test shard."
-until = "2026-12-31"
-
-[[replay.quarantine]]
-path = "packages/sql/libsql/test/Resolver.test.ts"
-job = "^Test \\(2/2, (Node|Deno)\\)$"
-reason = "Times out after 5 s or fails to execute a statement against libSQL: failed in 3 pull requests from May to July, only in the second test shard."
+reason = "Its setup hook times out after 30 s waiting on MySQL: failed in 8 pull requests in July, only in the second test shard. Two of them broke the build instead (a transform error, a missing import)."
 until = "2026-12-31"
 
 [[replay.quarantine]]
 path = "packages/sql/d1/test/Resolver.test.ts"
-job = "^Test \\((2/2, Node|Node 3/4)\\)$"
-reason = "Times out after 5 s against the local D1 engine: failed in 7 pull requests from May to July, only in the Node shard that runs it."
+job = "^Test \\(2/2, Node\\)$"
+reason = "Times out after 5 s against the local D1 engine: failed in 7 pull requests in July, only in the second Node test shard."
 until = "2026-12-31"
