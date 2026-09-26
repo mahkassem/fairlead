@@ -29,7 +29,9 @@ jobs:
           persist-credentials: false
           fetch-depth: ${{ github.event_name == 'pull_request' && '0' || '1' }}
       - run: python3 scripts/leak_check.py --event
-      - if: github.event_name == 'pull_request'
+      # An edit changes the text, not the commits, which were checked when the
+      # pull request was opened or pushed; a merged one's head may be gone.
+      - if: github.event_name == 'pull_request' && github.event.action != 'edited'
         env:
           BASE: ${{ github.event.pull_request.base.sha }}
           HEAD: ${{ github.event.pull_request.head.sha }}
