@@ -72,7 +72,7 @@ covers = ["test/{suite}/**/fixtures/**", "test/{suite}/vitest.config.*"]
 overrides_run_all = true
 ```
 
-Only set it where you know nothing outside the rule's tests reads those files, such as a config that another package's config imports or that a script names with `--config`.
+Don't set it for a file something outside the rule's tests reads, such as a config another package's config imports or a script names with `--config`. When the rule claims no test for the path, it runs everything as before.
 
 ## Unreached files
 

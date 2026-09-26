@@ -437,9 +437,14 @@ fn an_owner_rule_can_take_a_run_all_path_it_covers() {
             "export default {};\n",
         ),
         ("test/core/test/a.test.ts", "export {};\n"),
+        ("test/cli/vitest.config.ts", "export default {};\n"),
+        (
+            "test/empty/fixtures/vitest.config.ts",
+            "export default {};\n",
+        ),
     ];
     let dir = repo("owner-run-all", &files);
-    let rule = "[tests]\nexclude = [\"**/fixtures/**\"]\n[[tests.owners]]\nmatch = \"test/{suite}/**\"\ncovers = [\"test/{suite}/fixtures/**\"]\n";
+    let rule = "[tests]\nexclude = [\"**/fixtures/**\"]\n[[tests.owners]]\nmatch = \"test/{suite}/**\"\ncovers = [\"test/{suite}/**/fixtures/**\", \"test/{suite}/vitest.config.*\"]\n";
     let fixture = vec![modified("test/cli/fixtures/basic/vitest.config.ts")];
 
     let plain = run(&dir, &config(&format!("{VITEST}\n{rule}")), fixture.clone());
@@ -456,6 +461,19 @@ fn an_owner_rule_can_take_a_run_all_path_it_covers() {
         reason(&plan, "test/cli/test/run.test.ts"),
         Reason::Owner { rule: 0, .. }
     ));
+
+    let suite = run(&dir, &cfg, vec![modified("test/cli/vitest.config.ts")]);
+    assert_eq!(tests(&suite), ["test/cli/test/run.test.ts"]);
+
+    let empty = run(
+        &dir,
+        &cfg,
+        vec![modified("test/empty/fixtures/vitest.config.ts")],
+    );
+    assert!(
+        empty.all,
+        "a rule that claims no test for the path doesn't take it"
+    );
 
     let root = run(&dir, &cfg, vec![modified("vitest.config.ts")]);
     assert!(

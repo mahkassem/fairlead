@@ -157,13 +157,18 @@ pub fn plan(scan: &mut Scan, config: &Config, input: Input) -> Result<Plan, Stri
         lockfile,
     };
     let run_all = patterns(config.plan.run_all.items())?;
-    let trigger = cx
-        .changed
-        .iter()
-        .filter(|p| !(cx.lockfile.is_some() && p.as_str() == LOCKFILE))
-        .filter(|p| !cx.owners.overrides_run_all(p))
-        .find(|p| run_all.iter().any(|g| g.is_match(p)))
-        .cloned();
+    let test_paths: Vec<&str> = cx.tests.iter().map(|t| t.path.as_str()).collect();
+    let mut trigger = None;
+    for path in &cx.changed {
+        let scoped = cx.lockfile.is_some() && path == LOCKFILE;
+        if scoped || !run_all.iter().any(|g| g.is_match(path)) {
+            continue;
+        }
+        if !cx.owners.overrides_run_all(path, &test_paths)? {
+            trigger = Some(path.clone());
+            break;
+        }
+    }
     let mut warnings = Vec::new();
     if cx.lockfile.as_ref().is_some_and(|l| l.manifests.is_empty()) {
         warnings.push(Warning {

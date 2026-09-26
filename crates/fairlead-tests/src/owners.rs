@@ -53,12 +53,22 @@ impl Owners {
             .any(|r| r.covers.iter().any(|c| c.is_match(path)))
     }
 
-    /// Whether a rule with `overrides_run_all` covers `path`, so a `run_all`
-    /// match there selects that rule's tests rather than every test.
-    pub fn overrides_run_all(&self, path: &str) -> bool {
-        self.rules
-            .iter()
-            .any(|r| r.overrides_run_all && r.covers.iter().any(|c| c.is_match(path)))
+    /// Whether a rule with `overrides_run_all` covers `path` and claims at
+    /// least one of `tests` for it, so a `run_all` match there selects that
+    /// rule's tests rather than every test. Claiming none, it runs everything.
+    pub fn overrides_run_all(&self, path: &str, tests: &[&str]) -> Result<bool, String> {
+        for rule in self.rules.iter().filter(|r| r.overrides_run_all) {
+            for cover in &rule.covers {
+                let Some(caps) = cover.captures(path) else {
+                    continue;
+                };
+                let claimed = Pattern::new(&fill(&rule.matches, &caps))?;
+                if tests.iter().any(|t| claimed.is_match(t)) {
+                    return Ok(true);
+                }
+            }
+        }
+        Ok(false)
     }
 
     /// For each test the changes claim, the first claim found.
