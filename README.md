@@ -107,9 +107,10 @@ commands. The [quick start](#quick-start) shows them, and the
 
 ## Status
 
-Pre-alpha. The latest release, v0.2.0, ships the test plan, the CI commands
-and action, replay, and the config commands. Its recall on real CI failures,
-with every miss and its cause, is in the [changelog](CHANGELOG.md) and on the
+Pre-alpha. The latest release, v0.3.0, adds edges the imports don't show, a
+walk barrier, and replay of bun test output to v0.2.0's test plan, CI commands
+and action, replay, and config commands. Recall on real CI failures, with every
+miss and its cause, is in the [changelog](CHANGELOG.md) and on the
 [benchmarks page](https://mahkassem.github.io/fairlead/docs/benchmarks.html).
 Claude Code comes first, then Codex. The [roadmap](https://mahkassem.github.io/fairlead/docs/roadmap.html)
 has milestones K0 to K6, each an [issue](https://github.com/mahkassem/fairlead/issues)

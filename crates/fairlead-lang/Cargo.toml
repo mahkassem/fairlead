@@ -10,7 +10,7 @@ description = "Source scanning and import resolution for Fairlead."
 publish = false
 
 [dependencies]
-fairlead-core = { version = "0.2.0", path = "../fairlead-core" }
+fairlead-core = { version = "0.3.0", path = "../fairlead-core" }
 globset = "0.4"
 ignore = "0.4"
 oxc_resolver = "11.23"

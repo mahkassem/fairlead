@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.3.0 (2026-09-26)
+
+### New
+
+- Edges the imports don't show: `[[graph.edges]]` makes each file matching `from` depend on the files its `to` globs match, and the planner follows the edge like an import. It fits a test that reaches its code over HTTP instead of importing it. A `{name}` is read from the side where it's a whole path segment, so `{area}{,-*}.test.ts` still picks up `orders-refunds.test.ts`, and `config check` refuses a rule that would silently match the wrong files. See [Import graph](https://mahkassem.github.io/fairlead/docs/graph.html#edges-the-imports-dont-show).
+- A walk barrier: `graph.barrier` names files the planner reaches but doesn't go past, such as a server module that every area imports and that imports every area. A changed barrier file is left to `tests.unreached` unless `plan.run_all` covers it. `graph why` and `test --explain` say where a barrier stopped the walk, and `graph stats` counts rule edges and barrier files. See [Barriers](https://mahkassem.github.io/fairlead/docs/graph.html#barriers).
+- Replay reads `bun test` output: `extractor = "bun"` attributes each `(fail)` line to the file header above it, including bun's interleaved parallel output and several bun runs in one job, and never takes a failure from bun's closing summary. The dataset keeps those lines. See [Replay](https://mahkassem.github.io/fairlead/docs/replay.html).
+
+### Known gaps
+
+- A bun test file that fails to load prints no `(fail)` line, so replay can't attribute it yet ([#68](https://github.com/mahkassem/fairlead/issues/68)).
+- A captured path segment that looks like glob syntax, such as `[slug]`, is re-read as a glob when filled into another pattern ([#69](https://github.com/mahkassem/fairlead/issues/69)).
+
 ## 0.2.0 (2026-09-26)
 
 ### New
