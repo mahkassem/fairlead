@@ -1,6 +1,7 @@
 //! The `fairlead` command. Each command arrives with its milestone; K1.1
-//! adds `config`, K1.2 `graph`, K1.3 `plan` and `test --explain`.
+//! adds `config`, K1.2 `graph`, K1.3 `plan`, `test --explain` and `ci`.
 
+mod ci_cmd;
 mod graph_cmd;
 mod plan_cmd;
 
@@ -51,6 +52,11 @@ enum Command {
         /// Why this test file or check is in the plan, or why it isn't.
         #[arg(long, value_name = "FILE_OR_CHECK")]
         explain: String,
+    },
+    /// Plan and run tests in CI.
+    Ci {
+        #[command(subcommand)]
+        action: ci_cmd::CiAction,
     },
     /// Inspect the import graph.
     Graph {
@@ -233,6 +239,7 @@ fn main() -> ExitCode {
             out,
             schema,
         }) => plan_cmd::run_plan(&cwd(), changes, json, out, schema),
+        Some(Command::Ci { action }) => ci_cmd::run(action, &cwd()),
         Some(Command::Test { changes, explain }) => {
             plan_cmd::run_explain(&cwd(), changes, &explain)
         }

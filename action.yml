@@ -12,6 +12,25 @@ inputs:
     description: A release tag such as v0.1.0, or `latest`.
     required: false
     default: latest
+outputs:
+  all:
+    description: "`ci plan --format github`: true when everything is selected."
+    value: ${{ steps.run.outputs.all }}
+  plan:
+    description: "`ci plan --format github`: the path to the plan JSON."
+    value: ${{ steps.run.outputs.plan }}
+  plan_id:
+    description: "`ci plan --format github`: the plan's id."
+    value: ${{ steps.run.outputs.plan_id }}
+  invocations:
+    description: "`ci plan --format github`: the invocations as a JSON array, usable with fromJSON."
+    value: ${{ steps.run.outputs.invocations }}
+  checks:
+    description: "`ci plan --format github`: the selected check ids, space-separated."
+    value: ${{ steps.run.outputs.checks }}
+  tests:
+    description: "`ci plan --format github`: how many test files are selected."
+    value: ${{ steps.run.outputs.tests }}
 runs:
   using: composite
   steps:
@@ -26,8 +45,12 @@ runs:
         curl -fsSL "$base/fairlead-installer.sh" | sh
         echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
     - name: Run fairlead
+      id: run
       shell: bash
       env:
         FAIRLEAD_ARGS: ${{ inputs.command }}
-      # Word-split on purpose; the value is never re-evaluated by the shell.
-      run: fairlead $FAIRLEAD_ARGS
+      # Word-split on purpose, with globbing off so `*` reaches fairlead as
+      # written; the value is never re-evaluated by the shell.
+      run: |
+        set -f
+        fairlead $FAIRLEAD_ARGS
