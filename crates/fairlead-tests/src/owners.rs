@@ -11,6 +11,7 @@ use crate::pattern::{fill, Pattern};
 struct Rule {
     matches: String,
     covers: Vec<Pattern>,
+    overrides_run_all: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -38,6 +39,7 @@ impl Owners {
                 Ok(Rule {
                     matches: o.matches.clone(),
                     covers,
+                    overrides_run_all: o.overrides_run_all,
                 })
             })
             .collect::<Result<_, String>>()?;
@@ -49,6 +51,14 @@ impl Owners {
         self.rules
             .iter()
             .any(|r| r.covers.iter().any(|c| c.is_match(path)))
+    }
+
+    /// Whether a rule with `overrides_run_all` covers `path`, so a `run_all`
+    /// match there selects that rule's tests rather than every test.
+    pub fn overrides_run_all(&self, path: &str) -> bool {
+        self.rules
+            .iter()
+            .any(|r| r.overrides_run_all && r.covers.iter().any(|c| c.is_match(path)))
     }
 
     /// For each test the changes claim, the first claim found.
@@ -93,6 +103,7 @@ mod tests {
         let owners = Owners::new(&[Owner {
             matches: "services/{name}/test/**".into(),
             covers: vec!["services/{name}/src/**".into()],
+            overrides_run_all: false,
         }])
         .unwrap();
         let tests = ["services/api/test/a.test.ts", "services/web/test/b.test.ts"];

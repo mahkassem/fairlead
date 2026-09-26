@@ -34,7 +34,10 @@ command = ["pnpm", "vitest", "run", "{files}"]
 
 [[tests.owners]]
 match = "test/{suite}/**"
-covers = ["test/{suite}/fixtures/**"]
+# A suite's own runner config and its fixture projects' configs are loaded
+# only by that suite's tests, so they select the suite, not everything.
+covers = ["test/{suite}/**/fixtures/**", "test/{suite}/vitest.config.*"]
+overrides_run_all = true
 
 [[checks]]
 id = "lint"

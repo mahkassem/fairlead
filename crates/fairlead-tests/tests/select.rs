@@ -426,3 +426,40 @@ fn a_manifest_whose_package_has_no_files_is_still_unreached() {
     assert_eq!(plan.unreached[0].path, "packages/prebuilt/package.json");
     assert!(plan.all);
 }
+
+#[test]
+fn an_owner_rule_can_take_a_run_all_path_it_covers() {
+    let files = [
+        ("vitest.config.ts", "export default {};\n"),
+        ("test/cli/test/run.test.ts", "export {};\n"),
+        (
+            "test/cli/fixtures/basic/vitest.config.ts",
+            "export default {};\n",
+        ),
+        ("test/core/test/a.test.ts", "export {};\n"),
+    ];
+    let dir = repo("owner-run-all", &files);
+    let rule = "[tests]\nexclude = [\"**/fixtures/**\"]\n[[tests.owners]]\nmatch = \"test/{suite}/**\"\ncovers = [\"test/{suite}/fixtures/**\"]\n";
+    let fixture = vec![modified("test/cli/fixtures/basic/vitest.config.ts")];
+
+    let plain = run(&dir, &config(&format!("{VITEST}\n{rule}")), fixture.clone());
+    assert!(
+        plain.all,
+        "without the flag a covered run-all path runs everything"
+    );
+
+    let cfg = config(&format!("{VITEST}\n{rule}overrides_run_all = true\n"));
+    let plan = run(&dir, &cfg, fixture);
+    assert!(!plan.all);
+    assert_eq!(tests(&plan), ["test/cli/test/run.test.ts"]);
+    assert!(matches!(
+        reason(&plan, "test/cli/test/run.test.ts"),
+        Reason::Owner { rule: 0, .. }
+    ));
+
+    let root = run(&dir, &cfg, vec![modified("vitest.config.ts")]);
+    assert!(
+        root.all,
+        "a run-all path no such rule covers still runs everything"
+    );
+}

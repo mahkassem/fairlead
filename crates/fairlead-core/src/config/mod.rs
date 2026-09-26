@@ -207,6 +207,10 @@ pub struct Owner {
     pub matches: String,
     /// Paths whose change selects those tests; may use the same `{name}`.
     pub covers: Vec<String>,
+    /// A covered path that matches `plan.run_all` selects this rule's tests
+    /// instead of every test, such as a fixture project's runner config.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub overrides_run_all: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]

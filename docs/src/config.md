@@ -54,7 +54,7 @@ fairlead.toml: tests.unreachd: unknown field `unreachd`, expected one of ...
 | `tests.exclude` | `**/node_modules/**` | Paths that are never test files |
 | `tests.unreached` | `"module"` | What a changed file nothing reaches selects: `module`, `all` or `warn` |
 | `tests.runners` | `[]` | `id`, `match`, `exclude` (files under `match` left to another runner), `invoke` (`once` or `per-module`), `cwd`, `command` |
-| `tests.owners` | `[]` | Tests that don't import what they test: `match`, `covers` |
+| `tests.owners` | `[]` | Tests that don't import what they test: `match`, `covers`, and `overrides_run_all` to let a covered `plan.run_all` path select only those tests |
 | `tests.classes` | `[]` | `class` (`unit`, `own`, `demand`, `canary`) for a `match` |
 | `checks` | `[]` | Steps that aren't tests: `id`, `command`, `paths`, `modules`, `files` |
 | `plan.run_all` | lockfiles, root manifests, tsconfig, runner and CI config | A changed path matching one selects everything |

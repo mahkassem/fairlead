@@ -161,6 +161,7 @@ pub fn plan(scan: &mut Scan, config: &Config, input: Input) -> Result<Plan, Stri
         .changed
         .iter()
         .filter(|p| !(cx.lockfile.is_some() && p.as_str() == LOCKFILE))
+        .filter(|p| !cx.owners.overrides_run_all(p))
         .find(|p| run_all.iter().any(|g| g.is_match(p)))
         .cloned();
     let mut warnings = Vec::new();
