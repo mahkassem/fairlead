@@ -179,6 +179,9 @@ pub struct Runner {
     pub id: String,
     #[serde(rename = "match")]
     pub matches: Vec<String>,
+    /// Test files under `match` that this runner leaves to another.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub exclude: Vec<String>,
     #[serde(default)]
     pub invoke: Invoke,
     /// Working directory; `{module}` is the module's root path.
@@ -277,6 +280,7 @@ impl Default for Plan {
             ]),
             ignore: strings(&[
                 "*.md",
+                ".changeset/*.md",
                 "docs/**",
                 "**/README.md",
                 "**/CHANGELOG.md",
@@ -296,6 +300,9 @@ pub struct Replay {
     pub checks: List<CheckStep>,
     /// CI job names (regexes) whose failures replay leaves out on purpose.
     pub ignore: List<String>,
+    /// Step names (regexes): a job that failed only in such steps, such as
+    /// an install, failed before any test and is left out.
+    pub ignore_steps: List<String>,
 }
 
 impl Default for Replay {
@@ -307,6 +314,7 @@ impl Default for Replay {
             failures: List::default(),
             checks: List::default(),
             ignore: List::default(),
+            ignore_steps: List::default(),
         }
     }
 }

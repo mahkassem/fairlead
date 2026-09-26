@@ -58,13 +58,13 @@ pub fn runner_problems(tree: &Tree, config: &Config) -> Result<Vec<String>, Stri
 pub fn discover(tree: &Tree, config: &Config, modules: &Modules) -> Result<Discovered, String> {
     let include = compile(config.tests.matches.items())?;
     let exclude = compile(config.tests.exclude.items())?;
-    let runners: Vec<(&Runner, Vec<Pattern>)> = config
+    let runners: Vec<(&Runner, Vec<Pattern>, Vec<Pattern>)> = config
         .tests
         .runners
         .items()
         .iter()
-        .map(|r| compile(&r.matches).map(|p| (r, p)))
-        .collect::<Result<_, _>>()?;
+        .map(|r| Ok((r, compile(&r.matches)?, compile(&r.exclude)?)))
+        .collect::<Result<_, String>>()?;
     let classes: Vec<(TestClass, Vec<Pattern>)> = config
         .tests
         .classes
@@ -80,7 +80,7 @@ pub fn discover(tree: &Tree, config: &Config, modules: &Modules) -> Result<Disco
         let matching: Vec<usize> = runners
             .iter()
             .enumerate()
-            .filter(|(_, (_, p))| any(p, path))
+            .filter(|(_, (_, p, x))| any(p, path) && !any(x, path))
             .map(|(i, _)| i)
             .collect();
         match matching.len() {

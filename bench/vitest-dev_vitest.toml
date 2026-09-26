@@ -21,7 +21,9 @@ command = ["node", "--test", "{files}"]
 
 [[tests.runners]]
 id = "vitest"
-match = ["test/{unit,e2e,coverage-test,browser,workspaces,workspaces-browser,typescript,test-utils}/**", "examples/**", "packages/**"]
+# Every suite under test/ but two, since suites come and go over a quarter.
+match = ["test/**", "examples/**", "packages/**"]
+exclude = ["test/ui/**", "test/node-runner/**"]
 invoke = "per-module"
 cwd = "{module}"
 command = ["pnpm", "vitest", "run", "{files}"]
@@ -48,13 +50,16 @@ paths = ["packages/**", "scripts/**", "*.{ts,mjs,json}"]
 [replay]
 window_days = 90
 min_failures = 30
-# The changed-files probe and the browser image build, not tests.
-ignore = ["^Diff: ", "^Image: "]
+# The changed-files probe, the browser image build and the report merge, not tests.
+ignore = ["^Diff: ", "^Image: ", "^Merge Reports$"]
+# A job that failed only while installing never ran a test.
+ignore_steps = ["^Install$"]
 
 [[replay.failures]]
 runner = "vitest"
 extractor = "vitest"
-job = "^(Test|Browsers): "
+# Older runs named the test jobs "Build&Test:", "Cache&Test:" and so on.
+job = "^(Test|Browsers|[A-Za-z]+&Test): "
 
 [[replay.checks]]
 job = "^Lint: "

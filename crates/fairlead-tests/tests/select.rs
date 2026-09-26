@@ -251,6 +251,23 @@ fn an_ignored_path_selects_nothing_unless_something_references_it() {
 }
 
 #[test]
+fn a_changeset_note_selects_nothing() {
+    let mut files = WORKSPACE.to_vec();
+    files.push((".changeset/quick-fox.md", "---\n'core': patch\n---\nFix.\n"));
+    let dir = repo("changeset", &files);
+    let plan = run(
+        &dir,
+        &config(VITEST),
+        vec![modified(".changeset/quick-fox.md")],
+    );
+    assert!(
+        plan.tests.is_empty() && !plan.all,
+        "a release note isn't read by tests"
+    );
+    assert_eq!(plan.ignored, [".changeset/quick-fox.md"]);
+}
+
+#[test]
 fn a_non_literal_dynamic_import_at_the_root_depends_on_every_file() {
     let mut files = WORKSPACE.to_vec();
     files.push(("tests/plugins.test.ts", "const m = await import(name);\n"));
@@ -324,6 +341,35 @@ fn a_test_no_runner_matches_fails_the_plan_naming_it() {
         err.contains("packages/billing/test/invoice.test.ts"),
         "{err}"
     );
+}
+
+#[test]
+fn a_runner_leaves_its_excluded_files_to_another() {
+    let dir = repo("runner-exclude", WORKSPACE);
+    let cfg = config(
+        r#"
+[[tests.runners]]
+id = "vitest"
+match = ["packages/**"]
+exclude = ["packages/billing/**"]
+command = ["vitest", "run", "{files}"]
+
+[[tests.runners]]
+id = "jest"
+match = ["packages/billing/**"]
+command = ["jest", "{files}"]
+"#,
+    );
+    let plan = run(&dir, &cfg, vec![modified("packages/core/src/money.ts")]);
+    let jest = plan.invocations.iter().find(|i| i.id == "jest").unwrap();
+    assert!(jest
+        .argv
+        .contains(&"packages/billing/test/invoice.test.ts".to_string()));
+    let vitest = plan.invocations.iter().find(|i| i.id == "vitest").unwrap();
+    assert!(vitest
+        .argv
+        .iter()
+        .all(|a| !a.starts_with("packages/billing/")));
 }
 
 #[test]

@@ -12,7 +12,7 @@ fairlead replay run --data bench/data/owner_name.jsonl --clone ../name --config 
 Lists every completed `pull_request` and `merge_group` run since `--since`, a week at a time since one listing returns at most 1,000 runs, and records one row per run attempt, passing or failing, so a job that failed and then passed on a re-run shows up as flaky. `--workflow FILE` (repeatable; a workflow's file name, such as `ci.yml`, or its id) lists only those workflows' runs, so other workflows cost no requests, and a first attempt that was cancelled or skipped is left out: it ran nothing, and each recorded attempt costs an API request. It needs `curl` and a token in `GITHUB_TOKEN` or `GH_TOKEN`; in GitHub Actions the workflow's own token can read other public repositories' runs and logs.
 
 - **Failed jobs keep the extractor's input,** not its output: failure-level annotations (GitHub's `.github` exit-code note left out) and the log lines around each `FAIL` or `●`. Logs expire after 90 days; the dataset keeps enough to re-extract with a better extractor later.
-- **Each row records its pull request and base.** For a pull request run, the pull request comes from the commit's associated pulls and the base is the base branch's first-parent commit when the run started. For a merge queue run, both come from the queue branch's name (`gh-readonly-queue/<base>/pr-<N>-<sha>`).
+- **Each row records its pull request and base.** For a pull request run, the pull request comes from the run, the commit's associated pulls, or, for a fork, the pulls whose head is the fork's branch; the base is the base branch's first-parent commit when the run started, or the default branch's when no pull request is found. For a merge queue run, both come from the queue branch's name (`gh-readonly-queue/<base>/pr-<N>-<sha>`).
 - **With `--clone`,** each run's head commit is fetched into the clone, so it's there when `replay run` needs it.
 - **Rows already in the dataset are skipped** before any of their jobs are fetched, so a weekly fetch is incremental. `--limit N` stops after N new attempts.
 - **The last line says how it ended:** `fetch complete`, `fetch partial` (the limit was reached; run it again to continue), or `fetch stopped` with the API's error and exit code 2. The rows gathered so far are written in every case, and a report from a partial dataset shouldn't be read as the whole window.
@@ -22,7 +22,7 @@ The dataset is JSON lines, appended and never rewritten.
 
 ## `replay run`
 
-With `--fetch-missing`, the recorded heads and bases the clone lacks are fetched first. `--json-out PATH` writes the JSON report as well as printing the text one. For each failed row in the window, replay checks out the head commit into a worktree beside the clone (created once and reused, so the [parse cache](graph.md) carries over), plans the change from the merge base of the recorded base and the head, and classes every failure the row names:
+With `--fetch-missing`, the recorded heads and bases the clone lacks are fetched first. `--json-out PATH` writes the JSON report as well as printing the text one. For each failed row in the window, replay checks out the head commit into a worktree beside the clone (created once and reused, so the [parse cache](graph.md) carries over), plans the change from the merge base of the recorded base (or, for a row without one, the clone's default branch as it stood when the run started) and the head, and classes every failure the row names:
 
 | Outcome | Meaning |
 | --- | --- |
@@ -34,7 +34,7 @@ With `--fetch-missing`, the recorded heads and bases the clone lacks are fetched
 | unavailable | the head commit, or the history to its merge base, isn't in the clone |
 | error | the planner refused the commit, such as a test file no runner matches |
 | unwatched | no `[[replay.failures]]` or `[[replay.checks]]` entry names the job; listed by job name so a gap in the config can't raise recall |
-| ignored | `replay.ignore` names the job, such as one that only aggregates others |
+| ignored | `replay.ignore` names the job, such as one that only aggregates others, or it failed only in steps `replay.ignore_steps` names, such as an install |
 
 Recall is hits over hits and misses. Strict recall also counts unconfirmed failures as misses.
 
@@ -70,7 +70,7 @@ Per repository: runs replayed, attributed failures against the gate, recall and 
 
 ## The benchmarks
 
-`bench/` holds a config for each public benchmark repository, written from how that repository's CI runs its tests. The `bench` workflow runs weekly, or by hand with `since` and `limit`:
+`bench/` holds a config for each public benchmark repository, written from how that repository's CI runs its tests. The `bench` workflow runs weekly, or by hand with `since` (85 days back by default, since GitHub keeps job logs for 90) and `limit`:
 
 - For each repository in turn, it builds Fairlead from the workflow's commit, starts from the dataset on the `bench-data` branch (or `main`), clones the repository with full history and no blobs, records new runs, and replays the window with `--fetch-missing`.
 - A last job copies each grown dataset into `bench/data/`, writes [Benchmarks](benchmarks.md), and force-pushes both to `bench-data`, recreated from `main` each time, then opens a pull request from it if none is open.

@@ -88,17 +88,79 @@ pub fn merge_queue_branch(branch: &str) -> Option<(u64, String)> {
     Some((number.parse().ok()?, sha.to_string()))
 }
 
-/// The pull request a head commit belongs to, and its base branch.
-/// A refusal (rate limit) is an error, so the row isn't written without it.
-fn pull_for(http: &dyn Http, repo: &str, sha: &str) -> Result<Option<(u64, String)>, String> {
+fn number_and_base(pull: &Value) -> Option<(u64, String)> {
+    Some((
+        pull.get("number")?.as_u64()?,
+        pull.get("base")?.get("ref")?.as_str()?.to_string(),
+    ))
+}
+
+/// The pull request a run's head belongs to, and its base branch: from the
+/// run, from the commit's pulls, or, for a fork, which neither names, from
+/// the pulls whose head is the fork's branch. A refusal (rate limit) is an
+/// error, so the row isn't written without it.
+fn pull_for(http: &dyn Http, repo: &str, run: &Value) -> Result<Option<(u64, String)>, String> {
+    let sha = str_of(run, "head_sha");
+    if let Some(found) = run
+        .get("pull_requests")
+        .and_then(Value::as_array)
+        .and_then(|a| a.first())
+        .and_then(number_and_base)
+    {
+        return Ok(Some(found));
+    }
     let pulls = get_gone_ok(http, &format!("/repos/{repo}/commits/{sha}/pulls"))?;
-    let first = pulls.as_array().and_then(|a| a.first());
-    Ok(first.and_then(|first| {
-        Some((
-            first.get("number")?.as_u64()?,
-            first.get("base")?.get("ref")?.as_str()?.to_string(),
-        ))
-    }))
+    if let Some(found) = pulls
+        .as_array()
+        .and_then(|a| a.first())
+        .and_then(number_and_base)
+    {
+        return Ok(Some(found));
+    }
+    let owner = run
+        .get("head_repository")
+        .and_then(|r| r.get("owner"))
+        .map_or("", |o| str_of(o, "login"));
+    let branch = str_of(run, "head_branch");
+    let plain = |s: &str| {
+        !s.is_empty()
+            && s.chars()
+                .all(|c| c.is_ascii_alphanumeric() || "._-/".contains(c))
+    };
+    if !plain(owner) || !plain(branch) {
+        return Ok(None);
+    }
+    let by_head = get_gone_ok(
+        http,
+        &format!("/repos/{repo}/pulls?head={owner}:{branch}&state=all&per_page=10"),
+    )?;
+    // A fork's branch name can be reused; a pull request opened after the run
+    // can't be the one it ran for.
+    let started = str_of(run, "created_at");
+    let candidates: Vec<Value> = by_head
+        .as_array()
+        .cloned()
+        .unwrap_or_default()
+        .into_iter()
+        .filter(|p| started.is_empty() || str_of(p, "created_at") <= started)
+        .collect();
+    let exact = candidates
+        .iter()
+        .find(|p| p.get("head").map_or("", |h| str_of(h, "sha")) == sha);
+    Ok(exact.or(candidates.first()).and_then(number_and_base))
+}
+
+/// The repository's default branch, the base when no pull request is found.
+fn default_branch(http: &dyn Http, repo: &str) -> Result<Option<String>, String> {
+    let body = get_gone_ok(http, &format!("/repos/{repo}"))?;
+    Ok(Some(str_of(&body, "default_branch").to_string()).filter(|b| !b.is_empty()))
+}
+
+/// Answers already fetched, so each costs one request per fetch.
+#[derive(Default)]
+struct Lookups {
+    pulls: BTreeMap<String, Option<(u64, String)>>,
+    default_branch: Option<Option<String>>,
 }
 
 /// The base branch's first-parent commit when the run started.
@@ -249,7 +311,7 @@ fn today() -> String {
 pub fn fetch(http: &dyn Http, opts: &Options, seen: &BTreeSet<(u64, u32)>) -> (Vec<Row>, Stop) {
     let mut rows = Vec::new();
     let mut seen = seen.clone();
-    let mut pulls: BTreeMap<String, Option<(u64, String)>> = BTreeMap::new();
+    let mut lookups = Lookups::default();
     for event in EVENTS {
         let listed = match runs(http, opts, event) {
             Ok(r) => r,
@@ -266,7 +328,7 @@ pub fn fetch(http: &dyn Http, opts: &Options, seen: &BTreeSet<(u64, u32)>) -> (V
                 if opts.limit.is_some_and(|l| rows.len() >= l) {
                     return (rows, Stop::Limit);
                 }
-                match row_of(http, opts, &run, event, attempt, &mut pulls) {
+                match row_of(http, opts, &run, event, attempt, &mut lookups) {
                     Ok(row) => rows.push(row),
                     Err(e) => return (rows, Stop::Error(e)),
                 }
@@ -282,7 +344,7 @@ fn row_of(
     run: &Value,
     event: &str,
     attempt: u32,
-    pulls: &mut BTreeMap<String, Option<(u64, String)>>,
+    lookups: &mut Lookups,
 ) -> Result<Row, String> {
     let id = run.get("id").and_then(Value::as_u64).unwrap_or(0);
     let head_sha = str_of(run, "head_sha").to_string();
@@ -305,18 +367,29 @@ fn row_of(
         merge_queue_branch(str_of(run, "head_branch"))
             .map_or((None, None), |(n, sha)| (Some(n), Some(sha)))
     } else {
-        let found = match pulls.get(&head_sha) {
+        let found = match lookups.pulls.get(&head_sha) {
             Some(found) => found.clone(),
             None => {
-                let found = pull_for(http, opts.repo, &head_sha)?;
-                pulls.insert(head_sha.clone(), found.clone());
+                let found = pull_for(http, opts.repo, run)?;
+                lookups.pulls.insert(head_sha.clone(), found.clone());
                 found
             }
         };
-        let base = found
-            .as_ref()
+        let branch = match &found {
+            Some((_, branch)) => Some(branch.clone()),
+            None if opts.clone.is_none() => None,
+            None => match &lookups.default_branch {
+                Some(cached) => cached.clone(),
+                None => {
+                    let branch = default_branch(http, opts.repo)?;
+                    lookups.default_branch = Some(branch.clone());
+                    branch
+                }
+            },
+        };
+        let base = branch
             .zip(opts.clone)
-            .and_then(|((_, branch), clone)| base_at(clone, branch, &created_at));
+            .and_then(|(branch, clone)| base_at(clone, &branch, &created_at));
         (found.map(|(n, _)| n), base)
     };
     if let Some(clone) = opts.clone {

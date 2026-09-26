@@ -53,18 +53,19 @@ fairlead.toml: tests.unreachd: unknown field `unreachd`, expected one of ...
 | `tests.match` | `**/*.{test,spec}.{ts,tsx,js,jsx,mjs,cjs,mts,cts}` | Test files |
 | `tests.exclude` | `**/node_modules/**` | Paths that are never test files |
 | `tests.unreached` | `"module"` | What a changed file nothing reaches selects: `module`, `all` or `warn` |
-| `tests.runners` | `[]` | `id`, `match`, `invoke` (`once` or `per-module`), `cwd`, `command` |
+| `tests.runners` | `[]` | `id`, `match`, `exclude` (files under `match` left to another runner), `invoke` (`once` or `per-module`), `cwd`, `command` |
 | `tests.owners` | `[]` | Tests that don't import what they test: `match`, `covers` |
 | `tests.classes` | `[]` | `class` (`unit`, `own`, `demand`, `canary`) for a `match` |
 | `checks` | `[]` | Steps that aren't tests: `id`, `command`, `paths`, `modules`, `files` |
 | `plan.run_all` | lockfiles, root manifests, tsconfig, runner and CI config | A changed path matching one selects everything |
-| `plan.ignore` | root Markdown, `docs/**`, READMEs, changelogs, licences | A changed path matching one selects nothing unless a file references it |
+| `plan.ignore` | root Markdown, changeset notes (`.changeset/*.md`), `docs/**`, READMEs, changelogs, licences | A changed path matching one selects nothing unless a file references it |
 | `replay.provider` | `"github"` | Where CI history comes from |
 | `replay.window_days` | `90` | How far back replay looks |
 | `replay.min_failures` | `30` | Failures needed before a replay result counts |
 | `replay.failures` | `[]` | `runner`, `extractor` (`vitest`, `jest`, `regex`), `job`, `pattern` |
 | `replay.checks` | `[]` | Map a CI `job` and `step` to a `check` |
 | `replay.ignore` | `[]` | CI job names (regexes) whose failures replay leaves out on purpose, such as a job that only aggregates others |
+| `replay.ignore_steps` | `[]` | CI step names (regexes): a job that failed only in such steps, such as an install, is left out |
 
 Commands are always argv arrays, never shell strings, and `{files}` expands to one argument per file. In `tests.runners.cwd`, `{module}` is the module's root path and `{module.id}` its id.
 

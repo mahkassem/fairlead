@@ -144,6 +144,7 @@ job = "^test$"
 
 [replay]
 ignore = ["^all-green$"]
+ignore_steps = ["^Install$"]
 "#;
 
 #[test]
@@ -199,6 +200,10 @@ fn a_synthetic_history_replays_to_the_expected_outcomes() {
                 job("test", "failure", &[fail_b]),
                 job("docs", "failure", &[]),
                 job("all-green", "failure", &[]),
+                Job {
+                    failed_steps: vec!["Install".into()],
+                    ..job("test-windows", "failure", &[])
+                },
             ],
         ),
         row(
@@ -290,7 +295,10 @@ fn a_synthetic_history_replays_to_the_expected_outcomes() {
         "no rule names the docs job"
     );
     assert_eq!(r.unwatched.len(), 2, "{:?}", r.unwatched);
-    assert_eq!(r.ignored, 1, "replay.ignore names all-green");
+    assert_eq!(
+        r.ignored, 2,
+        "all-green by name, the install failure by step"
+    );
     let pr = &r.by_event["pull_request"];
     assert_eq!((pr.hits, pr.misses, pr.unconfirmed), (1, 1, 1));
     assert!(r.first_plan_seconds.is_some() && r.p90_plan_seconds.is_some());
@@ -513,4 +521,66 @@ fn a_commit_the_remote_lost_doesnt_keep_the_rest_of_its_batch_out() {
     let missing = fairlead_replay::git::fetch_missing(&clone, &[gone, later.clone()]);
     assert_eq!(missing, 1, "only the lost commit is still missing");
     assert!(fairlead_replay::git::has_commit(&clone, &later));
+}
+
+#[test]
+fn a_row_without_a_base_is_planned_from_the_default_branch() {
+    let origin =
+        std::env::temp_dir().join(format!("fairlead-replay-nobase-o-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&origin);
+    std::fs::create_dir_all(&origin).unwrap();
+    git(&origin, &["init", "-q", "-b", "main"]);
+    write(&origin, "src/b.ts", "export const b = 1;\n");
+    write(&origin, "test/a.test.ts", "it('a works', () => {});\n");
+    write(&origin, "test/b.test.ts", "import { b } from '../src/b';\n");
+    commit(&origin, "base");
+    git(&origin, &["checkout", "-q", "-b", "fork-pr"]);
+    write(&origin, "src/b.ts", "export const b = 2;\n");
+    let head = commit(&origin, "change b");
+    git(&origin, &["checkout", "-q", "main"]);
+    let clone =
+        std::env::temp_dir().join(format!("fairlead-replay-nobase-c-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&clone);
+    git(
+        std::env::temp_dir().as_path(),
+        &[
+            "clone",
+            "-q",
+            "--no-checkout",
+            origin.to_str().unwrap(),
+            clone.to_str().unwrap(),
+        ],
+    );
+    git(&clone, &["fetch", "-q", "origin", "fork-pr"]);
+    let mut failing = row(
+        1,
+        1,
+        14,
+        &head,
+        "unused",
+        10,
+        vec![job("test", "failure", &[" FAIL  test/b.test.ts > b works"])],
+    );
+    failing.base_sha = None;
+    failing.created_at = "2099-01-01T00:00:00Z".into();
+    let mut config: Config = toml::from_str(CONFIG).unwrap();
+    config.graph.cache = false;
+    let wt_path =
+        std::env::temp_dir().join(format!("fairlead-replay-nobase-wt-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&wt_path);
+    let replayer = Replayer {
+        clone: &clone,
+        worktree: Worktree::open(&clone, &wt_path, &head).unwrap(),
+        config: &config,
+        sources: Sources::new(&config).unwrap(),
+    };
+    let window = Window::ending("2099-01-01", 7).unwrap();
+    let replayed = replay(&replayer, &[failing], &window);
+    let outcomes: Vec<String> = replayed
+        .failures
+        .iter()
+        .map(|f| format!("{:?}", f.outcome))
+        .collect();
+    assert_eq!(outcomes, ["Hit"], "{:?}", replayed.failures);
+    assert_eq!(replayed.failures[0].changed, ["src/b.ts"]);
 }
