@@ -39,6 +39,13 @@ match = "test/{suite}/**"
 covers = ["test/{suite}/**/fixtures/**", "test/{suite}/vitest.config.*"]
 overrides_run_all = true
 
+# The UI specs drive the built client that @vitest/ui serves (distClientRoot),
+# so a change to it reaches them through a build step, not an import. Browser
+# mode serves that client only with browser.ui, which is off in CI.
+[[tests.owners]]
+match = "test/ui/**"
+covers = ["packages/ui/client/**"]
+
 [[checks]]
 id = "lint"
 command = ["pnpm", "run", "lint"]
