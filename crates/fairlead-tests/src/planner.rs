@@ -164,6 +164,14 @@ pub fn plan(scan: &mut Scan, config: &Config, input: Input) -> Result<Plan, Stri
         .find(|p| run_all.iter().any(|g| g.is_match(p)))
         .cloned();
     let mut warnings = Vec::new();
+    if cx.lockfile.as_ref().is_some_and(|l| l.manifests.is_empty()) {
+        warnings.push(Warning {
+            code: "lockfile-scoped-to-nothing".into(),
+            path: Some(LOCKFILE.into()),
+            message: "the lockfile changed but no workspace package's resolved dependencies did"
+                .into(),
+        });
+    }
     let walked = start_walk(&cx);
     let (tests, unreached, all_reason) = match trigger {
         Some(path) => {

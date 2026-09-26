@@ -170,3 +170,19 @@ fn without_the_base_text_scoping_off_or_hoisting_the_lockfile_selects_everything
         "an overrides change"
     );
 }
+
+#[test]
+fn a_lockfile_change_that_reaches_no_package_says_so() {
+    let base = LOCK.replace("settings:", "catalogs:\n  default:\n    left:\n      specifier: ^1.0.0\n      version: 1.0.0\nsettings:");
+    let head = base.replace(
+        "specifier: ^1.0.0\n      version: 1.0.0\nsettings",
+        "specifier: ^1.0.1\n      version: 1.0.0\nsettings",
+    );
+    let dir = repo_with("lock-nothing", &head, &[]);
+    let plan = plan_lock(&dir, CONFIG, Some(&base));
+    assert!(plan.tests.is_empty() && !plan.all);
+    assert!(plan
+        .warnings
+        .iter()
+        .any(|w| w.code == "lockfile-scoped-to-nothing"));
+}

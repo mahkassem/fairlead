@@ -34,9 +34,12 @@ It still selects everything when:
 - the root package's dependencies changed, since every package sees them;
 - an affected entry isn't a workspace package in the head tree;
 - anything outside `importers`, `packages`, `snapshots` and `catalogs` changed, such as `overrides`, `patchedDependencies` or `settings`;
-- or the lockfile doesn't parse, or names a package it doesn't list.
+- or the lockfile doesn't parse, has no importers (a single-project lockfile), or names a package it doesn't list.
+
+A lockfile change that reaches no package selects nothing and says so in a `lockfile-scoped-to-nothing` warning.
 
 Other lockfiles (`package-lock.json`, `yarn.lock`, `bun.lock`) always select everything.
+
 ## Modules
 
 A module is a unit a plan can widen to: each workspace package (`modules.discover = ["workspaces"]`), and each directory a `modules.define` pattern matches, named by its `{name}`. A file belongs to the deepest module above it; a file in none is at the root.

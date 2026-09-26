@@ -209,3 +209,23 @@ packages:
         .collect();
     assert_eq!(got, ["packages/b"]);
 }
+
+#[test]
+fn a_lockfile_with_no_importers_is_not_scoped() {
+    let single = r#"
+lockfileVersion: '6.0'
+dependencies:
+  left:
+    specifier: ^1.0.0
+    version: 1.0.0
+packages:
+  /left@1.0.0:
+    resolution: {integrity: sha512-left}
+    dependencies:
+      deep: 1.0.0
+  /deep@1.0.0:
+    resolution: {integrity: sha512-deep}
+"#;
+    let head = single.replace("sha512-deep", "sha512-deep-2");
+    assert_eq!(affected_importers(single, &head), None);
+}

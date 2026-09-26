@@ -86,6 +86,11 @@ impl Lock {
             }
         };
         let importers = object("importers")?;
+        // A single-project lockfile keeps its direct dependencies at the top
+        // level, with no importers to scope to.
+        if importers.is_empty() {
+            return None;
+        }
         let packages: BTreeMap<String, Value> = object("packages")?
             .into_iter()
             .map(|(k, v)| (k.trim_start_matches('/').to_string(), v))
