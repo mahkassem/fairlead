@@ -1,0 +1,29 @@
+2026-09-20T10:00:01.0000000Z bun test v1.4.2 (744846f84)
+2026-09-20T10:00:02.0000000Z ##[group]packages/api/test/orders.test.ts:
+2026-09-20T10:00:02.1000000Z (pass) orders > lists the open ones [12.10ms]
+2026-09-20T10:00:02.2000000Z 
+2026-09-20T10:00:02.3000000Z ##[endgroup]
+2026-09-20T10:00:02.4000000Z ##[group]packages/api/test/refunds.test.ts:
+2026-09-20T10:00:02.5000000Z error: expect(received).toBe(expected)
+2026-09-20T10:00:02.6000000Z Expected: 200
+2026-09-20T10:00:02.7000000Z Received: 409
+2026-09-20T10:00:02.8000000Z (fail) refunds > a second refund of the same order is refused [31.40ms]
+2026-09-20T10:00:02.9000000Z ##[endgroup]
+2026-09-20T10:00:03.0000000Z ##[group]packages/api/test/orders.test.ts:
+2026-09-20T10:00:03.1000000Z (pass) orders > closes one [8.00ms]
+2026-09-20T10:00:03.2000000Z ##[endgroup]
+2026-09-20T10:00:03.3000000Z ##[group]packages/api/test/invoices.test.ts:
+2026-09-20T10:00:03.4000000Z # Unhandled error between tests
+2026-09-20T10:00:03.5000000Z error: the server never answered /up
+2026-09-20T10:00:03.6000000Z (fail) (unnamed) [124.36ms]
+2026-09-20T10:00:03.7000000Z ##[endgroup]
+2026-09-20T10:00:03.8000000Z ##[group]packages/api/test/refunds.test.ts:
+2026-09-20T10:00:03.9000000Z (pass) refunds > a partial refund keeps the rest [10.00ms]
+2026-09-20T10:00:04.0000000Z ##[endgroup]
+2026-09-20T10:00:04.1000000Z 
+2026-09-20T10:00:04.2000000Z 2 tests failed:
+2026-09-20T10:00:04.3000000Z (fail) refunds > a second refund of the same order is refused [31.40ms]
+2026-09-20T10:00:04.4000000Z (fail) (unnamed) [124.36ms]
+2026-09-20T10:00:04.5000000Z 
+2026-09-20T10:00:04.6000000Z  3 pass
+2026-09-20T10:00:04.7000000Z  2 fail

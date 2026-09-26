@@ -91,3 +91,67 @@ fn a_custom_pattern_needs_a_file_group() {
         [printed("tests/x.spec.ts", None, None)]
     );
 }
+
+#[test]
+fn bun_attributes_each_failure_to_the_header_it_sits_under_and_stops_at_the_summary() {
+    assert_eq!(
+        extract(&Extractor::Bun, &fixture("bun-parallel.log")),
+        [
+            printed(
+                "packages/api/test/refunds.test.ts",
+                None,
+                Some("a second refund of the same order is refused")
+            ),
+            printed("packages/api/test/invoices.test.ts", None, None),
+        ]
+    );
+}
+
+#[test]
+fn bun_reads_the_plain_header_printed_outside_github() {
+    let log =
+        "packages/web/test/cart.test.tsx:\n(pass) cart > adds [1ms]\n(fail) cart > removes [2ms]\n";
+    assert_eq!(
+        extract(&Extractor::Bun, log),
+        [printed(
+            "packages/web/test/cart.test.tsx",
+            None,
+            Some("removes")
+        )]
+    );
+}
+
+#[test]
+fn bun_reads_the_same_failures_from_the_dataset_excerpt_as_from_the_whole_log() {
+    let log = fixture("bun-parallel.log");
+    let excerpt = fairlead_replay::dataset::log_excerpt(&log).join("\n");
+    assert_eq!(
+        extract(&Extractor::Bun, &excerpt),
+        extract(&Extractor::Bun, &log)
+    );
+}
+
+#[test]
+fn bun_reads_a_second_run_in_the_same_job_after_the_first_summary() {
+    let log = "packages/a/test/one.test.ts:\n(fail) one > breaks [1ms]\n\n1 tests failed:\n(fail) one > breaks [1ms]\n\npackages/b/test/two.test.ts:\n(fail) two > also breaks [1ms]\n\n1 tests failed:\n(fail) two > also breaks [1ms]\n";
+    assert_eq!(
+        extract(&Extractor::Bun, log),
+        [
+            printed("packages/a/test/one.test.ts", None, Some("breaks")),
+            printed("packages/b/test/two.test.ts", None, Some("also breaks")),
+        ]
+    );
+}
+
+#[test]
+fn bun_reads_a_header_whose_path_has_a_space() {
+    let log = "packages/web/test/my cart.test.ts:\n(fail) cart > removes [2ms]\n";
+    assert_eq!(
+        extract(&Extractor::Bun, log),
+        [printed(
+            "packages/web/test/my cart.test.ts",
+            None,
+            Some("removes")
+        )]
+    );
+}
