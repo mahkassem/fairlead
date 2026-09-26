@@ -1,0 +1,437 @@
+{
+  "$defs": {
+    "Change": {
+      "properties": {
+        "from": {
+          "description": "For a rename, the old path; it counts as changed too.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "path": {
+          "type": "string"
+        },
+        "status": {
+          "$ref": "#/$defs/Status"
+        }
+      },
+      "required": [
+        "path",
+        "status"
+      ],
+      "type": "object"
+    },
+    "CheckSelection": {
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "reason": {
+          "$ref": "#/$defs/Reason"
+        }
+      },
+      "required": [
+        "id",
+        "reason"
+      ],
+      "type": "object"
+    },
+    "Invocation": {
+      "properties": {
+        "argv": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "cwd": {
+          "description": "Repo-relative working directory.",
+          "type": "string"
+        },
+        "id": {
+          "description": "The runner or check id.",
+          "type": "string"
+        },
+        "kind": {
+          "$ref": "#/$defs/InvocationKind"
+        }
+      },
+      "required": [
+        "id",
+        "kind",
+        "cwd",
+        "argv"
+      ],
+      "type": "object"
+    },
+    "InvocationKind": {
+      "enum": [
+        "runner",
+        "check"
+      ],
+      "type": "string"
+    },
+    "Reason": {
+      "description": "The first reason a test or check was selected.",
+      "oneOf": [
+        {
+          "description": "A changed path matched `plan.run_all`.",
+          "properties": {
+            "kind": {
+              "const": "run-all",
+              "type": "string"
+            },
+            "path": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "path"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "The test file itself changed.",
+          "properties": {
+            "kind": {
+              "const": "changed",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "The test depends on a changed file: the chain runs from that file\nto the test, one edge per step.",
+          "properties": {
+            "chain": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "kind": {
+              "const": "import",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "chain"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "An owner rule's `covers` matched a changed path.",
+          "properties": {
+            "changed": {
+              "type": "string"
+            },
+            "covers": {
+              "type": "string"
+            },
+            "kind": {
+              "const": "owner",
+              "type": "string"
+            },
+            "rule": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "kind",
+            "rule",
+            "covers",
+            "changed"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Canary tests run in every plan.",
+          "properties": {
+            "kind": {
+              "const": "canary",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "A changed file nothing reaches widened to this test.",
+          "properties": {
+            "kind": {
+              "const": "unreached",
+              "type": "string"
+            },
+            "path": {
+              "type": "string"
+            },
+            "policy": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "path",
+            "policy"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "A check's `paths` matched this many changed files.",
+          "properties": {
+            "kind": {
+              "const": "paths",
+              "type": "string"
+            },
+            "matched": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "kind",
+            "matched"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "A check watches a module the change affects.",
+          "properties": {
+            "kind": {
+              "const": "modules",
+              "type": "string"
+            },
+            "modules": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            }
+          },
+          "required": [
+            "kind",
+            "modules"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "A check with no `paths` or `modules` runs in every plan.",
+          "properties": {
+            "kind": {
+              "const": "always",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "Status": {
+      "enum": [
+        "added",
+        "modified",
+        "deleted",
+        "renamed"
+      ],
+      "type": "string"
+    },
+    "TestClass": {
+      "enum": [
+        "unit",
+        "own",
+        "demand",
+        "canary"
+      ],
+      "type": "string"
+    },
+    "TestSelection": {
+      "properties": {
+        "class": {
+          "$ref": "#/$defs/TestClass"
+        },
+        "module": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "path": {
+          "type": "string"
+        },
+        "reason": {
+          "$ref": "#/$defs/Reason"
+        },
+        "runner": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "path",
+        "class",
+        "reason"
+      ],
+      "type": "object"
+    },
+    "UnreachedFile": {
+      "properties": {
+        "module": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "path": {
+          "type": "string"
+        },
+        "selected": {
+          "description": "What was selected for it: `module`, `all`, or `none` under `warn`.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "path",
+        "selected"
+      ],
+      "type": "object"
+    },
+    "Warning": {
+      "properties": {
+        "code": {
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        },
+        "path": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "code",
+        "message"
+      ],
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "all": {
+      "description": "Everything is selected.",
+      "type": "boolean"
+    },
+    "base": {
+      "description": "The commit changes were measured from, when there is one.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "changed": {
+      "items": {
+        "$ref": "#/$defs/Change"
+      },
+      "type": "array"
+    },
+    "checks": {
+      "items": {
+        "$ref": "#/$defs/CheckSelection"
+      },
+      "type": "array"
+    },
+    "config_digest": {
+      "description": "`sha256:` of the merged config.",
+      "type": "string"
+    },
+    "fairlead_version": {
+      "type": "string"
+    },
+    "head": {
+      "description": "HEAD's commit when the working tree matches it, else `worktree`.",
+      "type": "string"
+    },
+    "ignored": {
+      "description": "Changed paths `plan.ignore` matched that nothing references.",
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "invocations": {
+      "description": "What to run, in order: each an argv in a working directory.",
+      "items": {
+        "$ref": "#/$defs/Invocation"
+      },
+      "type": "array"
+    },
+    "plan_id": {
+      "description": "Stable for the same config, tree, base and changes.",
+      "type": "string"
+    },
+    "tests": {
+      "items": {
+        "$ref": "#/$defs/TestSelection"
+      },
+      "type": "array"
+    },
+    "tree_hash": {
+      "description": "The git tree id of HEAD when the working tree is clean, else\n`worktree:` and a hash of every file's path and blob id.",
+      "type": "string"
+    },
+    "unreached": {
+      "description": "Changed files nothing reaches, and what the plan did about each.",
+      "items": {
+        "$ref": "#/$defs/UnreachedFile"
+      },
+      "type": "array"
+    },
+    "version": {
+      "format": "uint32",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "warnings": {
+      "items": {
+        "$ref": "#/$defs/Warning"
+      },
+      "type": "array"
+    }
+  },
+  "required": [
+    "version",
+    "plan_id",
+    "fairlead_version",
+    "config_digest",
+    "tree_hash",
+    "head",
+    "all",
+    "changed",
+    "ignored",
+    "tests",
+    "checks",
+    "invocations",
+    "unreached",
+    "warnings"
+  ],
+  "title": "Plan",
+  "type": "object"
+}

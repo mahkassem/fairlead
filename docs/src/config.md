@@ -58,6 +58,7 @@ fairlead.toml: tests.unreachd: unknown field `unreachd`, expected one of ...
 | `tests.classes` | `[]` | `class` (`unit`, `own`, `demand`, `canary`) for a `match` |
 | `checks` | `[]` | Steps that aren't tests: `id`, `command`, `paths`, `modules`, `files` |
 | `plan.run_all` | lockfiles, root manifests, tsconfig, runner and CI config | A changed path matching one selects everything |
+| `plan.ignore` | root Markdown, `docs/**`, READMEs, changelogs, licences | A changed path matching one selects nothing unless a file references it |
 | `replay.provider` | `"github"` | Where CI history comes from |
 | `replay.window_days` | `90` | How far back replay looks |
 | `replay.min_failures` | `30` | Failures needed before a replay result counts |

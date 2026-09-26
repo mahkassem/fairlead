@@ -12,13 +12,17 @@ use crate::extract::{extract, Extracted, SpecKind};
 use crate::graph::{EdgeKind, Graph};
 use crate::resolve::{Resolver, Target};
 use crate::tree::{normalize, parent, Tree};
-use crate::workspace;
+use crate::workspace::{self, Package};
 
 #[derive(Default)]
 struct FileResult {
     edges: Vec<(String, EdgeKind)>,
     packages: Vec<String>,
     unresolved: Vec<String>,
+    /// Specifiers that didn't resolve, with their edge kind.
+    failed: Vec<(String, EdgeKind)>,
+    /// Path-like literals naming files that aren't in the tree.
+    dangling: Vec<String>,
     unknown: bool,
     fell_back: bool,
     parsed: Option<Parsed>,
@@ -34,6 +38,7 @@ struct Parsed {
 pub struct Scan {
     pub tree: Tree,
     pub graph: Graph,
+    pub packages: Vec<Package>,
     pub cache: CacheStats,
 }
 
@@ -101,6 +106,12 @@ pub fn build(root: &Path, config: &Config) -> std::io::Result<Scan> {
         graph
             .unresolved
             .extend(result.unresolved.into_iter().map(|s| (from, s)));
+        graph
+            .failed
+            .extend(result.failed.into_iter().map(|(s, k)| (from, s, k)));
+        graph
+            .dangling
+            .extend(result.dangling.into_iter().map(|p| (from, p)));
         if result.unknown {
             graph.unknown.push(from);
         }
@@ -112,6 +123,7 @@ pub fn build(root: &Path, config: &Config) -> std::io::Result<Scan> {
     Ok(Scan {
         tree,
         graph,
+        packages,
         cache: stats,
     })
 }
@@ -160,18 +172,20 @@ fn scan_file(
             Target::File(to) => result.edges.push((to, (*kind).into())),
             Target::Package(name) => result.packages.push(name),
             Target::External => {}
-            Target::Unresolved => result.unresolved.push(spec.clone()),
+            Target::NotFound => result.failed.push((spec.clone(), (*kind).into())),
+            Target::Unresolved => {
+                result.unresolved.push(spec.clone());
+                result.failed.push((spec.clone(), (*kind).into()));
+            }
         }
     }
     for literal in &extracted.literals {
         let from_file = normalize(parent(file), literal);
         let from_root = normalize("", literal.trim_start_matches("./"));
-        if let Some(to) = [from_file, from_root]
-            .into_iter()
-            .flatten()
-            .find(|p| tree.contains(p))
-        {
-            result.edges.push((to, EdgeKind::PathLiteral));
+        let candidates: Vec<String> = [from_file, from_root].into_iter().flatten().collect();
+        match candidates.iter().find(|p| tree.contains(p)) {
+            Some(to) => result.edges.push((to.clone(), EdgeKind::PathLiteral)),
+            None => result.dangling.extend(candidates),
         }
     }
     result.parsed = Some(parsed);

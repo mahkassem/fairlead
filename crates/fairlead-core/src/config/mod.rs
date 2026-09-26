@@ -247,6 +247,9 @@ pub enum CheckFiles {
 pub struct Plan {
     /// A changed path matching any of these selects everything.
     pub run_all: List<String>,
+    /// A changed path matching these selects nothing by itself; files that
+    /// reference it are still reached through their edges.
+    pub ignore: List<String>,
 }
 
 impl Default for Plan {
@@ -269,6 +272,13 @@ impl Default for Plan {
                 "**/jest.config.*",
                 "**/playwright.config.*",
                 ".github/workflows/**",
+            ]),
+            ignore: strings(&[
+                "*.md",
+                "docs/**",
+                "**/README.md",
+                "**/CHANGELOG.md",
+                "LICENSE*",
             ]),
         }
     }

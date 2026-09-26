@@ -27,6 +27,9 @@ pub struct WorkspaceFs {
     scopes: HashSet<String>,
     /// Absolute (outDir, rootDir) pairs.
     outputs: Vec<(PathBuf, PathBuf)>,
+    /// Deleted files shown as empty files, and the directories above them.
+    phantoms: HashSet<PathBuf>,
+    phantom_dirs: HashSet<PathBuf>,
 }
 
 impl WorkspaceFs {
@@ -46,6 +49,41 @@ impl WorkspaceFs {
             fs.packages.insert(package.name.clone(), dir);
         }
         fs
+    }
+
+    pub fn with_phantoms(mut self, root: &Path, phantoms: &[String]) -> WorkspaceFs {
+        for rel in phantoms {
+            // Segment by segment, so the separators match the resolver's paths on Windows.
+            let path = rel
+                .split('/')
+                .fold(root.to_path_buf(), |p, part| p.join(part));
+            let mut dir = path.parent();
+            while let Some(d) = dir.filter(|d| d.starts_with(root) && *d != root) {
+                self.phantom_dirs.insert(d.to_path_buf());
+                dir = d.parent();
+            }
+            self.phantoms.insert(path);
+        }
+        self
+    }
+
+    /// A phantom's metadata. Paths are compared without Windows' `\\?\`
+    /// prefix, which the resolver's canonical directories carry.
+    fn phantom(&self, path: &Path) -> Option<FileMetadata> {
+        if self.phantoms.is_empty() {
+            return None;
+        }
+        let path = crate::tree::plain(path);
+        if self.phantoms.contains(&path) {
+            return Some(FileMetadata::new(true, false, false));
+        }
+        self.phantom_dirs
+            .contains(&path)
+            .then(|| FileMetadata::new(false, true, false))
+    }
+
+    fn is_phantom_file(&self, path: &Path) -> bool {
+        !self.phantoms.is_empty() && self.phantoms.contains(&crate::tree::plain(path))
     }
 
     /// The real path behind a virtual `node_modules/<package>/...` path.
@@ -114,10 +152,16 @@ impl FileSystem for WorkspaceFs {
     }
 
     fn read(&self, path: &Path) -> io::Result<Vec<u8>> {
+        if self.is_phantom_file(path) {
+            return Ok(Vec::new());
+        }
         std::fs::read(self.real(path))
     }
 
     fn read_to_string(&self, path: &Path) -> io::Result<String> {
+        if self.is_phantom_file(path) {
+            return Ok(String::new());
+        }
         FileSystemOs::read_to_string(&self.real(path))
     }
 
@@ -125,17 +169,25 @@ impl FileSystem for WorkspaceFs {
         if self.is_virtual_dir(path) {
             return Ok(FileMetadata::new(false, true, false));
         }
-        FileSystemOs::metadata(&self.real(path))
+        let real = self.real(path);
+        // Phantoms first: a deleted path has nothing on disk to find, and how
+        // the OS reports a missing file differs by platform.
+        if let Some(meta) = self.phantom(&real) {
+            return Ok(meta);
+        }
+        FileSystemOs::metadata(&real)
     }
 
     fn symlink_metadata(&self, path: &Path) -> io::Result<FileMetadata> {
-        if self.is_virtual_dir(path) || self.unvirtual(path).is_some() {
+        if self.is_virtual_dir(path)
+            || self.unvirtual(path).is_some()
+            || self.phantom(path).is_some()
+        {
             return self.metadata(path);
         }
-        match FileSystemOs::symlink_metadata(path) {
-            Err(e) if e.kind() == io::ErrorKind::NotFound => self.metadata(path),
-            other => other,
-        }
+        // Any error falls through to `metadata`, which knows virtual and
+        // mapped paths: on Windows a missing file doesn't read as NotFound.
+        FileSystemOs::symlink_metadata(path).or_else(|_| self.metadata(path))
     }
 
     fn read_link(&self, path: &Path) -> Result<PathBuf, ResolveError> {
@@ -143,6 +195,10 @@ impl FileSystem for WorkspaceFs {
     }
 
     fn canonicalize(&self, path: &Path) -> io::Result<PathBuf> {
-        FileSystemOs::canonicalize(&self.real(path))
+        let real = self.real(path);
+        if self.phantom(&real).is_some() {
+            return Ok(real);
+        }
+        FileSystemOs::canonicalize(&real)
     }
 }
