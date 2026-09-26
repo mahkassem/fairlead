@@ -53,6 +53,16 @@ pub fn renamed(from: &str, to: &str) -> Change {
 }
 
 pub fn try_plan(dir: &Path, config: &Config, changes: Vec<Change>) -> Result<Plan, String> {
+    try_plan_with_base(dir, config, changes, Default::default())
+}
+
+/// A plan given the base's text of the files the planner reads at the base.
+pub fn try_plan_with_base(
+    dir: &Path,
+    config: &Config,
+    changes: Vec<Change>,
+    base_files: std::collections::BTreeMap<String, String>,
+) -> Result<Plan, String> {
     let mut scan = build(dir, config).unwrap();
     plan(
         &mut scan,
@@ -63,6 +73,7 @@ pub fn try_plan(dir: &Path, config: &Config, changes: Vec<Change>) -> Result<Pla
             head: "worktree".into(),
             config_digest: "sha256:test".into(),
             tree_hash: "worktree:test".into(),
+            base_files,
         },
     )
 }

@@ -251,9 +251,10 @@ fn an_ignored_path_selects_nothing_unless_something_references_it() {
 }
 
 #[test]
-fn a_changeset_note_selects_nothing() {
+fn a_changeset_note_or_its_state_selects_nothing() {
     let mut files = WORKSPACE.to_vec();
     files.push((".changeset/quick-fox.md", "---\n'core': patch\n---\nFix.\n"));
+    files.push((".changeset/pre.json", "{ \"mode\": \"pre\" }\n"));
     let dir = repo("changeset", &files);
     let plan = run(
         &dir,
@@ -265,6 +266,11 @@ fn a_changeset_note_selects_nothing() {
         "a release note isn't read by tests"
     );
     assert_eq!(plan.ignored, [".changeset/quick-fox.md"]);
+    let state = run(&dir, &config(VITEST), vec![modified(".changeset/pre.json")]);
+    assert!(
+        state.tests.is_empty() && !state.all,
+        "the changesets tool's own state"
+    );
 }
 
 #[test]

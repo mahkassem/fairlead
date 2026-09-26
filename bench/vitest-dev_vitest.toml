@@ -5,6 +5,10 @@
 [tests]
 exclude = ["**/node_modules/**", "**/fixtures/**", "**/__snapshots__/**", "docs/**"]
 
+[plan]
+# Measured here before it becomes the default.
+lockfile = "scope"
+
 [[tests.runners]]
 id = "playwright-ui"
 match = ["test/ui/**"]

@@ -87,6 +87,10 @@ def repo_section(slug, report, rows, fetch_line):
         lines.append(
             f"| Recall on `{plain(event)}` runs (strict) | {pct(e['recall'])} ({pct(e['strict_recall'])}) |"
         )
+    if report.get("widened_by"):
+        lines += ["", "Plans that selected everything, by cause:", ""]
+        for why, n in sorted(report["widened_by"].items(), key=lambda kv: (-kv[1], kv[0]))[:10]:
+            lines.append(f"- `{plain(why)}`: {n}")
     if report.get("unwatched"):
         lines += ["", "Failed jobs no rule watches:", ""]
         for job, n in sorted(report["unwatched"].items()):

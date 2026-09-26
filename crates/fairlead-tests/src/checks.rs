@@ -34,8 +34,7 @@ pub fn checks(
                 .map(|g| Pattern::new(g))
                 .collect::<Result<_, _>>()?;
             let matched = cx
-                .changed
-                .iter()
+                .changed_or_scoped()
                 .filter(|p| paths.iter().any(|g| g.is_match(p)))
                 .count();
             let modules: Vec<String> = check

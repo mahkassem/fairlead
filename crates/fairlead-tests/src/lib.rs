@@ -7,6 +7,7 @@ pub mod digest;
 pub mod explain;
 pub mod git;
 pub mod invoke;
+pub mod lockfile;
 pub mod modules;
 pub mod owners;
 pub mod pattern;

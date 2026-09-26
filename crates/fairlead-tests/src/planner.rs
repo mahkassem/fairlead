@@ -2,9 +2,9 @@
 //! deleted files, package manifests, the reverse walk, tests, unreached
 //! files, checks, then the invocations that run them.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
-use fairlead_core::config::{Config, Unresolved};
+use fairlead_core::config::{Config, LockfileMode, Unresolved};
 use fairlead_core::plan::{Change, Plan, Reason, Status, Warning, VERSION};
 use fairlead_lang::deleted::attach_deleted;
 use fairlead_lang::tree::{parent, Tree};
@@ -25,6 +25,35 @@ pub struct Input {
     pub head: String,
     pub config_digest: String,
     pub tree_hash: String,
+    /// Files' text at the base, for the changes that need it: the lockfile.
+    pub base_files: BTreeMap<String, String>,
+}
+
+/// The one lockfile the planner can scope, at the repository root.
+pub const LOCKFILE: &str = "pnpm-lock.yaml";
+
+/// The base-side files a plan of `changes` needs, read from git.
+pub fn base_files(
+    root: &std::path::Path,
+    base: &str,
+    changes: &[Change],
+) -> BTreeMap<String, String> {
+    let mut out = BTreeMap::new();
+    if changes
+        .iter()
+        .any(|c| c.path == LOCKFILE || c.from.as_deref() == Some(LOCKFILE))
+    {
+        if let Some(text) = crate::git::file_at(root, base, LOCKFILE) {
+            out.insert(LOCKFILE.to_string(), text);
+        }
+    }
+    out
+}
+
+/// A lockfile change narrowed to the packages it reaches: their manifests
+/// stand in for it wherever a changed path would count.
+pub struct LockScope {
+    pub manifests: BTreeSet<String>,
 }
 
 /// Everything the selection steps share.
@@ -39,6 +68,19 @@ pub struct Context<'a> {
     pub deleted: BTreeSet<String>,
     /// Changed paths `plan.ignore` matched that nothing references.
     pub ignored: BTreeSet<String>,
+    pub lockfile: Option<LockScope>,
+}
+
+impl Context<'_> {
+    /// Changed paths plus the manifests a scoped lockfile change stands for,
+    /// for rules that match paths: owners and checks.
+    pub fn changed_or_scoped(&self) -> impl Iterator<Item = &str> + Clone {
+        self.changed.iter().map(String::as_str).chain(
+            self.lockfile
+                .iter()
+                .flat_map(|l| l.manifests.iter().map(String::as_str)),
+        )
+    }
 }
 
 pub fn patterns(globs: &[String]) -> Result<Vec<Pattern>, String> {
@@ -102,6 +144,7 @@ pub fn plan(scan: &mut Scan, config: &Config, input: Input) -> Result<Plan, Stri
         .cloned()
         .collect();
     let owners = Owners::new(config.tests.owners.items())?;
+    let lockfile = lockfile_scope(scan, config, &changed, &input.base_files);
     let cx = Context {
         scan,
         config,
@@ -111,11 +154,13 @@ pub fn plan(scan: &mut Scan, config: &Config, input: Input) -> Result<Plan, Stri
         changed,
         deleted,
         ignored,
+        lockfile,
     };
     let run_all = patterns(config.plan.run_all.items())?;
     let trigger = cx
         .changed
         .iter()
+        .filter(|p| !(cx.lockfile.is_some() && p.as_str() == LOCKFILE))
         .find(|p| run_all.iter().any(|g| g.is_match(p)))
         .cloned();
     let mut warnings = Vec::new();
@@ -164,6 +209,56 @@ pub fn plan(scan: &mut Scan, config: &Config, input: Input) -> Result<Plan, Stri
     })
 }
 
+/// The packages a changed root pnpm lockfile reaches, or `None` to treat it
+/// as any other run-all path: scoping is off, there's no base text, pnpm
+/// hoists packages where every package can see them, or an affected
+/// importer (the root included) isn't a workspace package here.
+fn lockfile_scope(
+    scan: &Scan,
+    config: &Config,
+    changed: &BTreeSet<String>,
+    base_files: &BTreeMap<String, String>,
+) -> Option<LockScope> {
+    if config.plan.lockfile != LockfileMode::Scope || !changed.contains(LOCKFILE) {
+        return None;
+    }
+    let base = base_files.get(LOCKFILE)?;
+    let head = std::fs::read_to_string(scan.tree.root.join(LOCKFILE)).ok()?;
+    if hoists(&scan.tree.root) {
+        return None;
+    }
+    let affected = crate::lockfile::affected_importers(base, &head)?;
+    let mut manifests = BTreeSet::new();
+    // The root importer (`.`) is no workspace package, so a change there,
+    // visible to every package, falls through to run-all here.
+    for importer in affected {
+        if !scan.packages.iter().any(|p| p.dir == importer) {
+            return None;
+        }
+        manifests.insert(format!("{importer}/package.json"));
+    }
+    Some(LockScope { manifests })
+}
+
+/// Whether pnpm is set to hoist packages to a shared `node_modules`, in
+/// `.npmrc` or `pnpm-workspace.yaml`.
+fn hoists(root: &std::path::Path) -> bool {
+    let read = |name: &str| std::fs::read_to_string(root.join(name)).unwrap_or_default();
+    let npmrc = read(".npmrc").to_ascii_lowercase();
+    let workspace = read("pnpm-workspace.yaml").to_ascii_lowercase();
+    let npmrc_says = npmrc.lines().map(|l| l.replace(' ', "")).any(|l| {
+        l.starts_with("node-linker=hoisted")
+            || l.starts_with("shamefully-hoist=true")
+            || l.starts_with("public-hoist-pattern")
+    });
+    let workspace_says = workspace.lines().map(|l| l.replace(' ', "")).any(|l| {
+        l.starts_with("nodelinker:hoisted")
+            || l.starts_with("shamefullyhoist:true")
+            || l.starts_with("publichoistpattern")
+    });
+    npmrc_says || workspace_says
+}
+
 /// A workspace package's own `package.json`, which stands for the package.
 pub fn is_manifest(cx: &Context, path: &str) -> bool {
     let dir = parent(path);
@@ -175,19 +270,28 @@ pub fn is_manifest(cx: &Context, path: &str) -> bool {
 pub fn start_walk(cx: &Context) -> Walk {
     let graph = &cx.scan.graph;
     let mut starts: Vec<(u32, Via)> = Vec::new();
+    let package_files = |manifest: &str, via: &str, starts: &mut Vec<(u32, Via)>| {
+        let prefix = format!("{}/", parent(manifest));
+        for (id, file) in graph.files.iter().enumerate() {
+            if file.starts_with(&prefix) && file != manifest {
+                starts.push((id as u32, Via::Path(via.to_string())));
+            }
+        }
+    };
     for path in cx.changed.iter().filter(|p| !cx.ignored.contains(*p)) {
         if let Some(id) = graph.id(path) {
             starts.push((id, Via::Start));
         }
         if is_manifest(cx, path) {
-            let dir = parent(path);
-            let prefix = format!("{dir}/");
-            for (id, file) in graph.files.iter().enumerate() {
-                if file.starts_with(&prefix) && file != path {
-                    starts.push((id as u32, Via::Path(path.clone())));
-                }
-            }
+            package_files(path, path, &mut starts);
         }
+    }
+    for manifest in cx.lockfile.iter().flat_map(|l| &l.manifests) {
+        let via = format!("{LOCKFILE} ({})", parent(manifest));
+        if let Some(id) = graph.id(manifest) {
+            starts.push((id, Via::Path(via.clone())));
+        }
+        package_files(manifest, &via, &mut starts);
     }
     walk(graph, &cx.modules, starts)
 }

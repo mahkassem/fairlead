@@ -255,6 +255,18 @@ pub struct Plan {
     /// A changed path matching these selects nothing by itself; files that
     /// reference it are still reached through their edges.
     pub ignore: List<String>,
+    /// `all`: a changed lockfile selects everything. `scope`: a changed pnpm
+    /// lockfile selects only the workspace packages whose resolved
+    /// dependencies changed; opt-in while the benchmarks gather evidence.
+    pub lockfile: LockfileMode,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "kebab-case")]
+pub enum LockfileMode {
+    Scope,
+    #[default]
+    All,
 }
 
 impl Default for Plan {
@@ -280,12 +292,13 @@ impl Default for Plan {
             ]),
             ignore: strings(&[
                 "*.md",
-                ".changeset/*.md",
+                ".changeset/**",
                 "docs/**",
                 "**/README.md",
                 "**/CHANGELOG.md",
                 "LICENSE*",
             ]),
+            lockfile: LockfileMode::default(),
         }
     }
 }

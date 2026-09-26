@@ -127,7 +127,12 @@ pub fn make(cwd: &Path, changes: &Changes) -> Result<Planned, String> {
         None => "worktree".into(),
     };
     let tree_hash = clean.unwrap_or_else(|| digest::worktree_hash(&scan.tree));
+    let base_files = match &base {
+        Some(base) => fairlead_tests::planner::base_files(&root, base, &changes),
+        None => Default::default(),
+    };
     let input = Input {
+        base_files,
         changes,
         base,
         head,

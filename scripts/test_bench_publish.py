@@ -18,6 +18,7 @@ def report(**over):
                     "changed": ["src/a.ts"], "fix": ""}],
         "flaky": 0, "unconfirmed": 1, "unattributed": 0, "unavailable": 0,
         "errors": 0, "ignored": 0, "unwatched": {"docs | `x`": 2},
+        "widened_by": {"run-all pnpm-lock.yaml": 3},
         "recall": 2 / 3, "strict_recall": 0.5, "min_failures": 30,
         "by_event": {"pull_request": {"recall": 2 / 3, "strict_recall": 0.5}},
         "median_selected": 0.1, "p90_selected": 0.4, "run_all_share": 0.25,
@@ -61,6 +62,7 @@ class BenchPublishTest(unittest.TestCase):
         self.assertIn("| Recall | 66.7% |", page)
         self.assertIn("| Strict recall (unconfirmed as misses) | 50.0% |", page)
         self.assertIn("fetch complete", page)
+        self.assertIn("- `run-all pnpm-lock.yaml`: 3", page)
 
     def test_a_dataset_that_drops_rows_is_refused(self):
         data = self.root / "bench" / "data" / "o_r.jsonl"

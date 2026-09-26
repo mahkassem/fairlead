@@ -80,7 +80,7 @@ pub fn select(
     let paths: Vec<&str> = cx.tests.iter().map(|t| t.path.as_str()).collect();
     let claims: BTreeMap<usize, Reason> = cx
         .owners
-        .claims(cx.changed.iter().map(String::as_str), &paths)?
+        .claims(cx.changed_or_scoped(), &paths)?
         .into_iter()
         .map(|(t, c)| {
             (
@@ -140,10 +140,12 @@ fn unreached(
     let test_ids: HashSet<u32> = cx.tests.iter().filter_map(|t| graph.id(&t.path)).collect();
     let is_test: HashSet<&str> = cx.tests.iter().map(|t| t.path.as_str()).collect();
     let test_globs = crate::planner::patterns(cx.config.tests.matches.items()).unwrap_or_default();
-    // A deleted test has nothing left to run, and a manifest already stands for its package.
+    // A deleted test has nothing left to run, a manifest already stands for
+    // its package, and a scoped lockfile for the packages it reaches.
     let skip = |p: &str| {
         (cx.deleted.contains(p) && test_globs.iter().any(|g| g.is_match(p)))
             || (crate::planner::is_manifest(cx, p) && package_has_files(cx, p))
+            || (cx.lockfile.is_some() && p == crate::planner::LOCKFILE)
     };
     let mut out = Vec::new();
     let mut all_reason = None;

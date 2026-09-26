@@ -14,13 +14,29 @@ The working tree is always the head: in CI that's the checked-out commit. The ba
 ## How a plan is built
 
 1. **Changed paths.** `git diff --name-status --find-renames` from the base to the working tree, plus untracked files. A rename counts both paths; its old path counts as deleted.
-2. **Run everything.** A changed path matching `plan.run_all` selects every test and check. The defaults are lockfiles, root manifests, tsconfig files, test-runner and task-runner config, and CI workflows.
-3. **Ignored paths.** A changed path matching `plan.ignore` selects nothing by itself and is listed under `ignored`, unless a file references it, in which case it counts like any other change. A source file is never ignored, so a config file under `docs/` still counts. The defaults are root Markdown, changeset notes (`.changeset/*.md`), `docs/**`, READMEs, changelogs and licences.
+2. **Run everything.** A changed path matching `plan.run_all` selects every test and check. The defaults are lockfiles, root manifests, tsconfig files, test-runner and task-runner config, and CI workflows. With `plan.lockfile = "scope"` (opt-in for now), a root `pnpm-lock.yaml` is the exception when it can be read: see [Lockfile changes](#lockfile-changes).
+3. **Ignored paths.** A changed path matching `plan.ignore` selects nothing by itself and is listed under `ignored`, unless a file references it, in which case it counts like any other change. A source file is never ignored, so a config file under `docs/` still counts. The defaults are root Markdown, the changesets tool's folder (`.changeset/**`), `docs/**`, READMEs, changelogs and licences.
 4. **Deleted files.** A deleted file goes back into the graph as a phantom, joined to every import that now fails but would resolve to it, every path literal that names it, and its package, so whatever depended on it still counts.
 5. **Package manifests.** A changed `<package>/package.json` counts as every file in that package changing.
 6. **The walk.** From every changed file to everything that depends on it, over [import graph](graph.md) edges. A file with a non-literal dynamic import, a local import that doesn't resolve, or a tsconfig that couldn't be applied depends on every file in its module; at the root, on every file.
 7. **Tests** (below), **unreached files**, then **checks** and the **invocations** that run them.
 
+
+## Lockfile changes
+
+With `plan.lockfile = "scope"`, a changed root `pnpm-lock.yaml` (lockfile versions 6 to 9) is compared with the base's. Each workspace package whose own entry changed, or that depends, in the base or the head lockfile, on a package whose entry changed, counts as if its `package.json` changed: every file in it starts the walk, and checks and owner rules watching that manifest see it. A package nested inside an affected one is affected too, since Node resolution walks up.
+
+It still selects everything when:
+
+- `plan.lockfile = "all"`, the default until the [benchmarks](benchmarks.md) have more evidence;
+- there's no base (as with `--files`);
+- pnpm hoists packages into a shared `node_modules` (`node-linker=hoisted`, `shamefully-hoist` or a `public-hoist-pattern` in `.npmrc` or `pnpm-workspace.yaml`);
+- the root package's dependencies changed, since every package sees them;
+- an affected entry isn't a workspace package in the head tree;
+- anything outside `importers`, `packages`, `snapshots` and `catalogs` changed, such as `overrides`, `patchedDependencies` or `settings`;
+- or the lockfile doesn't parse, or names a package it doesn't list.
+
+Other lockfiles (`package-lock.json`, `yarn.lock`, `bun.lock`) always select everything.
 ## Modules
 
 A module is a unit a plan can widen to: each workspace package (`modules.discover = ["workspaces"]`), and each directory a `modules.define` pattern matches, named by its `{name}`. A file belongs to the deepest module above it; a file in none is at the root.
