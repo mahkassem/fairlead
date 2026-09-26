@@ -11,6 +11,9 @@ struct Recorded {
     responses: BTreeMap<String, Value>,
     /// Paths answered with this status instead.
     status: BTreeMap<String, u16>,
+    /// Answers given once each, before the ones above, in order.
+    once: Mutex<Vec<(String, u16, Value)>>,
+    paused: Mutex<Vec<u64>>,
     logs: BTreeMap<u64, String>,
     asked: Mutex<Vec<String>>,
 }
@@ -19,6 +22,12 @@ impl Http for Recorded {
     fn get_json(&self, path: &str) -> Result<(u16, Value), String> {
         self.asked.lock().unwrap().push(path.to_string());
         let key = path.split('?').next().unwrap();
+        let mut once = self.once.lock().unwrap();
+        if let Some(i) = once.iter().position(|(p, _, _)| p == key) {
+            let (_, status, body) = once.remove(i);
+            return Ok((status, body));
+        }
+        drop(once);
         if let Some(status) = self.status.get(key) {
             return Ok((*status, Value::Null));
         }
@@ -30,6 +39,10 @@ impl Http for Recorded {
 
     fn get_log(&self, _repo: &str, job_id: u64) -> Result<Option<String>, String> {
         Ok(self.logs.get(&job_id).cloned())
+    }
+
+    fn pause(&self, seconds: u64) {
+        self.paused.lock().unwrap().push(seconds);
     }
 }
 
@@ -80,6 +93,8 @@ fn api() -> Recorded {
     Recorded {
         responses,
         status: BTreeMap::new(),
+        once: Mutex::new(Vec::new()),
+        paused: Mutex::new(Vec::new()),
         logs,
         asked: Mutex::new(Vec::new()),
     }
@@ -280,4 +295,70 @@ fn a_fork_pull_request_is_found_by_its_head_branch() {
     assert!(asked
         .iter()
         .any(|p| p.contains("/pulls?head=someone:fix-thing")));
+}
+
+fn limited() -> Value {
+    json!({ "message": "You have exceeded a secondary rate limit. Please wait a few minutes." })
+}
+
+#[test]
+fn a_secondary_rate_limit_is_waited_out_and_retried() {
+    let http = api();
+    http.once.lock().unwrap().push((
+        "/repos/o/r/check-runs/101/annotations".into(),
+        403,
+        limited(),
+    ));
+    let (rows, stop) = fetch(&http, &opts(None), &BTreeSet::new());
+    assert_eq!(stop, Stop::Complete);
+    assert_eq!(*http.paused.lock().unwrap(), [60]);
+    let first = rows
+        .iter()
+        .find(|r| r.run_id == 11 && r.attempt == 1)
+        .unwrap();
+    assert_eq!(
+        first.jobs[0].annotations.len(),
+        1,
+        "the retry's answer is used"
+    );
+}
+
+#[test]
+fn a_limit_that_persists_stops_after_three_waits_and_a_plain_refusal_at_once() {
+    let http = api();
+    for _ in 0..4 {
+        http.once
+            .lock()
+            .unwrap()
+            .push(("/repos/o/r/commits/aaa/pulls".into(), 403, limited()));
+    }
+    let (_, stop) = fetch(&http, &opts(None), &BTreeSet::new());
+    assert!(matches!(stop, Stop::Error(e) if e.contains("403")));
+    assert_eq!(*http.paused.lock().unwrap(), [60, 120, 180]);
+    let mut plain = api();
+    plain
+        .status
+        .insert("/repos/o/r/commits/aaa/pulls".into(), 403);
+    let (_, stop) = fetch(&plain, &opts(None), &BTreeSet::new());
+    assert!(matches!(stop, Stop::Error(_)));
+    assert!(
+        plain.paused.lock().unwrap().is_empty(),
+        "no message, no wait"
+    );
+}
+
+#[test]
+fn each_lookup_is_one_request() {
+    let http = api();
+    let _ = fetch(&http, &opts(None), &BTreeSet::new());
+    let asked = http.asked.lock().unwrap();
+    let annotations = asked
+        .iter()
+        .filter(|p| p.contains("/check-runs/101/annotations"))
+        .count();
+    let pulls = asked
+        .iter()
+        .filter(|p| p.contains("/commits/aaa/pulls"))
+        .count();
+    assert_eq!((annotations, pulls), (1, 1), "{asked:?}");
 }

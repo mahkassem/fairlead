@@ -45,23 +45,43 @@ pub enum Stop {
     Error(String),
 }
 
-fn get(http: &dyn Http, path: &str) -> Result<Value, String> {
-    let (status, body) = http.get_json(path)?;
-    match status {
-        200 => Ok(body),
-        403 | 429 => Err(format!(
-            "GitHub refused {path} with {status} (rate limit or permissions); rows so far are kept"
-        )),
-        _ => Err(format!("GitHub answered {status} for {path}")),
+/// Retries after GitHub's secondary rate limit, which refuses bursts with a
+/// 403 or 429 however much of the hourly budget is left.
+const RETRIES: u32 = 3;
+
+fn request(http: &dyn Http, path: &str, gone_ok: bool) -> Result<Value, String> {
+    let mut attempt = 0;
+    loop {
+        let (status, body) = http.get_json(path)?;
+        let limited = || {
+            body.get("message")
+                .and_then(Value::as_str)
+                .is_some_and(|m| m.to_ascii_lowercase().contains("rate limit"))
+        };
+        match status {
+            200 => return Ok(body),
+            404 | 410 if gone_ok => return Ok(Value::Null),
+            403 | 429 if attempt < RETRIES && limited() => {
+                attempt += 1;
+                http.pause(60 * u64::from(attempt));
+            }
+            403 | 429 => {
+                return Err(format!(
+                    "GitHub refused {path} with {status} (rate limit or permissions); rows so far are kept"
+                ))
+            }
+            _ => return Err(format!("GitHub answered {status} for {path}")),
+        }
     }
+}
+
+fn get(http: &dyn Http, path: &str) -> Result<Value, String> {
+    request(http, path, false)
 }
 
 /// Like `get`, but a resource GitHub no longer has (404, 410) reads as `null`.
 fn get_gone_ok(http: &dyn Http, path: &str) -> Result<Value, String> {
-    match http.get_json(path)? {
-        (404 | 410, _) => Ok(Value::Null),
-        _ => get(http, path),
-    }
+    request(http, path, true)
 }
 
 fn str_of<'v>(v: &'v Value, key: &str) -> &'v str {

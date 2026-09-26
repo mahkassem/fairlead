@@ -12,6 +12,10 @@ pub trait Http {
     fn get_json(&self, path: &str) -> Result<(u16, Value), String>;
     /// A job's raw log, or `None` when GitHub no longer has it.
     fn get_log(&self, repo: &str, job_id: u64) -> Result<Option<String>, String>;
+    /// Waits before a retry.
+    fn pause(&self, seconds: u64) {
+        std::thread::sleep(std::time::Duration::from_secs(seconds));
+    }
 }
 
 pub struct Curl {
