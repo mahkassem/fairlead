@@ -20,7 +20,7 @@ permissions: {}
 
 jobs:
   text:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
     steps:
@@ -38,7 +38,7 @@ jobs:
   flag:
     needs: text
     if: failure()
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       issues: write
       pull-requests: write

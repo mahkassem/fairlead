@@ -27,7 +27,7 @@ concurrency:
 jobs:
   replay:
     name: replay (${{ matrix.repo }})
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 150
     permissions:
       actions: read
@@ -124,7 +124,7 @@ jobs:
   publish:
     needs: replay
     if: ${{ !cancelled() }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: write
       pull-requests: write
