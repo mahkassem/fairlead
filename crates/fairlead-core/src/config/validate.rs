@@ -180,6 +180,32 @@ fn replay(config: &Config, problems: &mut Vec<Problem>) {
             ));
         }
     }
+    for (i, entry) in config.replay.quarantine.items().iter().enumerate() {
+        let key = format!("replay.quarantine[{i}]");
+        let date = entry.until.len() == 10
+            && entry.until.chars().enumerate().all(|(j, c)| {
+                if j == 4 || j == 7 {
+                    c == '-'
+                } else {
+                    c.is_ascii_digit()
+                }
+            });
+        if !date {
+            problems.push(problem(
+                format!("{key}.until"),
+                "must be a date, YYYY-MM-DD",
+            ));
+        }
+        if entry.reason.trim().is_empty() {
+            problems.push(problem(format!("{key}.reason"), "must give the evidence"));
+        }
+        if entry.path.trim().is_empty() || entry.path.contains('*') {
+            problems.push(problem(
+                format!("{key}.path"),
+                "must name one test file, not a pattern",
+            ));
+        }
+    }
     let check_ids: BTreeSet<&str> = config
         .checks
         .items()

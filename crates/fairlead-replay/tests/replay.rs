@@ -585,3 +585,129 @@ fn a_row_without_a_base_is_planned_from_the_default_branch() {
     assert_eq!(outcomes, ["Hit"], "{:?}", replayed.failures);
     assert_eq!(replayed.failures[0].changed, ["src/b.ts"]);
 }
+
+#[test]
+fn a_quarantine_entry_applies_only_while_the_dataset_bears_it_out() {
+    let dir = std::env::temp_dir().join(format!("fairlead-replay-q-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    git(&dir, &["init", "-q", "-b", "main"]);
+    write(&dir, "src/b.ts", "export const b = 1;\n");
+    write(&dir, "test/a.test.ts", "it('a works', () => {});\n");
+    write(&dir, "test/b.test.ts", "import { b } from '../src/b';\n");
+    let base = commit(&dir, "base");
+    let mut heads = Vec::new();
+    for n in 0..3 {
+        git(&dir, &["checkout", "-q", "-B", &format!("pr{n}"), &base]);
+        write(&dir, "src/b.ts", &format!("export const b = {};\n", n + 2));
+        heads.push(commit(&dir, &format!("pr{n}")));
+    }
+    git(&dir, &["checkout", "-q", "-B", "pr3", &base]);
+    write(
+        &dir,
+        "test/a.test.ts",
+        "it('a works', () => { void 0; });\n",
+    );
+    let edits_a = commit(&dir, "pr3: edit a");
+    git(&dir, &["checkout", "-q", "main"]);
+    let fail_a = " FAIL  test/a.test.ts > a works";
+    let fail_b = " FAIL  test/b.test.ts > b works";
+    let rows: Vec<Row> = heads
+        .iter()
+        .enumerate()
+        .map(|(n, head)| {
+            row(
+                30 + n as u64,
+                1,
+                40 + n as u64,
+                head,
+                &base,
+                10 + n as u32,
+                vec![
+                    job("test-win", "failure", &[fail_a]),
+                    job("test", "failure", &[fail_b]),
+                ],
+            )
+        })
+        .collect();
+    let mut rows = rows;
+    rows.push(row(
+        33,
+        1,
+        43,
+        &edits_a,
+        &base,
+        13,
+        vec![job("test-win", "failure", &[fail_a])],
+    ));
+    let wt_path = std::env::temp_dir().join(format!("fairlead-replay-q-wt-{}", std::process::id()));
+    let run_with = |entries: &str, rows: &[Row]| {
+        let _ = std::fs::remove_dir_all(&wt_path);
+        let watch_windows = "[[replay.failures]]\nrunner = \"vitest\"\nextractor = \"vitest\"\njob = \"^test-win$\"\n";
+        let mut config: Config =
+            toml::from_str(&format!("{CONFIG}\n{watch_windows}\n{entries}")).unwrap();
+        config.graph.cache = false;
+        let replayer = Replayer {
+            clone: &dir,
+            worktree: Worktree::open(&dir, &wt_path, &base).unwrap(),
+            config: &config,
+            sources: Sources::new(&config).unwrap(),
+        };
+        let window = Window::ending("2026-09-16", 7).unwrap();
+        report(
+            "example/repo",
+            &window,
+            30,
+            &replay(&replayer, rows, &window),
+        )
+    };
+    let entry = |until: &str| {
+        format!("[[replay.quarantine]]\npath = \"test/a.test.ts\"\njob = \"^test-win$\"\nreason = \"fails on Windows only\"\nuntil = \"{until}\"\n")
+    };
+    let active = run_with(&entry("2099-01-01"), &rows);
+    assert_eq!(format!("{:?}", active.quarantine[0].status), "Active");
+    assert_eq!(
+        (
+            active.quarantined,
+            active.quarantine[0].would_miss,
+            active.quarantine[0].would_hit
+        ),
+        (4, 3, 1),
+        "pr3 edits a itself, so its failure would have been a hit"
+    );
+    assert_eq!(
+        (active.hits, active.misses.len(), active.judged),
+        (3, 0, 3),
+        "b is still judged"
+    );
+    assert_eq!(
+        active.hits_selected + active.hits_run_all + active.hits_check,
+        active.hits,
+        "the split counts hits only"
+    );
+    assert_eq!(active.recall, Some(1.0));
+    assert_eq!(
+        (active.raw_recall, active.raw_judged),
+        (Some(4.0 / 7.0), 7),
+        "raw counts a's failures as what they were"
+    );
+    let expired = run_with(&entry("2026-09-01"), &rows);
+    assert_eq!(format!("{:?}", expired.quarantine[0].status), "Expired");
+    assert_eq!(expired.misses.len(), 3);
+    let too_few = run_with(&entry("2099-01-01"), &rows[..2]);
+    assert_eq!(format!("{:?}", too_few.quarantine[0].status), "Unverified");
+    let mut elsewhere = rows.clone();
+    elsewhere[0].jobs[1] = job("test", "failure", &[fail_a]);
+    let other = run_with(&entry("2099-01-01"), &elsewhere);
+    assert_eq!(format!("{:?}", other.quarantine[0].status), "Unverified");
+    assert_eq!(other.quarantine[0].other_jobs, ["test"]);
+    let stale = run_with(
+        &entry("2099-01-01").replace("test/a.test.ts", "test/none.test.ts"),
+        &rows,
+    );
+    assert_eq!(
+        format!("{:?}", stale.quarantine[0].status),
+        "Unverified",
+        "no failures means no pull requests"
+    );
+}

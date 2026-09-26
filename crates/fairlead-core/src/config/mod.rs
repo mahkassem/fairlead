@@ -316,6 +316,8 @@ pub struct Replay {
     /// Step names (regexes): a job that failed only in such steps, such as
     /// an install, failed before any test and is left out.
     pub ignore_steps: List<String>,
+    /// Tests declared flaky in one job, with evidence and an expiry.
+    pub quarantine: List<Quarantine>,
 }
 
 impl Default for Replay {
@@ -328,6 +330,7 @@ impl Default for Replay {
             checks: List::default(),
             ignore: List::default(),
             ignore_steps: List::default(),
+            quarantine: List::default(),
         }
     }
 }
@@ -351,6 +354,22 @@ pub struct FailureSource {
     /// For `extractor = "regex"`: a pattern with a named `file` group.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub pattern: Option<String>,
+}
+
+/// A test file declared flaky in the jobs `job` names. Replay still plans
+/// and judges its failures, reports what they would have been, and applies
+/// the entry only while the dataset bears it out and `until` hasn't passed.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct Quarantine {
+    /// The test file, exactly as the repository names it.
+    pub path: String,
+    /// The CI job names it fails in, as a regex.
+    pub job: String,
+    /// The evidence, in a sentence.
+    pub reason: String,
+    /// The last day the entry applies, `YYYY-MM-DD`.
+    pub until: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]

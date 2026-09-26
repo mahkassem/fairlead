@@ -66,6 +66,7 @@ fairlead.toml: tests.unreachd: unknown field `unreachd`, expected one of ...
 | `replay.failures` | `[]` | `runner`, `extractor` (`vitest`, `jest`, `regex`), `job`, `pattern` |
 | `replay.checks` | `[]` | Map a CI `job` and `step` to a `check` |
 | `replay.ignore` | `[]` | CI job names (regexes) whose failures replay leaves out on purpose, such as a job that only aggregates others |
+| `replay.quarantine` | `[]` | Tests declared flaky in named jobs: `path`, `job`, `reason`, `until` ([Replay](replay.md#quarantine)) |
 | `replay.ignore_steps` | `[]` | CI step names (regexes): a job that failed only in such steps, such as an install, is left out |
 
 Commands are always argv arrays, never shell strings, and `{files}` expands to one argument per file. In `tests.runners.cwd`, `{module}` is the module's root path and `{module.id}` its id.

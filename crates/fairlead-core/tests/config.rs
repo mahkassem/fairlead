@@ -304,3 +304,26 @@ fn a_set_can_replace_a_list() {
     let config = load(&dir, &opts).unwrap().config;
     assert_eq!(config.plan.run_all.items(), ["only/**".to_string()]);
 }
+
+#[test]
+fn a_quarantine_entry_needs_a_date_evidence_and_one_file() {
+    let config: Config = toml::from_str(
+        r#"
+[[replay.quarantine]]
+path = "test/**/*.test.ts"
+job = "^unit$"
+reason = " "
+until = "next year"
+"#,
+    )
+    .unwrap();
+    let keys: Vec<String> = validate(&config).into_iter().map(|p| p.key).collect();
+    assert_eq!(
+        keys,
+        [
+            "replay.quarantine[0].until",
+            "replay.quarantine[0].reason",
+            "replay.quarantine[0].path"
+        ]
+    );
+}

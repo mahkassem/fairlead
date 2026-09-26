@@ -52,8 +52,15 @@ pub struct Report {
     /// Failed jobs no rule watches, by job name.
     pub unwatched: BTreeMap<String, usize>,
     pub ignored: usize,
+    /// Hits and misses: the failures recall is measured on.
+    pub judged: usize,
     /// Hits over hits and misses; `None` with nothing attributed.
     pub recall: Option<f64>,
+    /// Recall with quarantined failures counted as what they would have been.
+    pub raw_recall: Option<f64>,
+    pub raw_judged: usize,
+    pub quarantined: usize,
+    pub quarantine: Vec<crate::quarantine::Entry>,
     /// Hits over hits, misses and unconfirmed failures.
     pub strict_recall: Option<f64>,
     pub by_event: BTreeMap<String, EventRecall>,
@@ -145,7 +152,7 @@ pub fn report(repo: &str, window: &Window, min_failures: u32, replayed: &Replaye
         replayed
             .failures
             .iter()
-            .filter(|f| f.hit_by == Some(by))
+            .filter(|f| f.outcome == Outcome::Hit && f.hit_by == Some(by))
             .count()
     };
     let mut unwatched = BTreeMap::new();
@@ -172,6 +179,15 @@ pub fn report(repo: &str, window: &Window, min_failures: u32, replayed: &Replaye
         e.strict_recall = ratio(e.hits, e.hits + e.misses + e.unconfirmed);
     }
     let unconfirmed = count(Outcome::Unconfirmed);
+    let would = |o: Outcome| {
+        replayed
+            .failures
+            .iter()
+            .filter(|f| f.judged == Some(o))
+            .count()
+    };
+    let raw_hits = hits + would(Outcome::Hit);
+    let raw_judged = raw_hits + misses.len() + would(Outcome::Miss);
     let seconds: Vec<f64> = replayed.plans.iter().map(|p| p.seconds).collect();
     let mut widened_by = BTreeMap::new();
     for why in replayed.plans.iter().filter_map(|p| p.widened.clone()) {
@@ -193,7 +209,12 @@ pub fn report(repo: &str, window: &Window, min_failures: u32, replayed: &Replaye
         errors: count(Outcome::Error),
         unwatched,
         ignored: count(Outcome::Ignored),
+        judged,
         recall: ratio(hits, judged),
+        raw_recall: ratio(raw_hits, raw_judged),
+        raw_judged,
+        quarantined: count(Outcome::Quarantined),
+        quarantine: replayed.quarantine.clone(),
         strict_recall: ratio(hits, judged + unconfirmed),
         by_event,
         min_failures,
@@ -234,6 +255,24 @@ pub fn text(r: &Report) -> String {
         pct(r.recall),
         pct(r.strict_recall)
     );
+    if !r.quarantine.is_empty() {
+        let _ = writeln!(
+            out,
+            "  raw recall {} (n={})  adjusted {} (n={}), {} quarantined",
+            pct(r.raw_recall),
+            r.raw_judged,
+            pct(r.recall),
+            r.judged,
+            r.quarantined
+        );
+        for q in &r.quarantine {
+            let _ = writeln!(
+                out,
+                "    quarantine {}  [{}]  {:?}: {} absorbed ({} would-be hits, {} misses), {} pull requests, until {}",
+                q.path, q.job, q.status, q.absorbed, q.would_hit, q.would_miss, q.pulls, q.until
+            );
+        }
+    }
     let _ = writeln!(
         out,
         "  hits {} (selected {}, run_all {}, checks {})  misses {}",

@@ -38,6 +38,8 @@ pub enum Outcome {
     Unwatched,
     /// `replay.ignore` names the job.
     Ignored,
+    /// A `[[replay.quarantine]]` entry declares the test flaky in this job.
+    Quarantined,
 }
 
 /// How a hit's target came to be in the plan.
@@ -66,6 +68,8 @@ pub struct Failure {
     pub target: Target,
     pub outcome: Outcome,
     pub hit_by: Option<HitBy>,
+    /// What a quarantined failure would have been.
+    pub judged: Option<Outcome>,
     pub detail: String,
     /// The changed paths of the plan it was judged against.
     pub changed: Vec<String>,
@@ -87,6 +91,7 @@ pub struct Replayed {
     pub failures: Vec<Failure>,
     pub plans: Vec<Planned>,
     pub runs: usize,
+    pub quarantine: Vec<crate::quarantine::Entry>,
 }
 
 /// A `[[replay.failures]]` or `[[replay.checks]]` entry, compiled.
@@ -95,6 +100,7 @@ pub struct Sources {
     checks: Vec<(Regex, Regex, String)>,
     ignore: Vec<Regex>,
     ignore_steps: Vec<Regex>,
+    quarantine: Vec<(fairlead_core::config::Quarantine, Regex)>,
 }
 
 impl Sources {
@@ -143,11 +149,19 @@ impl Sources {
             .iter()
             .map(|p| Regex::new(p).map_err(|e| e.to_string()))
             .collect::<Result<_, String>>()?;
+        let quarantine = config
+            .replay
+            .quarantine
+            .items()
+            .iter()
+            .map(|q| Ok((q.clone(), Regex::new(&q.job).map_err(|e| e.to_string())?)))
+            .collect::<Result<_, String>>()?;
         Ok(Sources {
             failures,
             checks,
             ignore,
             ignore_steps,
+            quarantine,
         })
     }
 
@@ -321,6 +335,11 @@ pub fn replay(replayer: &Replayer, rows: &[Row], window: &Window) -> Replayed {
         out.runs += 1;
         replay_row(replayer, row, &rows, &mut out);
     }
+    out.quarantine = crate::quarantine::apply(
+        &replayer.sources.quarantine,
+        &mut out.failures,
+        &window.until,
+    );
     out
 }
 
@@ -343,6 +362,7 @@ fn record(
         target,
         outcome,
         hit_by: None,
+        judged: None,
         detail: detail.into(),
         changed: changed.to_vec(),
     });
