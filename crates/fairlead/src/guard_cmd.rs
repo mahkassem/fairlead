@@ -216,11 +216,13 @@ fn check_staged(root: &Path, guard: &Guard, settings: &config::Guard, list: bool
         new.extend(added::added(&before, &now));
     }
     fairlead_guard::sort(&mut new);
-    let mut event = Event::new(
-        "commit",
-        if new.is_empty() { "allow" } else { "deny" },
-        start.elapsed(),
-    );
+    let warn = settings.on_finding == config::OnFinding::Warn;
+    let decision = match (new.is_empty(), warn) {
+        (true, _) => "allow",
+        (false, true) => "warn",
+        (false, false) => "deny",
+    };
+    let mut event = Event::new("commit", decision, start.elapsed());
     event.files = Some(read);
     event.added = new.len();
     event.rules = new
@@ -250,11 +252,16 @@ fn check_staged(root: &Path, guard: &Guard, settings: &config::Guard, list: bool
         println!("guard: {read} staged file(s), {what} no findings");
         return ExitCode::SUCCESS;
     }
-    eprintln!("guard: {what} {} finding(s):", new.len());
+    let then = if warn { ", committing anyway" } else { "" };
+    eprintln!("guard: {what} {} finding(s){then}:", new.len());
     if !list {
         for f in &new {
             eprintln!("{f}");
         }
     }
-    ExitCode::FAILURE
+    if warn {
+        ExitCode::SUCCESS
+    } else {
+        ExitCode::FAILURE
+    }
 }

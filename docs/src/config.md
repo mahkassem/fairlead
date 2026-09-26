@@ -73,6 +73,7 @@ fairlead.toml: tests.unreachd: unknown field `unreachd`, expected one of ...
 | `guard.baseline` | `"fairlead-baseline.json"` | Ratcheted counts by file and rule, relative to the project root |
 | `guard.exclude` | `[]` | Tracked files no guard rule reads |
 | `guard.deny` | `"added"` | What stops a commit: `added`, only findings the change adds; `any`, every finding in a file it touches |
+| `guard.on_finding` | `"deny"` | `deny` stops the commit on those findings; `warn` shows them and lets it through |
 | `guard.events` | `"local"` | `local` records decisions in `.git/fairlead/events.jsonl`; `off` records nothing |
 | `guard.size` | off | `files`, `exclude`, `file_lines`, and `ratchet` (default `true`). See [Guard rules](guard.md) |
 

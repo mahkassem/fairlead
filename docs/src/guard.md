@@ -19,6 +19,7 @@ Every preset is off until configured, and each one names the files it reads.
 baseline = "fairlead-baseline.json"   # the default
 exclude = ["vendor/**"]               # tracked files no rule reads
 deny = "added"                        # the default; "any" fails on every finding in a touched file
+on_finding = "deny"                   # the default; "warn" shows the findings and lets the commit through
 events = "local"                      # the default; "off" records nothing
 
 [guard.size]
@@ -70,6 +71,9 @@ everything staged is new.
 `deny = "any"` makes a file you touch pass every rule instead: the commit stage
 fails on any finding in a staged file, old or new. It suits a codebase with no
 debt to carry; the default suits one that has some.
+
+`on_finding = "warn"` lets the commit through and shows the findings instead of
+stopping it. The check stage still fails on them in CI.
 
 ## Event log
 

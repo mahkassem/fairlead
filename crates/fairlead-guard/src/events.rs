@@ -30,7 +30,7 @@ pub struct Event {
     pub file: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub files: Option<usize>,
-    /// `allow`, `deny`, `error` or `timed_out`.
+    /// `allow`, `deny`, `warn`, `error` or `timed_out`.
     pub decision: &'static str,
     pub rules: Vec<&'static str>,
     pub added: usize,

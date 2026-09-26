@@ -245,3 +245,16 @@ fn events_off_writes_no_log() {
     assert!(guard(&dir, &["--staged"]).0);
     assert!(!dir.join(".git/fairlead/events.jsonl").exists());
 }
+
+#[test]
+fn on_finding_warn_shows_what_a_commit_adds_and_lets_it_through() {
+    let config = format!("{ZERO}[guard]\non_finding = \"warn\"\n");
+    let dir = repo("warn", &config, &[("src/ok.ts", lines(1))]);
+    std::fs::write(dir.join("src/ok.ts"), lines(4)).unwrap();
+    git(&dir, &["add", "-A"]);
+    let (ok, _, err) = guard(&dir, &["--staged"]);
+    assert!(ok, "{err}");
+    assert!(err.contains("add 1 finding(s), committing anyway"), "{err}");
+    let log = std::fs::read_to_string(dir.join(".git/fairlead/events.jsonl")).unwrap();
+    assert!(log.contains("\"decision\":\"warn\""), "{log}");
+}

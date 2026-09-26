@@ -413,6 +413,8 @@ pub struct Guard {
     /// What stops a write or a commit: only findings the change adds, or
     /// every finding in a file it touches.
     pub deny: Deny,
+    /// Whether those findings stop the write or commit, or are only shown.
+    pub on_finding: OnFinding,
     /// Where hook and commit decisions are recorded.
     pub events: Events,
     /// File length, a ratcheted rule unless `ratchet = false`. Off until set.
@@ -426,6 +428,7 @@ impl Default for Guard {
             baseline: "fairlead-baseline.json".into(),
             exclude: List::default(),
             deny: Deny::default(),
+            on_finding: OnFinding::default(),
             events: Events::default(),
             size: None,
         }
@@ -440,6 +443,16 @@ pub enum Deny {
     Added,
     /// Every finding in a file the change touches.
     Any,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "kebab-case")]
+pub enum OnFinding {
+    /// Stop it, with the findings as the reason.
+    #[default]
+    Deny,
+    /// Let it through and show the findings; the check stage still fails.
+    Warn,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, JsonSchema)]
