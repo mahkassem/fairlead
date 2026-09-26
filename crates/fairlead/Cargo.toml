@@ -17,9 +17,9 @@ path = "src/main.rs"
 
 [dependencies]
 clap = { version = "4", features = ["derive"] }
-fairlead-core = { version = "0.2.0", path = "../fairlead-core" }
-fairlead-lang = { version = "0.2.0", path = "../fairlead-lang" }
-fairlead-tests = { version = "0.2.0", path = "../fairlead-tests" }
-fairlead-replay = { version = "0.2.0", path = "../fairlead-replay" }
+fairlead-core = { version = "0.3.0", path = "../fairlead-core" }
+fairlead-lang = { version = "0.3.0", path = "../fairlead-lang" }
+fairlead-tests = { version = "0.3.0", path = "../fairlead-tests" }
+fairlead-replay = { version = "0.3.0", path = "../fairlead-replay" }
 serde_json = "1.0.151"
 toml = "1.1.6"
