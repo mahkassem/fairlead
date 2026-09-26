@@ -158,6 +158,49 @@ fn build_output_maps_back_to_source_through_the_package_tsconfig() {
 }
 
 #[test]
+fn ignored_build_output_on_disk_still_maps_to_source_or_package() {
+    let dir = repo(
+        "built",
+        &[
+            ("package.json", r#"{ "workspaces": ["packages/*"] }"#),
+            (".gitignore", "/packages/*/lib/\ndist/\n"),
+            (
+                "packages/lib/package.json",
+                r#"{ "name": "lib", "exports": { ".": "./lib/index.js" } }"#,
+            ),
+            (
+                "packages/lib/tsconfig.json",
+                r#"{ "compilerOptions": { "outDir": "lib", "rootDir": "src" } }"#,
+            ),
+            ("packages/lib/src/index.ts", "export const lib = 1;\n"),
+            ("packages/lib/lib/index.js", "exports.lib = 1;\n"),
+            (
+                "packages/bundled/package.json",
+                r#"{ "name": "bundled", "exports": { ".": "./dist/index.js" } }"#,
+            ),
+            ("packages/bundled/src/thing.ts", "export const t = 1;\n"),
+            ("packages/bundled/dist/index.js", "exports.t = 1;\n"),
+            ("packages/app/package.json", r#"{ "name": "app" }"#),
+            (
+                "packages/app/main.ts",
+                "import { lib } from 'lib';\nimport { t } from 'bundled';\n",
+            ),
+        ],
+    );
+    let s = scan(&dir);
+    assert_eq!(
+        deps(&s, "packages/app/main.ts"),
+        vec![("packages/lib/src/index.ts".into(), EdgeKind::Import)]
+    );
+    assert!(depends(
+        &s,
+        "packages/app/main.ts",
+        "packages/bundled/src/thing.ts"
+    ));
+    assert!(s.graph.unresolved.is_empty(), "{:?}", s.graph.unresolved);
+}
+
+#[test]
 fn a_workspace_import_with_no_file_on_disk_depends_on_the_whole_package() {
     let dir = repo(
         "package-edge",

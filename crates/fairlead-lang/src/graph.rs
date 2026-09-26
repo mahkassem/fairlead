@@ -72,14 +72,14 @@ impl Graph {
             .enumerate()
             .map(|(i, f)| (f.clone(), i as u32))
             .collect();
+        let dirs: Vec<String> = packages.iter().map(|(_, dir)| format!("{dir}/")).collect();
         let package_of = files
             .iter()
             .map(|f| {
-                packages
-                    .iter()
+                dirs.iter()
                     .enumerate()
-                    .filter(|(_, (_, dir))| f.starts_with(&format!("{dir}/")))
-                    .max_by_key(|(_, (_, dir))| dir.len())
+                    .filter(|(_, dir)| f.starts_with(dir.as_str()))
+                    .max_by_key(|(_, dir)| dir.len())
                     .map(|(i, _)| i as u32)
             })
             .collect();
@@ -133,7 +133,8 @@ impl Graph {
                     .map(|&f| (f, None)),
             );
         }
-        out.sort();
+        // A direct edge names its kind; keep it over the package edge.
+        out.sort_by_key(|&(f, k)| (f, k.is_none(), k));
         out.dedup_by_key(|(f, _)| *f);
         out
     }

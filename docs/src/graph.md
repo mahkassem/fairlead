@@ -20,7 +20,7 @@ fairlead graph importers FILE        # the files that depend on FILE directly
 | path literal | any string literal that names a file in the repository, so a test that spawns a CLI by its path depends on it |
 | snapshot | `__snapshots__/x.test.ts.snap` to `x.test.ts` |
 
-A `import()` whose argument isn't a plain string is counted as an unknown dynamic import; the planner treats the file as depending on its whole module.
+An `import()` or `require()` whose argument isn't a plain string is counted as an unknown dynamic import; the planner treats the file as depending on its whole module.
 
 ## Resolution, without an install
 
@@ -28,8 +28,8 @@ Specifiers resolve the way Node and TypeScript do: tsconfig `paths` and project 
 
 Workspace packages, from `workspaces` in the root `package.json` or `packages` in `pnpm-workspace.yaml`, resolve without `node_modules`: Fairlead shows the resolver a virtual `node_modules` that points at each package's folder. So a plan can run before `npm install`, and in CI before the install step.
 
-- An import that lands in a package's build output (its tsconfig `outDir`, not in git) maps back to the same path under `rootDir`.
-- A workspace import that still lands on a missing file becomes an edge to every file of that package, which is always safe.
+- An import that lands in a package's build output (its tsconfig `outDir`, not in git) maps back to the same path under `rootDir`, whether or not a local build has put the output on disk.
+- A workspace import that still lands on a missing or git-ignored file becomes an edge to every file of that package, which is always safe.
 - A tsconfig that `extends` something that can't be read (a shared config published as a package, before install) is skipped for that file, and counted in `graph stats`.
 
 Files larger than 256 KB, almost always generated, are scanned for import strings instead of parsed.

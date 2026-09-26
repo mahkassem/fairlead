@@ -77,8 +77,8 @@ impl WorkspaceFs {
                 .is_some_and(|n| self.scopes.contains(n.to_string_lossy().as_ref()))
     }
 
-    /// The source file a missing build output comes from, if one exists.
-    fn source_for(&self, path: &Path) -> Option<PathBuf> {
+    /// The source file a build output comes from, if one exists.
+    pub fn source_for(&self, path: &Path) -> Option<PathBuf> {
         let (out_dir, root_dir) = self.outputs.iter().find(|(out, _)| path.starts_with(out))?;
         let rel = path
             .strip_prefix(out_dir)

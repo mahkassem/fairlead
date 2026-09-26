@@ -35,6 +35,7 @@ const COMMON: &str = r#"
 (call_expression function: (import) arguments: (arguments . (string (string_fragment) @dynamic)))
 (call_expression function: (import) arguments: (arguments . [(identifier) (template_string) (binary_expression) (member_expression) (call_expression) (subscript_expression)] @unknown))
 (call_expression function: (identifier) @_req arguments: (arguments . (string (string_fragment) @require)) (#eq? @_req "require"))
+(call_expression function: (identifier) @_dreq arguments: (arguments . [(identifier) (template_string) (binary_expression) (member_expression) (call_expression) (subscript_expression)] @unknown) (#eq? @_dreq "require"))
 (call_expression function: (member_expression object: (identifier) @_obj property: (property_identifier) @_prop) arguments: (arguments . (string (string_fragment) @mock)) (#match? @_obj "^(vi|jest)$") (#match? @_prop "^(mock|doMock|unmock|requireActual|importActual|importMock|requireMock)$"))
 (call_expression function: (member_expression object: (identifier) @_robj property: (property_identifier) @_rprop) arguments: (arguments . (string (string_fragment) @require)) (#eq? @_robj "require") (#eq? @_rprop "resolve"))
 (string (string_fragment) @literal)
@@ -253,6 +254,8 @@ import j = require("./j");
         assert!(extract("x.js", b"const m = await import(name);").unknown_dynamic);
         assert!(extract("x.ts", b"await import(`./p/${n}.js`);").unknown_dynamic);
         assert!(!extract("x.ts", b"await import('./p.js');").unknown_dynamic);
+        assert!(extract("x.cjs", b"const m = require(path.join(dir, name));").unknown_dynamic);
+        assert!(!extract("x.cjs", b"const m = require('./m');").unknown_dynamic);
     }
 
     #[test]

@@ -35,6 +35,8 @@ pub struct Resolver {
     with_tsconfig: ResolverGeneric<WorkspaceFs>,
     plain: ResolverGeneric<WorkspaceFs>,
     packages: HashSet<String>,
+    /// Package folders with a trailing `/`, and their names.
+    dirs: Vec<(String, String)>,
 }
 
 fn options(config: &GraphConfig, root: &Path, tsconfig: bool) -> ResolveOptions {
@@ -71,6 +73,10 @@ impl Resolver {
             plain: ResolverGeneric::new_with_file_system(fs.clone(), options(config, root, false)),
             fs,
             packages: packages.iter().map(|p| p.name.clone()).collect(),
+            dirs: packages
+                .iter()
+                .map(|p| (format!("{}/", p.dir), p.name.clone()))
+                .collect(),
         }
     }
 
@@ -88,15 +94,35 @@ impl Resolver {
         let target = match result {
             // The resolver canonicalizes a package's folder, not the file in it,
             // so build output in a workspace package is mapped here.
-            Ok(resolution) => match tree.rel(&self.fs.real(resolution.path())) {
-                Some(rel) if rel.split('/').any(|p| p == "node_modules") => Target::External,
-                Some(rel) if tree.contains(&rel) => Target::File(rel),
-                Some(_) => Target::Unresolved,
-                None => Target::External,
-            },
+            Ok(resolution) => {
+                let real = self.fs.real(resolution.path());
+                match tree.rel(&real) {
+                    Some(rel) if rel.split('/').any(|p| p == "node_modules") => Target::External,
+                    Some(rel) if tree.contains(&rel) => Target::File(rel),
+                    Some(rel) => self.ignored(tree, &real, &rel),
+                    None => Target::External,
+                }
+            }
             Err(_) => self.unresolved(spec),
         };
         (target, fell_back)
+    }
+
+    /// A resolved file git ignores, such as local build output: its source
+    /// when the package's tsconfig says where that is, else its package.
+    fn ignored(&self, tree: &Tree, real: &Path, rel: &str) -> Target {
+        if let Some(source) = self.fs.source_for(real).and_then(|s| tree.rel(&s)) {
+            if tree.contains(&source) {
+                return Target::File(source);
+            }
+        }
+        self.dirs
+            .iter()
+            .filter(|(dir, _)| rel.starts_with(dir.as_str()))
+            .max_by_key(|(dir, _)| dir.len())
+            .map_or(Target::Unresolved, |(_, name)| {
+                Target::Package(name.clone())
+            })
     }
 
     fn unresolved(&self, spec: &str) -> Target {
