@@ -22,8 +22,20 @@ pub enum Status {
     Expired,
     /// Too few pull requests, or the test also failed in another job.
     Unverified,
-    /// It would apply, but no failure matched it.
+    /// The test didn't fail in the window, or only in ways it doesn't absorb.
     Stale,
+}
+
+impl Status {
+    /// The name the JSON report uses.
+    pub fn name(self) -> &'static str {
+        match self {
+            Status::Active => "active",
+            Status::Expired => "expired",
+            Status::Unverified => "unverified",
+            Status::Stale => "stale",
+        }
+    }
 }
 
 /// What one entry did in a replay.
@@ -38,6 +50,8 @@ pub struct Entry {
     pub pulls: usize,
     /// Jobs the test failed in that the entry doesn't name.
     pub other_jobs: Vec<String>,
+    /// Jobs the absorbed failures ran in, which shows how far the regex reaches.
+    pub jobs: Vec<String>,
     pub absorbed: usize,
     pub would_hit: usize,
     pub would_miss: usize,
@@ -71,6 +85,8 @@ fn apply_one(q: &Quarantine, job: &Regex, failures: &mut [Failure], until: &str)
     other_jobs.dedup();
     let status = if q.until.as_str() < until {
         Status::Expired
+    } else if !failures.iter().any(of_test) {
+        Status::Stale
     } else if pulls.len() < MIN_PULLS || !other_jobs.is_empty() {
         Status::Unverified
     } else {
@@ -84,6 +100,7 @@ fn apply_one(q: &Quarantine, job: &Regex, failures: &mut [Failure], until: &str)
         status,
         pulls: pulls.len(),
         other_jobs,
+        jobs: Vec::new(),
         absorbed: 0,
         would_hit: 0,
         would_miss: 0,
@@ -103,11 +120,77 @@ fn apply_one(q: &Quarantine, job: &Regex, failures: &mut [Failure], until: &str)
             _ => continue,
         }
         entry.absorbed += 1;
+        entry.jobs.push(f.job.clone());
         f.judged = Some(f.outcome);
         f.outcome = Outcome::Quarantined;
     }
+    entry.jobs.sort();
+    entry.jobs.dedup();
     if entry.absorbed == 0 {
         entry.status = Status::Stale;
     }
     entry
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn failure(pr: u64, job: &str, outcome: Outcome) -> Failure {
+        Failure {
+            run_id: pr,
+            attempt: 1,
+            event: "pull_request".into(),
+            pr: Some(pr),
+            head_sha: String::new(),
+            job: job.into(),
+            target: Target::Test("t.test.ts".into()),
+            outcome,
+            hit_by: None,
+            judged: None,
+            detail: String::new(),
+            changed: Vec::new(),
+        }
+    }
+
+    fn entry(job: &str) -> (Quarantine, Regex) {
+        let q = Quarantine {
+            path: "t.test.ts".into(),
+            job: job.into(),
+            reason: "flaky".into(),
+            until: "2099-01-01".into(),
+        };
+        (q, Regex::new(job).unwrap())
+    }
+
+    #[test]
+    fn absorbs_unconfirmed_and_names_the_jobs_it_reached() {
+        let mut fs = vec![
+            failure(1, "unit linux", Outcome::Unconfirmed),
+            failure(2, "unit windows", Outcome::Miss),
+            failure(3, "unit windows", Outcome::Flaky),
+        ];
+        let e = &apply(&[entry("unit")], &mut fs, "2026-09-01")[0];
+        assert_eq!(e.status, Status::Active);
+        assert_eq!((e.absorbed, e.would_unconfirmed, e.would_miss), (2, 1, 1));
+        assert_eq!(e.jobs, ["unit linux", "unit windows"]);
+        assert_eq!(fs[0].judged, Some(Outcome::Unconfirmed));
+        assert_eq!(
+            fs[2].outcome,
+            Outcome::Flaky,
+            "a flaky failure is left as it is"
+        );
+    }
+
+    #[test]
+    fn stale_when_the_test_never_failed_or_only_flakily() {
+        let mut none: Vec<Failure> = Vec::new();
+        let e = &apply(&[entry("^win$")], &mut none, "2026-09-01")[0];
+        assert_eq!(e.status, Status::Stale);
+        let mut flaky: Vec<Failure> = (1..=3)
+            .map(|pr| failure(pr, "win", Outcome::Flaky))
+            .collect();
+        let e = &apply(&[entry("^win$")], &mut flaky, "2026-09-01")[0];
+        assert_eq!((e.status, e.pulls, e.absorbed), (Status::Stale, 3, 0));
+    }
 }

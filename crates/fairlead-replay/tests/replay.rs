@@ -707,7 +707,7 @@ fn a_quarantine_entry_applies_only_while_the_dataset_bears_it_out() {
     );
     assert_eq!(
         format!("{:?}", stale.quarantine[0].status),
-        "Unverified",
-        "no failures means no pull requests"
+        "Stale",
+        "a test that no longer fails makes the entry stale"
     );
 }

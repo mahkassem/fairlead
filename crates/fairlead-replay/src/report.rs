@@ -268,9 +268,22 @@ pub fn text(r: &Report) -> String {
         for q in &r.quarantine {
             let _ = writeln!(
                 out,
-                "    quarantine {}  [{}]  {:?}: {} absorbed ({} would-be hits, {} misses), {} pull requests, until {}",
-                q.path, q.job, q.status, q.absorbed, q.would_hit, q.would_miss, q.pulls, q.until
+                "    quarantine {}  [{}]  {}: {} absorbed ({} would-be hits, {} misses), {} pull requests, until {}",
+                q.path,
+                q.job,
+                q.status.name(),
+                q.absorbed,
+                q.would_hit,
+                q.would_miss,
+                q.pulls,
+                q.until
             );
+            if !q.jobs.is_empty() {
+                let _ = writeln!(out, "      in jobs: {}", q.jobs.join(", "));
+            }
+            if !q.other_jobs.is_empty() {
+                let _ = writeln!(out, "      also failed in: {}", q.other_jobs.join(", "));
+            }
         }
     }
     let _ = writeln!(
