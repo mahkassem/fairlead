@@ -28,7 +28,7 @@ pub struct Options<'a> {
     pub clone: Option<&'a Path>,
     /// Stop after this many run attempts, for a partial fetch.
     pub limit: Option<usize>,
-    /// Only runs of these workflows, by name; every workflow when empty.
+    /// Only runs of these workflows, by file name or id; every workflow when empty.
     pub workflows: Vec<String>,
     /// The last day to list; the listing runs to the present without one.
     pub until: Option<&'a str>,
@@ -164,9 +164,35 @@ fn job_of(http: &dyn Http, repo: &str, job: &Value) -> Result<Job, String> {
     Ok(out)
 }
 
+/// Runs of the named workflows, or of every workflow when none is named.
+/// Listing per workflow spends no requests on the others.
+fn runs(http: &dyn Http, opts: &Options, event: &str) -> Result<Vec<Value>, String> {
+    if opts.workflows.is_empty() {
+        return runs_at(
+            http,
+            opts,
+            event,
+            &format!("/repos/{}/actions/runs", opts.repo),
+        );
+    }
+    let mut all = Vec::new();
+    for workflow in &opts.workflows {
+        if workflow.is_empty()
+            || !workflow
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || "._-".contains(c))
+        {
+            return Err(format!("`{workflow}` isn't a workflow file name or id"));
+        }
+        let at = format!("/repos/{}/actions/workflows/{workflow}/runs", opts.repo);
+        all.extend(runs_at(http, opts, event, &at)?);
+    }
+    Ok(all)
+}
+
 /// One listing query returns at most 1,000 runs, so the window is listed a
 /// week at a time.
-fn runs(http: &dyn Http, opts: &Options, event: &str) -> Result<Vec<Value>, String> {
+fn runs_at(http: &dyn Http, opts: &Options, event: &str, at: &str) -> Result<Vec<Value>, String> {
     let mut all = Vec::new();
     let mut from = opts.since.to_string();
     loop {
@@ -178,8 +204,7 @@ fn runs(http: &dyn Http, opts: &Options, event: &str) -> Result<Vec<Value>, Stri
         };
         for page in 1.. {
             let path = format!(
-                "/repos/{}/actions/runs?event={event}&status=completed&created={created}&per_page={PER_PAGE}&page={page}",
-                opts.repo
+                "{at}?event={event}&status=completed&created={created}&per_page={PER_PAGE}&page={page}"
             );
             let body = get(http, &path)?;
             let batch = body
@@ -189,7 +214,7 @@ fn runs(http: &dyn Http, opts: &Options, event: &str) -> Result<Vec<Value>, Stri
                 .unwrap_or_default();
             let total = body.get("total_count").and_then(Value::as_u64).unwrap_or(0) as usize;
             let done = batch.len() < PER_PAGE || page * PER_PAGE >= total;
-            all.extend(batch.into_iter().filter(|run| wanted(opts, run)));
+            all.extend(batch.into_iter().filter(wanted));
             if done {
                 break;
             }
@@ -202,14 +227,12 @@ fn runs(http: &dyn Http, opts: &Options, event: &str) -> Result<Vec<Value>, Stri
     Ok(all)
 }
 
-/// A run worth a row: of a listed workflow, and not a first attempt that was
-/// cancelled or skipped, which ran nothing.
-fn wanted(opts: &Options, run: &Value) -> bool {
-    let name = str_of(run, "name");
-    let workflow_ok = opts.workflows.is_empty() || opts.workflows.iter().any(|w| w == name);
+/// A run worth a row: not a first attempt that was cancelled or skipped,
+/// which ran nothing.
+fn wanted(run: &Value) -> bool {
     let first = run.get("run_attempt").and_then(Value::as_u64).unwrap_or(1) == 1;
     let empty = matches!(str_of(run, "conclusion"), "cancelled" | "skipped");
-    workflow_ok && !(first && empty)
+    !(first && empty)
 }
 
 /// Today in UTC, from the system clock.

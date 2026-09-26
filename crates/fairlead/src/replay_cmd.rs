@@ -34,7 +34,8 @@ pub enum ReplayAction {
         /// Stop after this many run attempts.
         #[arg(long)]
         limit: Option<usize>,
-        /// Only runs of this workflow, by name; repeat for several.
+        /// Only runs of this workflow, by file name (such as ci.yml) or id;
+        /// repeat for several.
         #[arg(long = "workflow", value_name = "NAME")]
         workflows: Vec<String>,
     },

@@ -3,13 +3,13 @@
 Replay is how Fairlead proves a plan's recall: it takes real CI failures from a repository's history, plans each failing commit again, and counts every failing test file or check the plan would have left out. It runs in two phases, so the report can always be reproduced from committed data.
 
 ```sh
-fairlead replay fetch --repo owner/name --since 2026-07-01 --workflow CI --data bench/data/owner_name.jsonl --clone ../name
+fairlead replay fetch --repo owner/name --since 2026-07-01 --workflow ci.yml --data bench/data/owner_name.jsonl --clone ../name
 fairlead replay run --data bench/data/owner_name.jsonl --clone ../name --config bench/owner_name.toml --fetch-missing
 ```
 
 ## `replay fetch`
 
-Lists every completed `pull_request` and `merge_group` run since `--since`, a week at a time since one listing returns at most 1,000 runs, and records one row per run attempt, passing or failing, so a job that failed and then passed on a re-run shows up as flaky. `--workflow NAME` (repeatable) keeps only those workflows' runs, and a first attempt that was cancelled or skipped is left out: it ran nothing, and each recorded attempt costs an API request. It needs `curl` and a token in `GITHUB_TOKEN` or `GH_TOKEN`; in GitHub Actions the workflow's own token can read other public repositories' runs and logs.
+Lists every completed `pull_request` and `merge_group` run since `--since`, a week at a time since one listing returns at most 1,000 runs, and records one row per run attempt, passing or failing, so a job that failed and then passed on a re-run shows up as flaky. `--workflow FILE` (repeatable; a workflow's file name, such as `ci.yml`, or its id) lists only those workflows' runs, so other workflows cost no requests, and a first attempt that was cancelled or skipped is left out: it ran nothing, and each recorded attempt costs an API request. It needs `curl` and a token in `GITHUB_TOKEN` or `GH_TOKEN`; in GitHub Actions the workflow's own token can read other public repositories' runs and logs.
 
 - **Failed jobs keep the extractor's input,** not its output: failure-level annotations (GitHub's `.github` exit-code note left out) and the log lines around each `FAIL` or `●`. Logs expire after 90 days; the dataset keeps enough to re-extract with a better extractor later.
 - **Each row records its pull request and base.** For a pull request run, the pull request comes from the commit's associated pulls and the base is the base branch's first-parent commit when the run started. For a merge queue run, both come from the queue branch's name (`gh-readonly-queue/<base>/pr-<N>-<sha>`).

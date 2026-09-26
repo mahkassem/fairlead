@@ -219,17 +219,29 @@ fn the_window_is_listed_a_week_at_a_time() {
 fn only_named_workflows_and_runs_that_ran_are_recorded() {
     let mut http = api();
     http.responses.insert(
-        "/repos/o/r/actions/runs".into(),
-        json!({ "total_count": 3, "workflow_runs": [
+        "/repos/o/r/actions/workflows/ci.yml/runs".into(),
+        json!({ "total_count": 2, "workflow_runs": [
             { "id": 11, "name": "ci", "head_sha": "aaa", "head_branch": "feature", "run_attempt": 2, "created_at": "2026-09-20T10:00:00Z", "conclusion": "success" },
-            { "id": 21, "name": "docs", "head_sha": "aaa", "head_branch": "feature", "run_attempt": 1, "created_at": "2026-09-20T10:00:00Z", "conclusion": "failure" },
             { "id": 31, "name": "ci", "head_sha": "ccc", "head_branch": "feature", "run_attempt": 1, "created_at": "2026-09-20T11:00:00Z", "conclusion": "cancelled" }
         ]}),
     );
     let mut o = opts(None);
-    o.workflows = vec!["ci".into()];
+    o.workflows = vec!["ci.yml".into()];
     let (rows, stop) = fetch(&http, &o, &BTreeSet::new());
     assert_eq!(stop, Stop::Complete);
     let ids: BTreeSet<u64> = rows.iter().map(|r| r.run_id).collect();
     assert_eq!(ids, [11].into_iter().collect());
+    let asked = http.asked.lock().unwrap();
+    assert!(
+        asked
+            .iter()
+            .all(|p| !p.starts_with("/repos/o/r/actions/runs?")),
+        "the repository-wide listing isn't used"
+    );
+    drop(asked);
+    o.workflows = vec!["../x".into()];
+    assert!(matches!(
+        fetch(&http, &o, &BTreeSet::new()).1,
+        Stop::Error(_)
+    ));
 }

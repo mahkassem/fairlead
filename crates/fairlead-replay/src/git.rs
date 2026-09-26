@@ -76,7 +76,12 @@ pub fn fetch_missing(clone: &Path, shas: &[String]) -> usize {
     for batch in missing.chunks(100) {
         let mut args = vec!["fetch", "-q", "origin", "--end-of-options"];
         args.extend(batch);
-        let _ = git(clone, &args);
+        // One commit the server no longer has fails the whole batch.
+        if git(clone, &args).is_err() {
+            for sha in batch {
+                let _ = git(clone, &["fetch", "-q", "origin", "--end-of-options", sha]);
+            }
+        }
     }
     missing.iter().filter(|sha| !has_commit(clone, sha)).count()
 }

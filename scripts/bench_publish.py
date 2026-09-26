@@ -50,6 +50,8 @@ def grow_dataset(new, current):
     new_keys = {(r["run_id"], r["attempt"]) for r in new_rows}
     if not old_keys <= new_keys:
         return False
+    if not new_rows:
+        return True
     current.parent.mkdir(parents=True, exist_ok=True)
     current.write_text(new.read_text(encoding="utf-8"), encoding="utf-8")
     return True

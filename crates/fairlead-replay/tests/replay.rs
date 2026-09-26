@@ -436,3 +436,81 @@ fn a_rebased_head_that_passed_leaves_the_failure_unconfirmed() {
         .collect();
     assert_eq!(outcomes, ["Unconfirmed"]);
 }
+
+#[test]
+fn a_hit_in_a_plan_that_selects_everything_counts_as_run_all() {
+    let dir = std::env::temp_dir().join(format!("fairlead-replay-all-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    git(&dir, &["init", "-q", "-b", "main"]);
+    write(&dir, "package.json", "{ \"name\": \"root\" }\n");
+    write(&dir, "test/a.test.ts", "it('a works', () => {});\n");
+    let base = commit(&dir, "base");
+    write(
+        &dir,
+        "package.json",
+        "{ \"name\": \"root\", \"private\": true }\n",
+    );
+    let head = commit(&dir, "change the root manifest");
+    let rows = vec![row(
+        1,
+        1,
+        13,
+        &head,
+        &base,
+        10,
+        vec![job("test", "failure", &[" FAIL  test/a.test.ts > a works"])],
+    )];
+    let mut config: Config = toml::from_str(CONFIG).unwrap();
+    config.graph.cache = false;
+    let wt_path =
+        std::env::temp_dir().join(format!("fairlead-replay-all-wt-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&wt_path);
+    let replayer = Replayer {
+        clone: &dir,
+        worktree: Worktree::open(&dir, &wt_path, &base).unwrap(),
+        config: &config,
+        sources: Sources::new(&config).unwrap(),
+    };
+    let replayed = replay(&replayer, &rows, &Window::ending("2026-09-11", 7).unwrap());
+    let r = report(
+        "example/repo",
+        &Window::ending("2026-09-11", 7).unwrap(),
+        30,
+        &replayed,
+    );
+    assert_eq!((r.hits, r.hits_run_all, r.hits_selected), (1, 1, 0));
+}
+
+#[test]
+fn a_commit_the_remote_lost_doesnt_keep_the_rest_of_its_batch_out() {
+    let origin =
+        std::env::temp_dir().join(format!("fairlead-replay-origin-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&origin);
+    std::fs::create_dir_all(&origin).unwrap();
+    git(&origin, &["init", "-q", "-b", "main"]);
+    write(&origin, "a.txt", "a\n");
+    commit(&origin, "a");
+    let clone = std::env::temp_dir().join(format!("fairlead-replay-lost-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&clone);
+    git(
+        std::env::temp_dir().as_path(),
+        &[
+            "clone",
+            "-q",
+            origin.to_str().unwrap(),
+            clone.to_str().unwrap(),
+        ],
+    );
+    git(&origin, &["checkout", "-q", "-b", "later"]);
+    write(&origin, "b.txt", "b\n");
+    let later = commit(&origin, "b");
+    git(
+        &origin,
+        &["config", "uploadpack.allowAnySHA1InWant", "true"],
+    );
+    let gone = "0123456789abcdef0123456789abcdef01234567".to_string();
+    let missing = fairlead_replay::git::fetch_missing(&clone, &[gone, later.clone()]);
+    assert_eq!(missing, 1, "only the lost commit is still missing");
+    assert!(fairlead_replay::git::has_commit(&clone, &later));
+}

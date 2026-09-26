@@ -69,6 +69,11 @@ class BenchPublishTest(unittest.TestCase):
         self.run_publish()
         self.assertIn('"run_id": 1', data.read_text())
 
+    def test_an_empty_dataset_is_not_committed(self):
+        (self.art / "data.jsonl").write_text("")
+        self.run_publish()
+        self.assertFalse((self.root / "bench" / "data" / "o_r.jsonl").exists())
+
     def test_text_from_other_repositories_cannot_break_out_of_code_spans(self):
         (self.art / "report.json").write_text(json.dumps(report()))
         page = self.run_publish()

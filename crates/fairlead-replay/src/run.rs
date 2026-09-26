@@ -194,8 +194,9 @@ fn targets(
 
 fn in_plan(plan: &Plan, target: &Target) -> Option<HitBy> {
     match target {
-        Target::Test(path) if plan.tests.iter().any(|t| &t.path == path) => Some(HitBy::Selected),
+        // A plan that selects everything also lists every test.
         Target::Test(_) if plan.all => Some(HitBy::RunAll),
+        Target::Test(path) if plan.tests.iter().any(|t| &t.path == path) => Some(HitBy::Selected),
         Target::Check(id) if plan.checks.iter().any(|c| &c.id == id) => Some(HitBy::Check),
         _ => None,
     }
