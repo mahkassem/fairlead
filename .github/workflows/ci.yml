@@ -36,6 +36,9 @@ jobs:
           size=$(wc -c < "$bin")
           echo "release binary: $size bytes"
           [ "$size" -le 15728640 ] || { echo "over the 15 MB budget"; exit 1; }
+      - name: Graph build stays within its time budget
+        if: matrix.os == 'ubuntu-latest'
+        run: cargo test --release -p fairlead-lang --test perf -- --ignored --nocapture
 
   deny:
     runs-on: ubuntu-latest

@@ -1,5 +1,7 @@
 //! The `fairlead` command. Each command arrives with its milestone; K1.1
-//! adds `config`.
+//! adds `config`, K1.2 `graph`.
+
+mod graph_cmd;
 
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
@@ -24,6 +26,14 @@ enum Command {
         #[command(subcommand)]
         action: ConfigAction,
         /// Override a value for this run, such as `tests.unreached=all`.
+        #[arg(long = "set", value_name = "KEY=VALUE", global = true)]
+        sets: Vec<String>,
+    },
+    /// Inspect the import graph.
+    Graph {
+        #[command(subcommand)]
+        action: graph_cmd::GraphAction,
+        /// Override a config value for this run.
         #[arg(long = "set", value_name = "KEY=VALUE", global = true)]
         sets: Vec<String>,
     },
@@ -167,6 +177,7 @@ fn main() -> ExitCode {
             ExitCode::SUCCESS
         }
         Some(Command::Config { action, sets }) => run_config(action, sets),
+        Some(Command::Graph { action, sets }) => graph_cmd::run(action, sets, &cwd()),
         None => {
             println!(
                 "fairlead {}: see `fairlead --help`",

@@ -104,3 +104,36 @@ fn config_schema_prints_a_json_schema() {
     let schema: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
     assert!(schema["properties"]["tests"].is_object());
 }
+
+#[test]
+fn graph_why_prints_the_chain_and_importers_lists_the_edge() {
+    let dir = scratch("graph");
+    std::fs::create_dir_all(dir.join("src")).unwrap();
+    std::fs::write(dir.join("src/a.ts"), "import { b } from './b.js';\n").unwrap();
+    std::fs::write(
+        dir.join("src/b.ts"),
+        "import { c } from './c';\nexport const b = 1;\n",
+    )
+    .unwrap();
+    std::fs::write(dir.join("src/c.ts"), "export const c = 1;\n").unwrap();
+    let why = fairlead_in(&dir, &["graph", "why", "src/a.ts", "src/c.ts"]);
+    let text = String::from_utf8_lossy(&why.stdout);
+    assert!(
+        why.status.success(),
+        "{}",
+        String::from_utf8_lossy(&why.stderr)
+    );
+    assert_eq!(
+        text.lines().map(str::trim).collect::<Vec<_>>(),
+        ["src/a.ts  (import)", "src/b.ts  (import)", "src/c.ts"]
+    );
+    let importers = fairlead_in(&dir.join("src"), &["graph", "importers", "c.ts"]);
+    assert_eq!(
+        String::from_utf8_lossy(&importers.stdout).trim(),
+        "src/b.ts  (import)"
+    );
+    let stats = fairlead_in(&dir, &["graph", "stats", "--json"]);
+    let value: serde_json::Value = serde_json::from_slice(&stats.stdout).unwrap();
+    assert_eq!(value["sources"], 3);
+    assert_eq!(value["edges"], 2);
+}
