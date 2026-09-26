@@ -174,8 +174,9 @@ fn execute(cwd: &Path, plan_path: &Path, fail_fast: bool) -> Result<ExitCode, St
         .get("version")
         .and_then(serde_json::Value::as_u64);
     if version != Some(u64::from(VERSION)) {
+        let found = version.map_or("no version".to_string(), |v| format!("plan version {v}"));
         return Err(format!(
-            "{} is plan version {version:?}; this fairlead reads version {VERSION}",
+            "{} is {found}; this fairlead reads version {VERSION}",
             plan_path.display()
         ));
     }
@@ -185,6 +186,11 @@ fn execute(cwd: &Path, plan_path: &Path, fail_fast: bool) -> Result<ExitCode, St
     let mut failed = Vec::new();
     for inv in &plan.invocations {
         let Some((program, args)) = inv.argv.split_first() else {
+            eprintln!("fairlead: {} has no argv", inv.id);
+            failed.push(inv.id.clone());
+            if fail_fast {
+                break;
+            }
             continue;
         };
         println!("fairlead: ({}) {}", inv.cwd, inv.argv.join(" "));

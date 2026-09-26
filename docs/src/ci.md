@@ -4,6 +4,8 @@
 
 ```yaml
 on: pull_request
+permissions:
+  contents: read
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -12,6 +14,7 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.sha }}   # the head, not the merge commit
           fetch-depth: 0                                    # history for the merge base
+          persist-credentials: false
       - id: plan
         uses: mahkassem/fairlead@v0.2.0
         with:
@@ -35,7 +38,7 @@ Pin the action and `actions/checkout` to a commit SHA in your own workflows.
 | `--base SHA` | the remote's default branch | The merge base of this and `HEAD` is what changes are measured from. |
 | `--head SHA` | none | Refuses to plan if `HEAD` is another commit. `actions/checkout` checks out the merge commit on `pull_request` unless you pass `ref`. |
 | `--format json\|github` | `json` | `github` also writes step outputs. |
-| `--out PATH` | `fairlead-plan.json` in `$RUNNER_TEMP` or the system temp directory | Never the working tree, where the file would count as a change. |
+| `--out PATH` | `fairlead-plan.json` in `$RUNNER_TEMP` or the system temp directory | Never the working tree, where the file would count as a change. A relative path is from the current directory. |
 | `--set KEY=VALUE` | | Override a config value for this run. |
 
 A missing merge base fails with exit code 2, never an empty plan: fetch more history or pass `--files`.
@@ -55,6 +58,6 @@ Nothing is keyed to a runner name or folder layout. `invocations` can feed a job
 
 ## `fairlead ci run --plan PATH`
 
-Runs each invocation's argv in its working directory, in order, without a shell, and exits 1 if any failed, after running the rest. `--fail-fast` stops at the first failure. A plan of another version is refused with exit code 2.
+Runs each invocation's argv in its working directory (relative to the repository root; a relative `--plan` is from the current directory), in order, without a shell, and exits 1 if any failed or has no argv, after running the rest. `--fail-fast` stops at the first failure. A plan of another version is refused with exit code 2.
 
 Without a shell, Windows finds only `.exe` programs on `PATH`: a runner that starts `npx` or another `.cmd` shim needs the full name, such as `npx.cmd`, in its argv.

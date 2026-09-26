@@ -291,6 +291,10 @@ fn ci_run_runs_every_invocation_and_fails_if_any_did() {
     plan_with(&dir, &[&["git", "--version"]]);
     let ok = fairlead_in(&dir, &["ci", "run", "--plan", "plan.json"]);
     assert!(ok.status.success());
+    plan_with(&dir, &[&[], &["fairlead-no-such-program"]]);
+    let bad = fairlead_in(&dir, &["ci", "run", "--plan", "plan.json"]);
+    assert_eq!(bad.status.code(), Some(1));
+    assert!(String::from_utf8_lossy(&bad.stderr).contains("failed: step0, step1"));
 }
 
 #[test]
