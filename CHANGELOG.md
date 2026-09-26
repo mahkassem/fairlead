@@ -4,6 +4,7 @@
 
 ### New
 
+- The git hook: `fairlead hooks install --git` adds the commit stage to `lefthook.yml` by inserting lines, keeping its comments and layout, and uninstall restores it byte for byte. Plain `install` adds it wherever a lefthook config already exists. `fairlead doctor` reports both hooks, whether lefthook will run the git one, whether `fairlead` is on the PATH, and the event log: write-hook decisions, denies by rule, p50 and p95 time, time-outs, errors and commit-stage runs. See [The git hook](https://mahkassem.github.io/fairlead/docs/guard.html#the-git-hook).
 - The write stage: `fairlead hooks install` adds a Claude Code hook that runs `fairlead guard hook` before every edit, and denies one that adds a finding, with the findings as the reason the agent reads (or, with `guard.on_finding = "warn"`, lets it through with them as a note). It never answers "allow", lets a call through whenever it can't decide, and keeps to `guard.budget_ms` (40 by default). `[[guard.commands]]` deny shell commands. `hooks.claude` chooses `.claude/settings.json` (shared, the default) or `.claude/settings.local.json`; `fairlead hooks uninstall` restores the file byte for byte when nobody changed it since. See [The write hook](https://mahkassem.github.io/fairlead/docs/guard.html#the-write-hook).
 
 ### Changed

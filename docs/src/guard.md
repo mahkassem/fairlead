@@ -180,9 +180,11 @@ external rule can run at: when the hook runs, the file isn't written yet.
 ## The write hook
 
 ```bash
-fairlead hooks install      # add the hook to .claude/settings.json
-fairlead hooks status       # where it is, and whether uninstall can restore the file exactly
-fairlead hooks uninstall    # take it out again
+fairlead hooks install         # the Claude Code hook, and the git hook if lefthook is set up
+fairlead hooks install --git   # only the git hook, making lefthook.yml if there's none
+fairlead hooks status          # where each is, and whether uninstall can restore the file exactly
+fairlead hooks uninstall       # take them out again
+fairlead doctor                # the hooks, the binary on the PATH, and what the event log recorded
 ```
 
 The hook goes where `hooks.claude` says: `"shared"` (the default) is the
@@ -214,6 +216,31 @@ Uninstall puts the original back byte for byte when nobody changed the file
 since; otherwise it removes only Fairlead's entries, keeps everything else,
 and says the formatting may differ. On a fresh clone, where there's no
 manifest, it removes the entries by their command.
+
+## The git hook
+
+The commit stage runs through [lefthook](https://github.com/evilmartians/lefthook):
+install adds a `fairlead-guard` command running `fairlead guard check --staged`
+to `pre-commit` in `lefthook.yml` (or `lefthook.yaml`, `.lefthook.yml`,
+`.lefthook.yaml`, whichever is there). It adds lines at the indentation around
+them, under `commands`, or as an item where the config uses `jobs`, and never
+rewrites the rest, so comments and layout stay. A `pre-commit` or `commands`
+written on one line (`pre-commit: {}`) is refused, to be added by hand.
+
+Without `--git`, install adds the git hook only where a lefthook config already
+exists. lefthook runs the command once `lefthook install` has put it in
+`.git/hooks`; `status` and `doctor` say when it hasn't. Uninstall restores the
+file byte for byte when nobody changed it since, else removes the two lines
+and any `commands`, `jobs` or `pre-commit` they leave empty, and a config
+install made is removed.
+
+## Doctor
+
+`fairlead doctor` reads the event log and reports the newest 500 write-hook
+calls by decision, the rules that denied, the hook's p50 and p95 time, any
+calls that ran out of time or hit an error, and the commit stage's runs. It
+also says where each hook is installed, whether lefthook will run the git one,
+and whether `fairlead` is on the PATH, since the hooks call it by name.
 
 ## The ratchet
 

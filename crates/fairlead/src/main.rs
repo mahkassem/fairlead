@@ -118,8 +118,45 @@ fn cwd() -> PathBuf {
     std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))
 }
 
+/// Where `fairlead` is on the PATH, if it is: the hooks run it by name.
+fn on_path() -> Option<PathBuf> {
+    let names: &[&str] = if cfg!(windows) {
+        &["fairlead.exe", "fairlead"]
+    } else {
+        &["fairlead"]
+    };
+    std::env::split_paths(&std::env::var_os("PATH")?)
+        .flat_map(|dir| names.iter().map(move |n| dir.join(n)))
+        .find(|p| p.is_file())
+}
+
+/// Hooks, the binary on the PATH, and what the event log recorded.
+fn doctor_hooks(dir: &Path, loaded: Option<&Loaded>) -> String {
+    let root = graph_cmd::repo_root(dir);
+    let Some(git_dir) = fairlead_guard::git::git_dir(&root) else {
+        return "hooks: not a git repository\n".to_string();
+    };
+    let config = loaded.map(|l| l.config.clone()).unwrap_or_default();
+    let mut out: String = hooks_cmd::describe(&root, &config)
+        .into_iter()
+        .map(|l| l + "\n")
+        .collect();
+    out.push_str(&match on_path() {
+        Some(path) => format!("on PATH: {}\n", path.display()),
+        None => "on PATH: no; the hooks do nothing until `fairlead` is installed\n".to_string(),
+    });
+    let log =
+        std::fs::read_to_string(git_dir.join("fairlead").join("events.jsonl")).unwrap_or_default();
+    out.push_str(&fairlead_guard::summary::render(
+        &fairlead_guard::summary::summarize(&log),
+    ));
+    out
+}
+
 fn doctor_report(dir: &Path, opts: &LoadOptions) -> String {
-    let config = match config::load(dir, opts) {
+    let loaded = config::load(dir, opts);
+    let hooks = doctor_hooks(dir, loaded.as_ref().ok());
+    let config = match loaded {
         Ok(loaded) if loaded.files.is_empty() => "none found; defaults apply".to_string(),
         Ok(loaded) if loaded.problems.is_empty() => {
             format!("{} (valid)", loaded.files[0].display())
@@ -132,7 +169,7 @@ fn doctor_report(dir: &Path, opts: &LoadOptions) -> String {
         Err(e) => format!("invalid: {e}"),
     };
     format!(
-        "fairlead {}\nplatform: {}-{}\nconfig: {}\n",
+        "fairlead {}\nplatform: {}-{}\nconfig: {}\n{hooks}",
         env!("CARGO_PKG_VERSION"),
         std::env::consts::OS,
         std::env::consts::ARCH,
