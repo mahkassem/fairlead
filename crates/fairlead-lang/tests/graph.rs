@@ -500,8 +500,9 @@ fn a_deleted_file_is_joined_back_to_everything_that_referred_to_it() {
         .map(|(from, spec, _)| {
             let file = &s.graph.files[*from as usize];
             format!(
-                "{file} {spec} -> {:?}",
-                resolver.resolve_path(&s.tree, file, spec)
+                "{file} {spec} -> {:?} ({:?})",
+                resolver.resolve_path(&s.tree, file, spec),
+                resolver.why_not(&s.tree, file, spec)
             )
         })
         .collect();
