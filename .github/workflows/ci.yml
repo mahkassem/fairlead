@@ -40,6 +40,21 @@ jobs:
         if: matrix.os == 'ubuntu-latest'
         run: cargo test --release -p fairlead-lang --test perf -- --ignored --nocapture
 
+  msrv:
+    name: minimum Rust version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: The workspace builds with the rust-version it declares
+        shell: bash
+        run: |
+          msrv=$(sed -n 's/^rust-version = "\(.*\)"$/\1/p' Cargo.toml)
+          echo "declared rust-version: $msrv"
+          rustup toolchain install "$msrv" --profile minimal
+          RUSTUP_TOOLCHAIN="$msrv" cargo check --workspace --all-targets --locked
+
   deny:
     runs-on: ubuntu-latest
     steps:
