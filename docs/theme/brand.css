@@ -1,0 +1,13 @@
+/* Fairlead brand: the logo in the title bar and the guide green for links,
+   each in its light and dark form to match mdBook's theme. */
+.menu-title {
+  color: transparent;
+  background: url("../images/fairlead-logo.svg") center / auto 55% no-repeat;
+}
+.coal .menu-title,
+.navy .menu-title,
+.ayu .menu-title {
+  background-image: url("../images/fairlead-logo-dark.svg");
+}
+.light, .rust { --links: #008F67; --sidebar-active: #008F67; }
+.coal, .navy, .ayu { --links: #00AE7B; --sidebar-active: #00AE7B; }

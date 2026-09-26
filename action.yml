@@ -2,7 +2,7 @@ name: Fairlead
 description: Install Fairlead and run one of its commands.
 branding:
   icon: anchor
-  color: blue
+  color: green
 inputs:
   command:
     description: The fairlead arguments to run, for example `doctor` or `ci plan`.

@@ -5,4 +5,5 @@ language = "en"
 src = "src"
 
 [output.html]
+additional-css = ["theme/brand.css"]
 git-repository-url = "https://github.com/mahkassem/fairlead"
