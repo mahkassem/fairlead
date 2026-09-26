@@ -29,10 +29,10 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { os: ubuntu-latest, installer: shell }
+          - { os: ubuntu-24.04, installer: shell }
           - { os: macos-latest, installer: shell }
           - { os: windows-latest, installer: powershell }
-          - { os: ubuntu-latest, installer: npm }
+          - { os: ubuntu-24.04, installer: npm }
           - { os: macos-latest, installer: npm }
           - { os: windows-latest, installer: npm }
     runs-on: ${{ matrix.os }}
