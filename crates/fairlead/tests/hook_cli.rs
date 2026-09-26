@@ -227,14 +227,17 @@ fn a_new_file_in_a_new_directory_is_checked_like_any_other() {
 
 #[test]
 fn a_command_rule_denies_a_shell_command_with_its_reason() {
-    let config = format!("{SIZE}[[guard.commands]]\nmatch = '(^|\\s)git stash(\\s|$)'\nreason = \"Commit instead.\"\n");
+    let config = format!("{SIZE}[[guard.commands]]\nmatch = '(^|\\s)git push --force(\\s|$)'\nreason = \"Open a pull request instead.\"\n");
     let dir = repo("bash", &config, &[]);
     let answer = hook(
         &dir,
-        call(&dir, "Bash", json!({"command": "git stash pop"})),
+        call(&dir, "Bash", json!({"command": "git push --force"})),
     )
     .unwrap();
-    assert_eq!(reason(&answer), "fairlead guard: Commit instead.");
+    assert_eq!(
+        reason(&answer),
+        "fairlead guard: Open a pull request instead."
+    );
     assert_eq!(
         hook(&dir, call(&dir, "Bash", json!({"command": "git status"}))),
         None

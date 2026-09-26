@@ -258,7 +258,7 @@ mod tests {
 
     fn codes() -> ItemCodes {
         ItemCodes::new(&config::ItemCodes {
-            pattern: r"(?-u:\b)T[0-9]{4}(?-u:\b)".into(),
+            pattern: r"(?-u:\b)[A-Z]+-[0-9]+(?-u:\b)".into(),
             pointer: true,
         })
         .unwrap()
@@ -267,11 +267,14 @@ mod tests {
     #[test]
     fn a_code_in_a_pointer_at_the_end_or_before_a_full_stop_is_allowed() {
         let c = codes();
-        assert!(c.check("why this is so (T1024)").is_empty());
-        assert!(c.check("why (T1024, T1025). More words").is_empty());
-        assert_eq!(c.check("see (T1024) for more"), ["T1024"]);
-        assert_eq!(c.check("T1024 and T1024 and T1025"), ["T1024", "T1025"]);
-        assert_eq!(c.check("(T1024 and more)"), ["T1024"]);
+        assert!(c.check("why this is so (ABC-12)").is_empty());
+        assert!(c.check("why (ABC-12, ABC-13). More words").is_empty());
+        assert_eq!(c.check("see (ABC-12) for more"), ["ABC-12"]);
+        assert_eq!(
+            c.check("ABC-12 and ABC-12 and ABC-13"),
+            ["ABC-12", "ABC-13"]
+        );
+        assert_eq!(c.check("(ABC-12 and more)"), ["ABC-12"]);
     }
 
     #[test]

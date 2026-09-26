@@ -12,7 +12,7 @@ migrations = ["db/migrations/**/*.sql"]
 block_length = { source = 8, test = 10, header = 12, inline = 2, migration = 1 }
 density = { source = 0.25, test = 0.20 }
 history = { dates = true, names = ["Ada"], phrases = ["used to", "no longer", "until now"], measured = true }
-item_codes = { pattern = '(?-u:\b)T[0-9]{4}(?-u:\b)', pointer = true }
+item_codes = { pattern = '(?-u:\b)[A-Z]+-[0-9]+(?-u:\b)', pointer = true }
 agent_phrases = [
   '(?i)(?-u:\b)you must(?-u:\b)',
   '(?i)(?-u:\b)never (?:do|write|add|put)(?-u:\b)',

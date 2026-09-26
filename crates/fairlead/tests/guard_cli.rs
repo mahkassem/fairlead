@@ -350,36 +350,39 @@ fn the_check_stage_compares_migrations_with_the_base_it_is_given() {
 #[test]
 fn test_names_and_citations_run_at_the_check_stage() {
     let config = concat!(
-        "[guard.test_names]\nfiles = [\"test/**\"]\nfile = '^[a-z-]+\\.test\\.ts$'\ntitles_without = 'T[0-9]{4}'\n",
-        "[guard.citations]\nfiles = [\"src/**\"]\npattern = '\\((?P<code>T[0-9]{4})\\)'\nheadings_in = \"LESSONS.md\"\n",
+        "[guard.test_names]\nfiles = [\"test/**\"]\nfile = '^[a-z-]+\\.test\\.ts$'\ntitles_without = '[A-Z]+-[0-9]+'\n",
+        "[guard.citations]\nfiles = [\"src/**\"]\npattern = '\\((?P<code>[A-Z]+-[0-9]+)\\)'\nheadings_in = \"decisions.md\"\n",
     );
     let dir = repo(
         "names-cite",
         config,
         &[
-            ("LESSONS.md", "## T1024\n".into()),
+            ("decisions.md", "## ABC-12\n".into()),
             (
-                "test/Leave.test.ts",
-                "test(\"T1024 works\", () => {})\n".into(),
+                "test/Orders.test.ts",
+                "test(\"ABC-12 works\", () => {})\n".into(),
             ),
             (
                 "src/a.ts",
-                "// Why (T1024).\n// And why (T4040).\nexport const a = 1\n".into(),
+                "// Why (ABC-12).\n// And why (ABC-44).\nexport const a = 1\n".into(),
             ),
         ],
     );
     let (ok, _, err) = guard(&dir, &[]);
     assert!(!ok);
-    assert!(err.contains("test/Leave.test.ts:1 test-file-name"), "{err}");
     assert!(
-        err.contains("test/Leave.test.ts:1 test-title: test title carries \"T1024\""),
+        err.contains("test/Orders.test.ts:1 test-file-name"),
         "{err}"
     );
     assert!(
-        err.contains("src/a.ts:1 citation: cites \"T4040\""),
+        err.contains("test/Orders.test.ts:1 test-title: test title carries \"ABC-12\""),
         "{err}"
     );
-    assert!(!err.contains("\"T1024\", which"), "{err}");
+    assert!(
+        err.contains("src/a.ts:1 citation: cites \"ABC-44\""),
+        "{err}"
+    );
+    assert!(!err.contains("\"ABC-12\", which"), "{err}");
 }
 
 #[cfg(unix)]

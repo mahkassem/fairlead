@@ -138,22 +138,22 @@ mod tests {
     #[test]
     fn a_file_name_outside_the_pattern_is_a_finding() {
         let n = names(Some(r"^[a-z]+(-[a-z]+)*\.test\.ts$"), None);
-        assert!(check(&n, "test/leave-balance.test.ts", "").is_empty());
+        assert!(check(&n, "test/order-total.test.ts", "").is_empty());
         assert_eq!(
-            check(&n, "test/LeaveBalance.test.ts", ""),
-            ["test/LeaveBalance.test.ts:1 test-file-name: file name `LeaveBalance.test.ts` doesn't match the test file pattern"]
+            check(&n, "test/OrderTotal.test.ts", ""),
+            ["test/OrderTotal.test.ts:1 test-file-name: file name `OrderTotal.test.ts` doesn't match the test file pattern"]
         );
     }
 
     #[test]
     fn a_title_that_carries_the_pattern_is_a_finding_wherever_the_call_sits() {
-        let n = names(None, Some(r"(?-u:\b)T[0-9]{4}(?-u:\b)"));
-        let text = "describe(\"T1024 leave\", () => {\n  it.only('works', () => {})\n  test(`T2000 edge`, () => {})\n  it(`${x} T3000`, () => {})\n})\n";
+        let n = names(None, Some(r"(?-u:\b)[A-Z]+-[0-9]+(?-u:\b)"));
+        let text = "describe(\"ABC-12 orders\", () => {\n  it.only('works', () => {})\n  test(`ABC-20 edge`, () => {})\n  it(`${x} ABC-30`, () => {})\n})\n";
         assert_eq!(
             check(&n, "a.test.ts", text),
             [
-                "a.test.ts:1 test-title: test title carries \"T1024\"",
-                "a.test.ts:3 test-title: test title carries \"T2000\""
+                "a.test.ts:1 test-title: test title carries \"ABC-12\"",
+                "a.test.ts:3 test-title: test title carries \"ABC-20\""
             ]
         );
     }

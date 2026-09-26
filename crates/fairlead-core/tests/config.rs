@@ -573,7 +573,7 @@ fn test_names_citations_migrations_commands_and_external_rules_are_validated() {
         ["guard.migrations.unique_prefix.allow"]
     );
     assert_eq!(
-        keys("[[guard.commands]]\nmatch = \"git stash\"\nreason = \" \"\n"),
+        keys("[[guard.commands]]\nmatch = \"git push --force\"\nreason = \" \"\n"),
         ["guard.commands[0].reason"]
     );
     assert_eq!(
