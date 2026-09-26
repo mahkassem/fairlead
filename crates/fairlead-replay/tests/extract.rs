@@ -130,3 +130,28 @@ fn bun_reads_the_same_failures_from_the_dataset_excerpt_as_from_the_whole_log() 
         extract(&Extractor::Bun, &log)
     );
 }
+
+#[test]
+fn bun_reads_a_second_run_in_the_same_job_after_the_first_summary() {
+    let log = "packages/a/test/one.test.ts:\n(fail) one > breaks [1ms]\n\n1 tests failed:\n(fail) one > breaks [1ms]\n\npackages/b/test/two.test.ts:\n(fail) two > also breaks [1ms]\n\n1 tests failed:\n(fail) two > also breaks [1ms]\n";
+    assert_eq!(
+        extract(&Extractor::Bun, log),
+        [
+            printed("packages/a/test/one.test.ts", None, Some("breaks")),
+            printed("packages/b/test/two.test.ts", None, Some("also breaks")),
+        ]
+    );
+}
+
+#[test]
+fn bun_reads_a_header_whose_path_has_a_space() {
+    let log = "packages/web/test/my cart.test.ts:\n(fail) cart > removes [2ms]\n";
+    assert_eq!(
+        extract(&Extractor::Bun, log),
+        [printed(
+            "packages/web/test/my cart.test.ts",
+            None,
+            Some("removes")
+        )]
+    );
+}

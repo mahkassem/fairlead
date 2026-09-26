@@ -5,8 +5,8 @@
 //! Bun names the file once, on a `path:` header it prints again whenever
 //! parallel output switches files, and each failure as `(fail) suite > test`
 //! under it; its closing summary repeats the failures with no header, so
-//! reading stops there. Lines inside an assertion diff (`+`/`-`) are another
-//! run's output, so they're skipped.
+//! nothing is read again until the next header. Lines inside an assertion
+//! diff (`+`/`-`) are another run's output, so they're skipped.
 
 use std::sync::OnceLock;
 
@@ -106,7 +106,7 @@ pub fn extract(extractor: &Extractor, log: &str) -> Vec<Printed> {
                 p
             }),
             Extractor::Regex(re) => custom(re, line),
-            Extractor::Bun => unreachable!("read whole above"),
+            Extractor::Bun => unreachable!("handled above"),
         };
         if let Some(mut printed) = found {
             printed.project = printed.project.or(package);
@@ -167,7 +167,7 @@ fn jest_title(after: &[String]) -> Option<String> {
 /// A test file's header, as bun prints it or as GitHub renders its group.
 pub fn bun_header(line: &str) -> Option<&str> {
     static HEADER: OnceLock<Regex> = OnceLock::new();
-    let pattern = format!(r"^(?:##\[group\]|::group::)?(?P<path>\S+{TEST_EXT}):\s*$");
+    let pattern = format!(r"^(?:##\[group\]|::group::)?(?P<path>[^\s(][^:]*?{TEST_EXT}):\s*$");
     re(&HEADER, &pattern)
         .captures(line)
         .and_then(|c| c.name("path"))
@@ -185,8 +185,10 @@ fn bun(lines: &[String]) -> Vec<Printed> {
     let mut file: Option<&str> = None;
     let mut out: Vec<Printed> = Vec::new();
     for line in lines {
+        // A job can run bun more than once; the next run's headers start over.
         if summary.is_match(line) {
-            break;
+            file = None;
+            continue;
         }
         if let Some(path) = bun_header(line) {
             file = Some(path);
