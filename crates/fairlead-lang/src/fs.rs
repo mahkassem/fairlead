@@ -185,10 +185,9 @@ impl FileSystem for WorkspaceFs {
         {
             return self.metadata(path);
         }
-        match FileSystemOs::symlink_metadata(path) {
-            Err(e) if e.kind() == io::ErrorKind::NotFound => self.metadata(path),
-            other => other,
-        }
+        // Any error falls through to `metadata`, which knows virtual and
+        // mapped paths: on Windows a missing file doesn't read as NotFound.
+        FileSystemOs::symlink_metadata(path).or_else(|_| self.metadata(path))
     }
 
     fn read_link(&self, path: &Path) -> Result<PathBuf, ResolveError> {
