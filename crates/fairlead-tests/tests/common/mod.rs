@@ -3,7 +3,7 @@
 #![allow(dead_code)]
 
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use fairlead_core::config::Config;
 use fairlead_core::plan::{Change, Plan, Reason, Status};
@@ -52,7 +52,7 @@ pub fn renamed(from: &str, to: &str) -> Change {
     }
 }
 
-pub fn try_plan(dir: &PathBuf, config: &Config, changes: Vec<Change>) -> Result<Plan, String> {
+pub fn try_plan(dir: &Path, config: &Config, changes: Vec<Change>) -> Result<Plan, String> {
     let mut scan = build(dir, config).unwrap();
     plan(
         &mut scan,
@@ -67,7 +67,7 @@ pub fn try_plan(dir: &PathBuf, config: &Config, changes: Vec<Change>) -> Result<
     )
 }
 
-pub fn run(dir: &PathBuf, config: &Config, changes: Vec<Change>) -> Plan {
+pub fn run(dir: &Path, config: &Config, changes: Vec<Change>) -> Plan {
     try_plan(dir, config, changes).unwrap()
 }
 
