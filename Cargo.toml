@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/fairlead", "crates/fairlead-core", "crates/fairlead-lang", "crates/fairlead-tests"]
+members = ["crates/fairlead", "crates/fairlead-core", "crates/fairlead-lang", "crates/fairlead-tests", "crates/fairlead-replay"]
 
 [workspace.package]
 version = "0.1.1"

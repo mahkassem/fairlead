@@ -4,6 +4,7 @@
 mod ci_cmd;
 mod graph_cmd;
 mod plan_cmd;
+mod replay_cmd;
 
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
@@ -52,6 +53,11 @@ enum Command {
         /// Why this test file or check is in the plan, or why it isn't.
         #[arg(long, value_name = "FILE_OR_CHECK")]
         explain: String,
+    },
+    /// Replay recorded CI failures against the planner.
+    Replay {
+        #[command(subcommand)]
+        action: replay_cmd::ReplayAction,
     },
     /// Plan and run tests in CI.
     Ci {
@@ -240,6 +246,7 @@ fn main() -> ExitCode {
             schema,
         }) => plan_cmd::run_plan(&cwd(), changes, json, out, schema),
         Some(Command::Ci { action }) => ci_cmd::run(action, &cwd()),
+        Some(Command::Replay { action }) => replay_cmd::run(action),
         Some(Command::Test { changes, explain }) => {
             plan_cmd::run_explain(&cwd(), changes, &explain)
         }
