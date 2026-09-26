@@ -7,7 +7,7 @@ use std::path::Path;
 use std::time::Instant;
 
 use fairlead_core::config::Config;
-use fairlead_core::plan::Plan;
+use fairlead_core::plan::{Plan, Reason};
 use fairlead_lang::build;
 use fairlead_tests::{git as plan_git, plan, Input};
 use regex::Regex;
@@ -78,6 +78,8 @@ pub struct Planned {
     pub total: usize,
     pub all: bool,
     pub seconds: f64,
+    /// Why the plan selected every test, when it did: a coarse path.
+    pub widened: Option<String>,
 }
 
 #[derive(Debug, Default)]
@@ -256,6 +258,7 @@ impl Replayer<'_> {
                 .map(|t| t.path)
                 .collect();
         let input = Input {
+            base_files: fairlead_tests::planner::base_files(&self.worktree.path, base, &changes),
             changes,
             base: Some(base.to_string()),
             head: head.to_string(),
@@ -281,6 +284,23 @@ impl Replayer<'_> {
             packages,
         }
     }
+}
+
+/// The run-all path or unreached file that widened a plan to every test,
+/// as `kind path-group`: a top directory for nested paths, else the file.
+fn widened_by(plan: &Plan, total: usize) -> Option<String> {
+    if !plan.all && plan.tests.len() < total {
+        return None;
+    }
+    let group = |path: &str| match path.split_once('/') {
+        Some((top, _)) => format!("{top}/**"),
+        None => path.to_string(),
+    };
+    plan.tests.iter().find_map(|t| match &t.reason {
+        Reason::RunAll { path } => Some(format!("run-all {}", group(path))),
+        Reason::Unreached { path, .. } => Some(format!("unreached {}", group(path))),
+        _ => None,
+    })
 }
 
 fn changed_paths(plan: &Plan) -> Vec<String> {
@@ -396,6 +416,7 @@ fn replay_row(r: &Replayer, row: &Row, all: &[&Row], out: &mut Replayed) {
         total: tests.len(),
         all: plan.all,
         seconds,
+        widened: widened_by(&plan, tests.len()),
     });
     let changed = changed_paths(&plan);
     let snapshot = r.snapshot();

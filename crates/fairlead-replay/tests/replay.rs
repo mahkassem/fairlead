@@ -488,6 +488,7 @@ fn a_hit_in_a_plan_that_selects_everything_counts_as_run_all() {
         &replayed,
     );
     assert_eq!((r.hits, r.hits_run_all, r.hits_selected), (1, 1, 0));
+    assert_eq!(r.widened_by.get("run-all package.json"), Some(&1));
 }
 
 #[test]

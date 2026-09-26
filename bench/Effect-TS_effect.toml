@@ -12,6 +12,13 @@ exclude = [
   "**/test/cluster-integration/**",
 ]
 
+[plan]
+# Measured here before it becomes the default.
+lockfile = "scope"
+# Migration guides and their data, and agent-facing writing patterns: read by
+# people and tools, not by tests (a file something references still counts).
+ignore = ["migration/**", ".patterns/**"]
+
 [[tests.runners]]
 id = "vitest"
 match = ["**"]
@@ -105,6 +112,7 @@ step = "^Generate Documentation$"
 check = "docgen"
 
 [[replay.checks]]
-job = "^Test \\(Documentation\\)$"
+# Named "Documentation Tests" in some weeks.
+job = "^(Test \\(Documentation\\)|Documentation Tests)$"
 step = "^Test Documentation$"
 check = "doctest"

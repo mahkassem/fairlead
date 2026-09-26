@@ -24,6 +24,15 @@ fn git(root: &Path, args: &[&str]) -> Result<String, String> {
     Ok(String::from_utf8_lossy(&out.stdout).into_owned())
 }
 
+/// A file's text at `rev`, or `None` if it didn't exist there.
+pub fn file_at(root: &Path, rev: &str, path: &str) -> Option<String> {
+    git(
+        root,
+        &["show", "--end-of-options", &format!("{rev}:{path}")],
+    )
+    .ok()
+}
+
 /// The commit a plan compares against: the merge base of `base` and HEAD.
 pub fn merge_base(root: &Path, base: &str) -> Result<String, String> {
     Ok(git(root, &["merge-base", base, "HEAD"])?.trim().to_string())

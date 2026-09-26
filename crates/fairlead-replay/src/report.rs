@@ -64,6 +64,8 @@ pub struct Report {
     pub run_all_share: Option<f64>,
     pub median_plan_seconds: Option<f64>,
     pub p90_plan_seconds: Option<f64>,
+    /// Plans that selected every test, by what widened them.
+    pub widened_by: BTreeMap<String, usize>,
     /// The first plan's time, with the parse cache cold.
     pub first_plan_seconds: Option<f64>,
 }
@@ -171,6 +173,10 @@ pub fn report(repo: &str, window: &Window, min_failures: u32, replayed: &Replaye
     }
     let unconfirmed = count(Outcome::Unconfirmed);
     let seconds: Vec<f64> = replayed.plans.iter().map(|p| p.seconds).collect();
+    let mut widened_by = BTreeMap::new();
+    for why in replayed.plans.iter().filter_map(|p| p.widened.clone()) {
+        *widened_by.entry(why).or_insert(0) += 1;
+    }
     Report {
         repo: repo.to_string(),
         from: window.from.clone(),
@@ -197,6 +203,7 @@ pub fn report(repo: &str, window: &Window, min_failures: u32, replayed: &Replaye
             .then(|| replayed.plans.iter().filter(|p| p.all).count() as f64 / plans as f64),
         median_plan_seconds: quantile(seconds.clone(), 0.5),
         p90_plan_seconds: quantile(seconds.clone(), 0.9),
+        widened_by,
         first_plan_seconds: seconds.first().copied(),
         misses,
     }
@@ -266,6 +273,14 @@ pub fn text(r: &Report) -> String {
         secs(r.median_plan_seconds),
         secs(r.p90_plan_seconds)
     );
+    if !r.widened_by.is_empty() {
+        let mut by: Vec<(&String, &usize)> = r.widened_by.iter().collect();
+        by.sort_by(|a, b| b.1.cmp(a.1).then(a.0.cmp(b.0)));
+        let _ = writeln!(out, "  plans that selected everything, by cause:");
+        for (why, n) in by.iter().take(10) {
+            let _ = writeln!(out, "    {n:>4}  {why}");
+        }
+    }
     if !r.unwatched.is_empty() {
         let _ = writeln!(out, "  unwatched failed jobs (no rule names them):");
         for (job, n) in &r.unwatched {

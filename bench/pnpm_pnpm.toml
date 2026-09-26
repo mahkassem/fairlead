@@ -13,6 +13,10 @@ exclude = [
   "pnpm/**",
 ]
 
+[plan]
+# Measured here before it becomes the default.
+lockfile = "scope"
+
 [[tests.runners]]
 id = "jest"
 match = ["**"]
