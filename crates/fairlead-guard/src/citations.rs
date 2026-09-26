@@ -1,4 +1,4 @@
-//! `[guard.citations]`: a pointer in a comment, such as `(T1024)`, has to
+//! `[guard.citations]`: a pointer in a comment, such as `(ABC-12)`, has to
 //! name a heading in a Markdown file, so a pointer never points nowhere.
 
 use std::collections::HashSet;
@@ -18,7 +18,7 @@ pub(crate) struct Citations {
 }
 
 /// Each heading's first word, with a trailing `:` or `.` dropped, so
-/// `## T1024: title` names `T1024`.
+/// `## ABC-12: title` names `ABC-12`.
 pub(crate) fn heading_names(markdown: &str) -> HashSet<String> {
     markdown
         .lines()
@@ -86,8 +86,10 @@ mod tests {
     #[test]
     fn a_heading_names_its_first_word_at_any_level() {
         let names =
-            heading_names("# Lessons\n\n## T1024\ntext\n### no-stash: why\n#not a heading\n");
-        assert!(names.contains("T1024") && names.contains("no-stash") && names.contains("Lessons"));
+            heading_names("# Decisions\n\n## ABC-12\ntext\n### no-cache: why\n#not a heading\n");
+        assert!(
+            names.contains("ABC-12") && names.contains("no-cache") && names.contains("Decisions")
+        );
         assert!(!names.contains("not"));
     }
 
@@ -95,18 +97,18 @@ mod tests {
     fn a_pointer_to_a_missing_heading_is_a_finding() {
         let dir = std::env::temp_dir().join(format!("fairlead-citations-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
-        std::fs::write(dir.join("LESSONS.md"), "## T1024\n").unwrap();
+        std::fs::write(dir.join("decisions.md"), "## ABC-12\n").unwrap();
         let c = Citations::new(
             &config::Citations {
                 files: vec!["**".to_string()].into(),
                 exclude: Default::default(),
-                pattern: r"\((?P<code>T[0-9]{4})\)".into(),
-                headings_in: "LESSONS.md".into(),
+                pattern: r"\((?P<code>[A-Z]+-[0-9]+)\)".into(),
+                headings_in: "decisions.md".into(),
             },
             &dir,
         )
         .unwrap();
-        let text = "// Why (T1024).\nx() // and why (T9999).\n";
+        let text = "// Why (ABC-12).\nx() // and why (ABC-99).\n";
         let found: Vec<String> = c
             .check(&Source::new("a.ts", text))
             .iter()
@@ -114,7 +116,7 @@ mod tests {
             .collect();
         assert_eq!(
             found,
-            ["a.ts:2 citation: cites \"T9999\", which no heading in LESSONS.md names"]
+            ["a.ts:2 citation: cites \"ABC-99\", which no heading in decisions.md names"]
         );
         let _ = std::fs::remove_dir_all(&dir);
     }

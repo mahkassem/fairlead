@@ -1,16 +1,16 @@
 export const a = 1
 
-// Retries twice, since the first call can race the cache (T1024).
+// Retries twice, since the first call can race the cache (ABC-12).
 export const b = 2
 
-// Two pointers are fine too (T1024, T1025). More words after.
+// Two pointers are fine too (ABC-12, ABC-13). More words after.
 export const c = 3
 
-// See T1024 for the story, and T1024 again.
+// See ABC-12 for the story, and ABC-12 again.
 export const d = 4
 
-/** One line with its pointer (T1024) */
+/** One line with its pointer (ABC-12) */
 export const e = 5
 
-// A list that isn't a pointer (T1024 and more)
+// A list that isn't a pointer (ABC-12 and more)
 export const f = 6

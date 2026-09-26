@@ -47,12 +47,18 @@ mod tests {
             reason: r.into(),
         };
         let c = Commands::new(&[
-            rule(r"(^|\s)git stash(\s|$)", "Commit instead."),
+            rule(
+                r"(^|\s)git push --force(\s|$)",
+                "Open a pull request instead.",
+            ),
             rule(r"rm -rf /", "Never."),
         ])
         .unwrap();
-        assert_eq!(c.denied("cd x && git stash pop"), Some("Commit instead."));
-        assert_eq!(c.denied("git stashed"), None);
+        assert_eq!(
+            c.denied("cd x && git push --force origin main"),
+            Some("Open a pull request instead.")
+        );
+        assert_eq!(c.denied("git push --forced"), None);
         assert_eq!(c.denied("ls"), None);
     }
 }

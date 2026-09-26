@@ -152,8 +152,8 @@ fails only on a number the commit newly shares.
 
 ```toml
 [[guard.commands]]
-match = '(^|\s)git stash(\s|$)'
-reason = "Commit instead; a stash in a worktree is easy to lose."
+match = '(^|\s)git push --force(\s|$)'
+reason = "Open a pull request instead; a forced push rewrites what others have."
 ```
 
 A shell command an agent may not run, with the reason it's told. The write
