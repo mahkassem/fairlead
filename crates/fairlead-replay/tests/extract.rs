@@ -91,3 +91,42 @@ fn a_custom_pattern_needs_a_file_group() {
         [printed("tests/x.spec.ts", None, None)]
     );
 }
+
+#[test]
+fn bun_attributes_each_failure_to_the_header_it_sits_under_and_stops_at_the_summary() {
+    assert_eq!(
+        extract(&Extractor::Bun, &fixture("bun-parallel.log")),
+        [
+            printed(
+                "packages/api/test/refunds.test.ts",
+                None,
+                Some("a second refund of the same order is refused")
+            ),
+            printed("packages/api/test/invoices.test.ts", None, None),
+        ]
+    );
+}
+
+#[test]
+fn bun_reads_the_plain_header_printed_outside_github() {
+    let log =
+        "packages/web/test/cart.test.tsx:\n(pass) cart > adds [1ms]\n(fail) cart > removes [2ms]\n";
+    assert_eq!(
+        extract(&Extractor::Bun, log),
+        [printed(
+            "packages/web/test/cart.test.tsx",
+            None,
+            Some("removes")
+        )]
+    );
+}
+
+#[test]
+fn bun_reads_the_same_failures_from_the_dataset_excerpt_as_from_the_whole_log() {
+    let log = fixture("bun-parallel.log");
+    let excerpt = fairlead_replay::dataset::log_excerpt(&log).join("\n");
+    assert_eq!(
+        extract(&Extractor::Bun, &excerpt),
+        extract(&Extractor::Bun, &log)
+    );
+}

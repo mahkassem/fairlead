@@ -10,6 +10,8 @@ use std::path::Path;
 
 use serde::{Deserialize, Serialize};
 
+use crate::extract::{bun_header, clean};
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Row {
     pub repo: String,
@@ -57,16 +59,27 @@ impl Job {
     }
 }
 
-/// The log lines worth keeping for extraction: each `FAIL` or `●` line and
-/// the two after it, capped so one noisy job can't bloat the dataset.
+/// The log lines worth keeping for extraction: each `FAIL`, `●` or bun
+/// `(fail)` line and the two after it, the bun file header a failure sits
+/// under, and bun's summary line, which ends what the extractor reads. Capped
+/// so one noisy job can't bloat the dataset.
 pub fn log_excerpt(log: &str) -> Vec<String> {
     const AFTER: usize = 2;
     const CAP: usize = 400;
     let lines: Vec<&str> = log.lines().collect();
     let mut keep = BTreeSet::new();
+    let mut header = None;
     for (i, line) in lines.iter().enumerate() {
-        if line.contains("FAIL") || line.contains('●') {
+        let cleaned = clean(line);
+        if bun_header(&cleaned).is_some() {
+            header = Some(i);
+        }
+        if line.contains("FAIL") || line.contains('●') || line.contains("(fail)") {
             keep.extend(i..(i + 1 + AFTER).min(lines.len()));
+            keep.extend(header.filter(|_| line.contains("(fail)")));
+        }
+        if cleaned.trim_end().ends_with("failed:") {
+            keep.insert(i);
         }
     }
     keep.into_iter()

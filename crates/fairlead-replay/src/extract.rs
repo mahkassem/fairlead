@@ -2,8 +2,11 @@
 //! way: Vitest as `FAIL  [project]  path > suite > test`, Jest as
 //! `FAIL path (1.2 s)` with the test's title on a following `●` line, and
 //! either may sit behind a workspace runner's `<package> <script>: ` prefix.
-//! Lines inside an assertion diff (`+`/`-`) are another run's output, so
-//! they're skipped.
+//! Bun names the file once, on a `path:` header it prints again whenever
+//! parallel output switches files, and each failure as `(fail) suite > test`
+//! under it; its closing summary repeats the failures with no header, so
+//! reading stops there. Lines inside an assertion diff (`+`/`-`) are another
+//! run's output, so they're skipped.
 
 use std::sync::OnceLock;
 
@@ -23,6 +26,7 @@ pub struct Printed {
 pub enum Extractor {
     Vitest,
     Jest,
+    Bun,
     /// A pattern with a named `file` group, and optionally `project` and `title`.
     Regex(Regex),
 }
@@ -32,6 +36,7 @@ impl Extractor {
         match (name, pattern) {
             ("vitest", _) => Ok(Extractor::Vitest),
             ("jest", _) => Ok(Extractor::Jest),
+            ("bun", _) => Ok(Extractor::Bun),
             ("regex", Some(p)) => {
                 let re = Regex::new(p).map_err(|e| format!("replay.failures pattern: {e}"))?;
                 if re.capture_names().flatten().all(|n| n != "file") {
@@ -41,7 +46,7 @@ impl Extractor {
             }
             ("regex", None) => Err("replay.failures: extractor \"regex\" needs a pattern".into()),
             (other, _) => Err(format!(
-                "unknown extractor `{other}`; use vitest, jest or regex"
+                "unknown extractor `{other}`; use vitest, jest, bun or regex"
             )),
         }
     }
@@ -53,7 +58,7 @@ fn re(cell: &'static OnceLock<Regex>, pattern: &str) -> &'static Regex {
 
 const TEST_EXT: &str = r"\.(?:[cm]?[jt]sx?)";
 
-fn clean(line: &str) -> String {
+pub(crate) fn clean(line: &str) -> String {
     static STAMP: OnceLock<Regex> = OnceLock::new();
     static ANSI: OnceLock<Regex> = OnceLock::new();
     let line = re(&ANSI, r"\x1b\[[0-9;]*[A-Za-z]").replace_all(line, "");
@@ -85,6 +90,9 @@ fn last_segment(title: &str, separator: &str) -> Option<String> {
 
 pub fn extract(extractor: &Extractor, log: &str) -> Vec<Printed> {
     let lines: Vec<String> = log.lines().map(clean).collect();
+    if let Extractor::Bun = extractor {
+        return bun(&lines);
+    }
     let mut out: Vec<Printed> = Vec::new();
     for (i, raw) in lines.iter().enumerate() {
         let (package, line) = split_prefix(raw);
@@ -98,6 +106,7 @@ pub fn extract(extractor: &Extractor, log: &str) -> Vec<Printed> {
                 p
             }),
             Extractor::Regex(re) => custom(re, line),
+            Extractor::Bun => unreachable!("read whole above"),
         };
         if let Some(mut printed) = found {
             printed.project = printed.project.or(package);
@@ -153,6 +162,50 @@ fn jest_title(after: &[String]) -> Option<String> {
         }
     }
     None
+}
+
+/// A test file's header, as bun prints it or as GitHub renders its group.
+pub fn bun_header(line: &str) -> Option<&str> {
+    static HEADER: OnceLock<Regex> = OnceLock::new();
+    let pattern = format!(r"^(?:##\[group\]|::group::)?(?P<path>\S+{TEST_EXT}):\s*$");
+    re(&HEADER, &pattern)
+        .captures(line)
+        .and_then(|c| c.name("path"))
+        .map(|m| m.as_str())
+}
+
+fn bun(lines: &[String]) -> Vec<Printed> {
+    static FAIL: OnceLock<Regex> = OnceLock::new();
+    static SUMMARY: OnceLock<Regex> = OnceLock::new();
+    let fail = re(
+        &FAIL,
+        r"^\s*\(fail\)\s+(?P<title>.*?)(?:\s+\[[\d.]+m?s\])?\s*$",
+    );
+    let summary = re(&SUMMARY, r"^\s*\d+ tests? failed:\s*$");
+    let mut file: Option<&str> = None;
+    let mut out: Vec<Printed> = Vec::new();
+    for line in lines {
+        if summary.is_match(line) {
+            break;
+        }
+        if let Some(path) = bun_header(line) {
+            file = Some(path);
+            continue;
+        }
+        let (Some(path), Some(c)) = (file, fail.captures(line)) else {
+            continue;
+        };
+        let title = last_segment(&c["title"], " > ").filter(|t| t != "(unnamed)");
+        let printed = Printed {
+            path: path.to_string(),
+            project: None,
+            title,
+        };
+        if !out.contains(&printed) {
+            out.push(printed);
+        }
+    }
+    out
 }
 
 fn custom(re: &Regex, line: &str) -> Option<Printed> {
