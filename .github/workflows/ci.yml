@@ -51,6 +51,7 @@ jobs:
         shell: bash
         run: |
           msrv=$(sed -n 's/^rust-version = "\(.*\)"$/\1/p' Cargo.toml)
+          [ -n "$msrv" ] || { echo "no rust-version in Cargo.toml"; exit 1; }
           echo "declared rust-version: $msrv"
           rustup toolchain install "$msrv" --profile minimal
           RUSTUP_TOOLCHAIN="$msrv" cargo check --workspace --all-targets --locked
