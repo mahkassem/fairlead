@@ -10,7 +10,7 @@ pub mod invoke;
 pub mod lockfile;
 pub mod modules;
 pub mod owners;
-pub mod pattern;
+pub use fairlead_core::pattern;
 pub mod planner;
 pub mod render;
 pub mod select;

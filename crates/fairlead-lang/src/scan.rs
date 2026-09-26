@@ -11,6 +11,7 @@ use crate::cache::{self, CacheStats, ParseCache};
 use crate::extract::{extract, Extracted, SpecKind};
 use crate::graph::{EdgeKind, Graph};
 use crate::resolve::{Resolver, Target};
+use crate::rules::{RuleStats, Rules};
 use crate::tree::{normalize, parent, Tree};
 use crate::workspace::{self, Package};
 
@@ -40,6 +41,7 @@ pub struct Scan {
     pub graph: Graph,
     pub packages: Vec<Package>,
     pub cache: CacheStats,
+    pub rules: RuleStats,
 }
 
 pub fn build(root: &Path, config: &Config) -> std::io::Result<Scan> {
@@ -120,11 +122,16 @@ pub fn build(root: &Path, config: &Config) -> std::io::Result<Scan> {
         }
     }
     add_snapshot_edges(&tree, &mut graph);
+    let rules = Rules::new(&config.graph).map_err(std::io::Error::other)?;
+    let rule_stats = rules.apply(&mut graph).map_err(std::io::Error::other)?;
+    let all = 0..graph.files.len() as u32;
+    rules.mark(&mut graph, all);
     Ok(Scan {
         tree,
         graph,
         packages,
         cache: stats,
+        rules: rule_stats,
     })
 }
 

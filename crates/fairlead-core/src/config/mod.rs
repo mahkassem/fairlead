@@ -117,6 +117,20 @@ pub struct Graph {
     /// Keep each file's parse result under `.git/fairlead`, keyed by its
     /// git blob id, so unchanged files aren't parsed again.
     pub cache: bool,
+    /// Dependencies the imports don't show, followed like imports.
+    pub edges: List<EdgeRule>,
+    /// Files the walk reaches but never goes past to their importers.
+    pub barrier: List<String>,
+}
+
+/// Each file matching `from` depends on every file its `to` globs match.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct EdgeRule {
+    /// The dependent files; `{name}` stands for one path segment.
+    pub from: String,
+    /// The files they depend on, with the same `{name}`s as `from`.
+    pub to: Vec<String>,
 }
 
 impl Default for Graph {
@@ -127,6 +141,8 @@ impl Default for Graph {
             unresolved: Unresolved::Warn,
             conditions: strings(&["import", "node", "default"]),
             cache: true,
+            edges: List::default(),
+            barrier: List::default(),
         }
     }
 }

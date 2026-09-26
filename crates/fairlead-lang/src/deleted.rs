@@ -11,6 +11,7 @@ use rayon::prelude::*;
 
 use crate::graph::EdgeKind;
 use crate::resolve::Resolver;
+use crate::rules::Rules;
 use crate::scan::Scan;
 
 /// Adds the deleted paths as phantom nodes and returns their ids, in order.
@@ -50,6 +51,11 @@ pub fn attach_deleted(scan: &mut Scan, config: &GraphConfig, deleted: &[String])
     for (from, to) in literals {
         let to = scan.graph.add_phantom(&to);
         scan.graph.add_edge(from, to, EdgeKind::PathLiteral);
+    }
+    // Validated with the config, so a pattern that fails here was checked already.
+    if let Ok(rules) = Rules::new(config) {
+        let _ = rules.apply_to(&mut scan.graph, &ids);
+        rules.mark(&mut scan.graph, ids.iter().copied());
     }
     ids
 }

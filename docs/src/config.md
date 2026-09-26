@@ -50,6 +50,8 @@ fairlead.toml: tests.unreachd: unknown field `unreachd`, expected one of ...
 | `graph.unresolved` | `"warn"` | `warn` or `fail` on imports that don't resolve |
 | `graph.conditions` | `["import", "node", "default"]` | Package `exports` conditions, in order |
 | `graph.cache` | `true` | Keep parse results under `.git/fairlead` so unchanged files aren't parsed again |
+| `graph.edges` | `[]` | `{ from, to }` rules: each file matching `from` depends on the files `to` matches. See [Import graph](graph.md#edges-the-imports-dont-show) |
+| `graph.barrier` | `[]` | Globs the walk reaches but doesn't go past. See [Import graph](graph.md#barriers) |
 | `tests.match` | `**/*.{test,spec}.{ts,tsx,js,jsx,mjs,cjs,mts,cts}` | Test files |
 | `tests.exclude` | `**/node_modules/**` | Paths that are never test files |
 | `tests.unreached` | `"module"` | What a changed file nothing reaches selects: `module`, `all` or `warn` |

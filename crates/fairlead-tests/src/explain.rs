@@ -1,6 +1,6 @@
 //! `test --explain`: why a file or check is in the plan, or why it isn't.
 
-use std::collections::{HashSet, VecDeque};
+use std::collections::{HashMap, VecDeque};
 
 use fairlead_core::config::{Config, TestClass};
 use fairlead_core::plan::{Plan, Reason};
@@ -21,18 +21,33 @@ fn chain(reason: &Reason) -> String {
     }
 }
 
-/// Every file `id` depends on, directly or not.
-fn dependencies(scan: &Scan, id: u32) -> HashSet<u32> {
-    let mut seen = HashSet::from([id]);
+/// Every file `id` depends on, directly or not, with the file each was
+/// first reached from.
+fn dependencies(scan: &Scan, id: u32) -> HashMap<u32, u32> {
+    let mut seen = HashMap::from([(id, id)]);
     let mut queue = VecDeque::from([id]);
     while let Some(file) = queue.pop_front() {
         for (to, _) in scan.graph.dependencies(file) {
-            if seen.insert(*to) {
+            if !seen.contains_key(to) {
+                seen.insert(*to, file);
                 queue.push_back(*to);
             }
         }
     }
     seen
+}
+
+/// The first barrier on the way from `changed` to `test`, other than `test`:
+/// the file where the planner's walk, which starts at the change, stops.
+fn barrier_between(scan: &Scan, deps: &HashMap<u32, u32>, test: u32, changed: u32) -> Option<u32> {
+    let mut path = vec![changed];
+    let mut at = changed;
+    while at != test {
+        at = *deps.get(&at)?;
+        path.push(at);
+    }
+    path.pop();
+    path.into_iter().find(|&f| scan.graph.is_barrier(f))
 }
 
 pub fn explain(plan: &Plan, scan: &Scan, config: &Config, target: &str) -> Result<String, String> {
@@ -66,16 +81,28 @@ pub fn explain(plan: &Plan, scan: &Scan, config: &Config, target: &str) -> Resul
                 .to_string()
         }
         _ => {
-            let deps = scan
-                .graph
-                .id(target)
-                .map(|id| dependencies(scan, id))
-                .unwrap_or_default();
-            format!(
-                "none of the {} changed files is among the {} files it depends on",
-                plan.changed.len(),
-                deps.len().saturating_sub(1)
-            )
+            let id = scan.graph.id(target);
+            let deps = id.map(|id| dependencies(scan, id)).unwrap_or_default();
+            let stopped = id.and_then(|id| {
+                plan.changed.iter().find_map(|c| {
+                    let c = scan.graph.id(&c.path).filter(|c| deps.contains_key(c))?;
+                    let b = barrier_between(scan, &deps, id, c)?;
+                    Some((
+                        scan.graph.files[c as usize].clone(),
+                        scan.graph.files[b as usize].clone(),
+                    ))
+                })
+            });
+            match stopped {
+                Some((changed, barrier)) => format!(
+                    "it depends on {changed}, but only through {barrier}, a graph.barrier file the walk doesn't go past"
+                ),
+                None => format!(
+                    "none of the {} changed files is among the {} files it depends on",
+                    plan.changed.len(),
+                    deps.len().saturating_sub(1)
+                ),
+            }
         }
     };
     Ok(format!("{target} isn't selected: {why}"))

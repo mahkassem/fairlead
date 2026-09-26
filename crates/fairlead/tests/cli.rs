@@ -169,3 +169,48 @@ fn replay_run_refuses_a_config_with_problems() {
     let err = String::from_utf8_lossy(&out.stderr);
     assert!(err.contains("replay.quarantine"), "{err}");
 }
+
+#[test]
+fn graph_why_says_where_a_barrier_stops_the_plan_and_stats_count_rule_edges() {
+    let dir = scratch("graph-barrier");
+    std::fs::create_dir_all(dir.join("src/http")).unwrap();
+    std::fs::create_dir_all(dir.join("test")).unwrap();
+    std::fs::write(dir.join("src/a.ts"), "import './http/server';\n").unwrap();
+    std::fs::write(dir.join("src/http/server.ts"), "import '../c';\n").unwrap();
+    std::fs::write(dir.join("src/c.ts"), "export const c = 1;\n").unwrap();
+    std::fs::write(dir.join("test/a.test.ts"), "export {};\n").unwrap();
+    std::fs::write(
+        dir.join("fairlead.toml"),
+        "[graph]\nbarrier = [\"src/http/**\"]\n\n[[graph.edges]]\nfrom = \"test/a.test.ts\"\nto = [\"src/a.ts\"]\n",
+    )
+    .unwrap();
+    let why = fairlead_in(&dir, &["graph", "why", "src/a.ts", "src/c.ts"]);
+    let text = String::from_utf8_lossy(&why.stdout);
+    assert!(
+        text.contains("its walk stops at src/http/server.ts"),
+        "{text}"
+    );
+    let stats = fairlead_in(&dir, &["graph", "stats"]);
+    let text = String::from_utf8_lossy(&stats.stdout);
+    assert!(text.contains("rule edges: 1, barrier files: 1"), "{text}");
+}
+
+#[test]
+fn graph_why_names_the_barrier_nearest_the_change_when_a_chain_crosses_two() {
+    let dir = scratch("graph-two-barriers");
+    std::fs::create_dir_all(dir.join("src/http")).unwrap();
+    std::fs::create_dir_all(dir.join("src/db")).unwrap();
+    std::fs::write(dir.join("src/a.ts"), "import './http/server';\n").unwrap();
+    std::fs::write(dir.join("src/http/server.ts"), "import '../mid';\n").unwrap();
+    std::fs::write(dir.join("src/mid.ts"), "import './db/pool';\n").unwrap();
+    std::fs::write(dir.join("src/db/pool.ts"), "import '../c';\n").unwrap();
+    std::fs::write(dir.join("src/c.ts"), "export const c = 1;\n").unwrap();
+    std::fs::write(
+        dir.join("fairlead.toml"),
+        "[graph]\nbarrier = [\"src/http/**\", \"src/db/**\"]\n",
+    )
+    .unwrap();
+    let why = fairlead_in(&dir, &["graph", "why", "src/a.ts", "src/c.ts"]);
+    let text = String::from_utf8_lossy(&why.stdout);
+    assert!(text.contains("its walk stops at src/db/pool.ts"), "{text}");
+}

@@ -354,6 +354,7 @@ dependencies = [
 name = "fairlead-core"
 version = "0.2.0"
 dependencies = [
+ "regex",
  "schemars",
  "serde",
  "serde-saphyr",

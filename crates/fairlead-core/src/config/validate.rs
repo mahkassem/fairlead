@@ -74,7 +74,51 @@ pub fn validate(config: &Config) -> Vec<Problem> {
     }
     checks(config, &mut problems);
     replay(config, &mut problems);
+    graph_edges(config, &mut problems);
     problems
+}
+
+/// A placeholder is read from a side where it is a whole path segment, since
+/// `{area}*` would also swallow `-runs` from `area-runs`; every glob naming
+/// one must name them all, or a leftover `{name}` would match anything.
+fn graph_edges(config: &Config, problems: &mut Vec<Problem>) {
+    let whole = |glob: &str, name: &str| glob.split('/').any(|s| s == format!("{{{name}}}"));
+    for (i, rule) in config.graph.edges.items().iter().enumerate() {
+        let key = format!("graph.edges[{i}]");
+        let names = placeholders(&rule.from);
+        if rule.to.is_empty() {
+            problems.push(problem(format!("{key}.to"), "needs at least one glob"));
+        }
+        for (j, to) in rule.to.iter().enumerate() {
+            let here = placeholders(to);
+            if !here.is_empty() && here != names {
+                problems.push(problem(
+                    format!("{key}.to[{j}]"),
+                    "must use the same `{name}`s as `from`, or none",
+                ));
+            }
+        }
+        let bound = rule.to.iter().filter(|t| !placeholders(t).is_empty());
+        let from_side = names.iter().all(|n| whole(&rule.from, n));
+        let to_side = names.iter().all(|n| bound.clone().all(|t| whole(t, n)))
+            && bound.clone().next().is_some();
+        if !names.is_empty() && !from_side && !to_side {
+            problems.push(problem(
+                key.clone(),
+                "each `{name}` must be a whole path segment in `from`, or in every `to` that uses it",
+            ));
+        }
+        for glob in std::iter::once(&rule.from).chain(&rule.to) {
+            if let Err(e) = crate::pattern::Pattern::new(glob) {
+                problems.push(problem(key.clone(), e));
+            }
+        }
+    }
+    for (i, glob) in config.graph.barrier.items().iter().enumerate() {
+        if let Err(e) = crate::pattern::Pattern::new(glob) {
+            problems.push(problem(format!("graph.barrier[{i}]"), e));
+        }
+    }
 }
 
 fn version_pin(config: &Config, problems: &mut Vec<Problem>) {
