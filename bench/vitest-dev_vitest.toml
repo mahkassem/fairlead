@@ -39,6 +39,17 @@ match = "test/{suite}/**"
 covers = ["test/{suite}/**/fixtures/**", "test/{suite}/vitest.config.*"]
 overrides_run_all = true
 
+# Browser mode serves the built UI client (packages/browser imports @vitest/ui's
+# distClientRoot), so a change to the client reaches the browser and UI specs
+# through a build step, not an import.
+[[tests.owners]]
+match = "test/browser/**"
+covers = ["packages/ui/client/**"]
+
+[[tests.owners]]
+match = "test/ui/**"
+covers = ["packages/ui/client/**"]
+
 [[checks]]
 id = "lint"
 command = ["pnpm", "run", "lint"]
