@@ -54,7 +54,7 @@ with its exit criteria.
 
 Pre-alpha. The latest release, v0.1.1, ships the config commands. The test
 plan, the CI commands and action, and replay are on `main`, and ship in v0.2.0
-once the benchmarks meet its recall bar.
+once the benchmarks meet its recall bar ([#20](https://github.com/mahkassem/fairlead/issues/20)).
 
 ## Install
 
@@ -65,7 +65,7 @@ curl -fsSL https://github.com/mahkassem/fairlead/releases/latest/download/fairle
 # Windows (PowerShell)
 powershell -c "irm https://github.com/mahkassem/fairlead/releases/latest/download/fairlead-installer.ps1 | iex"
 
-# In a JavaScript or TypeScript project, pinned in package.json
+# In a JavaScript or TypeScript project, as a dev dependency
 bun add -d fairlead   # or: npm i -D fairlead
 ```
 

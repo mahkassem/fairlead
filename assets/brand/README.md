@@ -32,6 +32,8 @@ The SVGs are the source; the PNGs are rendered from them.
 | Guide | `#008F67` | The guided path on light backgrounds |
 | Guide on dark | `#00AE7B` | The guided path on dark backgrounds |
 | White | `#FFFFFF` | The rails and wordmark on dark backgrounds |
+| Deep guide | `#087C5C` | The darker tone of the two-tone green icon |
+| Black | `#000000` | The monochrome black logo |
 
 ## Use
 
