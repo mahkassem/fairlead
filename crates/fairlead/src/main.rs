@@ -1,7 +1,8 @@
 //! The `fairlead` command. Each command arrives with its milestone; K1.1
-//! adds `config`, K1.2 `graph`.
+//! adds `config`, K1.2 `graph`, K1.3 `plan` and `test --explain`.
 
 mod graph_cmd;
+mod plan_cmd;
 
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
@@ -28,6 +29,28 @@ enum Command {
         /// Override a value for this run, such as `tests.unreached=all`.
         #[arg(long = "set", value_name = "KEY=VALUE", global = true)]
         sets: Vec<String>,
+    },
+    /// Which tests and checks the changes since a base commit can affect.
+    Plan {
+        #[command(flatten)]
+        changes: plan_cmd::Changes,
+        /// Print the plan as JSON.
+        #[arg(long)]
+        json: bool,
+        /// Also write the plan JSON to this file.
+        #[arg(long, value_name = "PATH")]
+        out: Option<PathBuf>,
+        /// Print the plan's JSON Schema and exit.
+        #[arg(long)]
+        schema: bool,
+    },
+    /// Explain test selection.
+    Test {
+        #[command(flatten)]
+        changes: plan_cmd::Changes,
+        /// Why this test file or check is in the plan, or why it isn't.
+        #[arg(long, value_name = "FILE_OR_CHECK")]
+        explain: String,
     },
     /// Inspect the import graph.
     Graph {
@@ -79,7 +102,33 @@ fn doctor_report(dir: &Path, opts: &LoadOptions) -> String {
     )
 }
 
+/// Test files that don't map to exactly one runner, which only the tree can say.
+fn runner_problems(loaded: &Loaded) -> Vec<String> {
+    let root = if loaded.files.is_empty() {
+        graph_cmd::repo_root(&cwd())
+    } else {
+        loaded.root.clone()
+    };
+    let tree = fairlead_lang::tree::Tree::scan(&root);
+    fairlead_tests::testfiles::runner_problems(&tree, &loaded.config).unwrap_or_else(|e| vec![e])
+}
+
 fn check(loaded: &Loaded) -> ExitCode {
+    let runners = if loaded.problems.is_empty() {
+        runner_problems(loaded)
+    } else {
+        Vec::new()
+    };
+    if !runners.is_empty() {
+        for line in runners.iter().take(50) {
+            eprintln!("tests.runners: {line}");
+        }
+        eprintln!(
+            "{} test file(s) don't map to exactly one runner",
+            runners.len()
+        );
+        return ExitCode::FAILURE;
+    }
     if loaded.problems.is_empty() {
         let files: Vec<String> = loaded
             .files
@@ -178,6 +227,15 @@ fn main() -> ExitCode {
         }
         Some(Command::Config { action, sets }) => run_config(action, sets),
         Some(Command::Graph { action, sets }) => graph_cmd::run(action, sets, &cwd()),
+        Some(Command::Plan {
+            changes,
+            json,
+            out,
+            schema,
+        }) => plan_cmd::run_plan(&cwd(), changes, json, out, schema),
+        Some(Command::Test { changes, explain }) => {
+            plan_cmd::run_explain(&cwd(), changes, &explain)
+        }
         None => {
             println!(
                 "fairlead {}: see `fairlead --help`",

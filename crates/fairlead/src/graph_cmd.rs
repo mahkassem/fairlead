@@ -24,7 +24,7 @@ pub enum GraphAction {
 }
 
 /// The repository root: the nearest directory with `.git`, else `start`.
-fn repo_root(start: &Path) -> PathBuf {
+pub fn repo_root(start: &Path) -> PathBuf {
     start
         .ancestors()
         .find(|d| d.join(".git").exists())

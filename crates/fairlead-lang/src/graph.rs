@@ -47,6 +47,12 @@ pub struct Graph {
     package_importers: Vec<Vec<u32>>,
     /// Unresolved specifiers, by file.
     pub unresolved: Vec<(u32, String)>,
+    /// Every specifier that didn't resolve, uninstalled packages included.
+    pub failed: Vec<(u32, String, EdgeKind)>,
+    /// Path-like literals naming no file in the tree, as repo paths.
+    pub dangling: Vec<(u32, String)>,
+    /// Package folders, parallel to `packages`.
+    package_dirs: Vec<String>,
     /// Files with a dynamic import whose target isn't a plain string.
     pub unknown: Vec<u32>,
     /// Files whose tsconfig couldn't be applied.
@@ -90,10 +96,33 @@ impl Graph {
             deps: vec![Vec::new(); n],
             rdeps: vec![Vec::new(); n],
             package_importers: vec![Vec::new(); packages.len()],
+            package_dirs: packages.iter().map(|(_, dir)| format!("{dir}/")).collect(),
             packages: packages.into_iter().map(|(name, _)| name).collect(),
             package_of,
             ..Graph::default()
         }
+    }
+
+    /// Adds a file that isn't in the tree, such as one a change deleted, so
+    /// edges can point at it; returns its id, or the existing one.
+    pub fn add_phantom(&mut self, file: &str) -> u32 {
+        if let Some(id) = self.id(file) {
+            return id;
+        }
+        let id = self.files.len() as u32;
+        self.files.push(file.to_string());
+        self.index.insert(file.to_string(), id);
+        self.deps.push(Vec::new());
+        self.rdeps.push(Vec::new());
+        let package = self
+            .package_dirs
+            .iter()
+            .enumerate()
+            .filter(|(_, dir)| file.starts_with(dir.as_str()))
+            .max_by_key(|(_, dir)| dir.len())
+            .map(|(i, _)| i as u32);
+        self.package_of.push(package);
+        id
     }
 
     pub fn id(&self, file: &str) -> Option<u32> {

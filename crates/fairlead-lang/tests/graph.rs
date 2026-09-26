@@ -459,3 +459,50 @@ fn a_solution_tsconfig_with_references_resolves_each_project_by_its_own_paths() 
     );
     assert!(s.graph.unresolved.is_empty(), "{:?}", s.graph.unresolved);
 }
+
+#[test]
+fn a_deleted_file_is_joined_back_to_everything_that_referred_to_it() {
+    let dir = repo(
+        "deleted",
+        &[
+            ("package.json", r#"{ "workspaces": ["packages/*"] }"#),
+            (
+                "tsconfig.json",
+                r#"{ "compilerOptions": { "baseUrl": ".", "paths": { "@app/*": ["app/*"] } } }"#,
+            ),
+            ("app/relative.ts", "import { gone } from './gone';\n"),
+            ("app/alias.ts", "import { gone } from '@app/gone';\n"),
+            ("app/spawn.test.ts", "const bin = 'tools/gone-cli.mjs';\n"),
+            (
+                "packages/lib/package.json",
+                r#"{ "name": "lib", "exports": { ".": "./src/index.ts" } }"#,
+            ),
+            ("app/uses-lib.ts", "import { x } from 'lib';\n"),
+            ("app/other.ts", "export const other = 1;\n"),
+        ],
+    );
+    let mut s = scan(&dir);
+    let deleted = [
+        "app/gone.ts".to_string(),
+        "tools/gone-cli.mjs".to_string(),
+        "packages/lib/src/index.ts".to_string(),
+    ];
+    let ids = fairlead_lang::deleted::attach_deleted(&mut s, &Config::default().graph, &deleted);
+    let importers = |id: u32| -> Vec<String> {
+        let mut v: Vec<String> = s
+            .graph
+            .importers(id)
+            .into_iter()
+            .map(|(f, _)| s.graph.files[f as usize].clone())
+            .collect();
+        v.sort();
+        v
+    };
+    assert_eq!(importers(ids[0]), ["app/alias.ts", "app/relative.ts"]);
+    assert_eq!(importers(ids[1]), ["app/spawn.test.ts"]);
+    assert_eq!(
+        importers(ids[2]),
+        ["app/uses-lib.ts"],
+        "through the package edge"
+    );
+}

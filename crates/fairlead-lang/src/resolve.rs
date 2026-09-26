@@ -26,6 +26,9 @@ pub enum Target {
     Package(String),
     /// A package outside the repository, or a runtime builtin.
     External,
+    /// A bare specifier that didn't resolve and names no workspace package:
+    /// usually a package that isn't installed, but possibly an alias.
+    NotFound,
     /// Couldn't be resolved; the planner widens around it.
     Unresolved,
 }
@@ -64,7 +67,27 @@ fn options(config: &GraphConfig, root: &Path, tsconfig: bool) -> ResolveOptions 
 
 impl Resolver {
     pub fn new(root: &Path, packages: &[Package], config: &GraphConfig) -> Resolver {
-        let fs = WorkspaceFs::for_workspace(root, packages);
+        Resolver::over(
+            WorkspaceFs::for_workspace(root, packages),
+            root,
+            packages,
+            config,
+        )
+    }
+
+    /// A resolver that also sees `phantoms`, repo-relative files that no
+    /// longer exist, as empty files.
+    pub fn with_phantoms(
+        root: &Path,
+        packages: &[Package],
+        config: &GraphConfig,
+        phantoms: &[String],
+    ) -> Resolver {
+        let fs = WorkspaceFs::for_workspace(root, packages).with_phantoms(root, phantoms);
+        Resolver::over(fs, root, packages, config)
+    }
+
+    fn over(fs: WorkspaceFs, root: &Path, packages: &[Package], config: &GraphConfig) -> Resolver {
         Resolver {
             with_tsconfig: ResolverGeneric::new_with_file_system(
                 fs.clone(),
@@ -125,13 +148,25 @@ impl Resolver {
             })
     }
 
+    /// Where `spec` in `file` lands, repo-relative, whether or not that file
+    /// is in the tree: how a deleted file's importers are found again.
+    pub fn resolve_path(&self, tree: &Tree, file: &str, spec: &str) -> Option<String> {
+        let abs = tree.abs(file);
+        let resolution = self
+            .with_tsconfig
+            .resolve_file(&abs, spec)
+            .or_else(|_| self.plain.resolve_file(&abs, spec))
+            .ok()?;
+        tree.rel(&self.fs.real(resolution.path()))
+    }
+
     fn unresolved(&self, spec: &str) -> Target {
         if spec.starts_with('.') || spec.starts_with('/') || spec.starts_with('#') {
             return Target::Unresolved;
         }
         match package_name(spec) {
             Some(name) if self.packages.contains(name) => Target::Package(name.to_string()),
-            Some(_) => Target::External,
+            Some(_) => Target::NotFound,
             None => Target::Unresolved,
         }
     }

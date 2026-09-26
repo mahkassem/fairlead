@@ -27,6 +27,9 @@ pub struct WorkspaceFs {
     scopes: HashSet<String>,
     /// Absolute (outDir, rootDir) pairs.
     outputs: Vec<(PathBuf, PathBuf)>,
+    /// Deleted files shown as empty files, and the directories above them.
+    phantoms: HashSet<PathBuf>,
+    phantom_dirs: HashSet<PathBuf>,
 }
 
 impl WorkspaceFs {
@@ -46,6 +49,28 @@ impl WorkspaceFs {
             fs.packages.insert(package.name.clone(), dir);
         }
         fs
+    }
+
+    pub fn with_phantoms(mut self, root: &Path, phantoms: &[String]) -> WorkspaceFs {
+        for rel in phantoms {
+            let path = root.join(rel);
+            let mut dir = path.parent();
+            while let Some(d) = dir.filter(|d| d.starts_with(root) && *d != root) {
+                self.phantom_dirs.insert(d.to_path_buf());
+                dir = d.parent();
+            }
+            self.phantoms.insert(path);
+        }
+        self
+    }
+
+    fn phantom(&self, path: &Path) -> Option<FileMetadata> {
+        if self.phantoms.contains(path) {
+            return Some(FileMetadata::new(true, false, false));
+        }
+        self.phantom_dirs
+            .contains(path)
+            .then(|| FileMetadata::new(false, true, false))
     }
 
     /// The real path behind a virtual `node_modules/<package>/...` path.
@@ -114,10 +139,16 @@ impl FileSystem for WorkspaceFs {
     }
 
     fn read(&self, path: &Path) -> io::Result<Vec<u8>> {
+        if self.phantoms.contains(path) {
+            return Ok(Vec::new());
+        }
         std::fs::read(self.real(path))
     }
 
     fn read_to_string(&self, path: &Path) -> io::Result<String> {
+        if self.phantoms.contains(path) {
+            return Ok(String::new());
+        }
         FileSystemOs::read_to_string(&self.real(path))
     }
 
@@ -125,7 +156,11 @@ impl FileSystem for WorkspaceFs {
         if self.is_virtual_dir(path) {
             return Ok(FileMetadata::new(false, true, false));
         }
-        FileSystemOs::metadata(&self.real(path))
+        let real = self.real(path);
+        match FileSystemOs::metadata(&real) {
+            Err(e) if e.kind() == io::ErrorKind::NotFound => self.phantom(&real).ok_or(e),
+            other => other,
+        }
     }
 
     fn symlink_metadata(&self, path: &Path) -> io::Result<FileMetadata> {
@@ -143,6 +178,10 @@ impl FileSystem for WorkspaceFs {
     }
 
     fn canonicalize(&self, path: &Path) -> io::Result<PathBuf> {
-        FileSystemOs::canonicalize(&self.real(path))
+        let real = self.real(path);
+        if self.phantom(&real).is_some() {
+            return Ok(real);
+        }
+        FileSystemOs::canonicalize(&real)
     }
 }
