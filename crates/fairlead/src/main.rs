@@ -2,6 +2,7 @@
 //! adds `config`, K1.2 `graph`, K1.3 `plan`, `test --explain` and `ci`,
 //! K2.1 `guard`.
 
+mod bench_cmd;
 mod ci_cmd;
 mod graph_cmd;
 mod guard_cmd;

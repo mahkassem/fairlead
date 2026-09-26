@@ -242,6 +242,32 @@ calls that ran out of time or hit an error, and the commit stage's runs. It
 also says where each hook is installed, whether lefthook will run the git one,
 and whether `fairlead` is on the PATH, since the hooks call it by name.
 
+## Checking the guard against your linter
+
+When the guard replaces a linter you already run, check that the two agree
+before you switch:
+
+```bash
+your-linter --list > theirs.txt                 # one finding per line: file:line rule
+fairlead guard compare theirs.txt               # fails on any difference
+fairlead guard compare theirs.txt --map max-lines=file-length --rules file-length
+```
+
+`compare` reads `file:line rule`, with an optional `:column` and anything after
+the rule, and matches findings on file, line and rule, so the wording of
+messages doesn't matter. `--map` renames the other linter's rules to
+Fairlead's, and `--rules` compares only the ones named. It lists up to 20
+findings each side has that the other doesn't.
+
+`fairlead guard bench --since REV` replays your history through the write
+hook: for each commit since `REV` on HEAD's first-parent line (a merge counts
+as the change it brought in), it sends each changed file the guard reads to
+`fairlead guard hook` as a write, in a temporary worktree with today's config.
+It reports the edits, p50, p95 and the slowest wall time, process start
+included, and what the hook decided. `--limit` stops after that many edits
+(200 by default), and `--p95-under MS` fails when p95 is over it. The main
+event log is left alone.
+
 ## The ratchet
 
 A ratcheted rule is for debt you already have: it fails only when a file has

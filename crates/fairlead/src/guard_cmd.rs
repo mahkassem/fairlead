@@ -34,6 +34,31 @@ pub enum GuardAction {
     /// The write stage: read a Claude Code PreToolUse call on stdin and deny
     /// it, or add a note, when it breaks a rule. `fairlead hooks install` runs it.
     Hook,
+    /// Compare another linter's findings, one `file:line rule` per line, with
+    /// the check stage's, and fail on any difference.
+    Compare {
+        /// The other linter's output, or `-` for stdin.
+        file: String,
+        /// Only these rules, on both sides.
+        #[arg(long, value_delimiter = ',')]
+        rules: Vec<String>,
+        /// Read the other linter's rule names as Fairlead's: `theirs=ours`.
+        #[arg(long = "map", value_name = "THEIRS=OURS")]
+        maps: Vec<String>,
+    },
+    /// Replay the files each commit since REV changed through the write hook,
+    /// and report how long it took and what it decided.
+    Bench {
+        /// Replay the commits after this one, on HEAD's first-parent line.
+        #[arg(long, value_name = "REV")]
+        since: String,
+        /// Stop after this many edits.
+        #[arg(long, default_value_t = 200)]
+        limit: usize,
+        /// Fail when the 95th percentile is over this many milliseconds.
+        #[arg(long, value_name = "MS")]
+        p95_under: Option<f64>,
+    },
 }
 
 fn fail(message: impl std::fmt::Display) -> ExitCode {
@@ -44,6 +69,14 @@ fn fail(message: impl std::fmt::Display) -> ExitCode {
 pub fn run(action: GuardAction, sets: Vec<String>, cwd: &Path) -> ExitCode {
     if matches!(action, GuardAction::Hook) {
         return crate::hook_cmd::run();
+    }
+    if let GuardAction::Bench {
+        since,
+        limit,
+        p95_under,
+    } = &action
+    {
+        return crate::bench_cmd::run(cwd, since, *limit, *p95_under);
     }
     let loaded = match config::load(cwd, &LoadOptions::from_process(sets)) {
         Ok(loaded) => loaded,
@@ -68,6 +101,9 @@ pub fn run(action: GuardAction, sets: Vec<String>, cwd: &Path) -> ExitCode {
         println!("guard: no rules configured");
         return ExitCode::SUCCESS;
     }
+    if let GuardAction::Compare { file, rules, maps } = &action {
+        return crate::bench_cmd::compare(&root, &guard, file, rules, maps);
+    }
     let GuardAction::Check {
         staged,
         list,
@@ -75,7 +111,7 @@ pub fn run(action: GuardAction, sets: Vec<String>, cwd: &Path) -> ExitCode {
         base,
     } = action
     else {
-        unreachable!("the hook returned above");
+        unreachable!("the other actions returned above");
     };
     if staged {
         return check_staged(&root, &guard, &loaded.config.guard, list);
@@ -96,14 +132,15 @@ struct Tree<'a> {
     base: Option<&'a str>,
 }
 
-fn check_tree(root: &Path, guard: &Guard, baseline_path: &Path, how: Tree<'_>) -> ExitCode {
-    let Tree { list, write, base } = how;
-    let files = match git::tracked(root) {
-        Ok(files) => files,
-        Err(e) => return fail(e),
-    };
+/// Every finding the check stage sees over the tracked files, sorted.
+pub fn tree_findings(
+    root: &Path,
+    guard: &Guard,
+    base: Option<&str>,
+) -> Result<Vec<Finding>, String> {
+    let files = git::tracked(root)?;
     // In parallel, and still in path order, since collect keeps it.
-    let findings: Vec<Finding> = files
+    let mut findings: Vec<Finding> = files
         .par_iter()
         .filter(|p| guard.reads(p))
         .map(|path| match std::fs::read_to_string(root.join(path)) {
@@ -115,17 +152,21 @@ fn check_tree(root: &Path, guard: &Guard, baseline_path: &Path, how: Tree<'_>) -
         .into_iter()
         .flatten()
         .collect();
-    let mut findings = findings;
-    match stages::tree(guard, root, &files, base) {
-        Ok(more) => {
-            findings.extend(more.findings);
-            for note in more.notes {
-                eprintln!("guard: {note}");
-            }
-        }
-        Err(e) => return fail(e),
+    let more = stages::tree(guard, root, &files, base)?;
+    findings.extend(more.findings);
+    for note in more.notes {
+        eprintln!("guard: {note}");
     }
     fairlead_guard::sort(&mut findings);
+    Ok(findings)
+}
+
+fn check_tree(root: &Path, guard: &Guard, baseline_path: &Path, how: Tree<'_>) -> ExitCode {
+    let Tree { list, write, base } = how;
+    let findings = match tree_findings(root, guard, base) {
+        Ok(findings) => findings,
+        Err(e) => return fail(e),
+    };
     if list {
         for f in &findings {
             println!("{f}");

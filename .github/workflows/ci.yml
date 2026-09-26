@@ -44,6 +44,9 @@ jobs:
       - name: Graph build stays within its time budget
         if: matrix.os == 'ubuntu-latest'
         run: cargo test --release -p fairlead-lang --test perf -- --ignored --nocapture
+      - name: Write hook stays within its time budget
+        if: matrix.os == 'ubuntu-latest'
+        run: cargo test --release -p fairlead --test hook_perf -- --ignored --nocapture
 
   msrv:
     name: minimum Rust version
