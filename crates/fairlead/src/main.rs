@@ -5,6 +5,8 @@
 mod ci_cmd;
 mod graph_cmd;
 mod guard_cmd;
+mod hook_cmd;
+mod hooks_cmd;
 mod plan_cmd;
 mod replay_cmd;
 
@@ -82,6 +84,11 @@ enum Command {
         /// Override a config value for this run.
         #[arg(long = "set", value_name = "KEY=VALUE", global = true)]
         sets: Vec<String>,
+    },
+    /// Install, check or remove the Claude Code hook that runs the guard.
+    Hooks {
+        #[command(subcommand)]
+        action: hooks_cmd::HooksAction,
     },
     /// Inspect the import graph.
     Graph {
@@ -264,6 +271,7 @@ fn main() -> ExitCode {
         Some(Command::Config { action, sets }) => run_config(action, sets),
         Some(Command::Graph { action, sets }) => graph_cmd::run(action, sets, &cwd()),
         Some(Command::Guard { action, sets }) => guard_cmd::run(action, sets, &cwd()),
+        Some(Command::Hooks { action }) => hooks_cmd::run(action, &cwd()),
         Some(Command::Plan {
             changes,
             json,

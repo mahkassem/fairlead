@@ -88,14 +88,7 @@ impl EventLog {
     /// The log for the repository holding `root`, which may be a
     /// subdirectory or a worktree, or none outside a repository.
     pub fn open(root: &Path) -> Option<EventLog> {
-        let out = std::process::Command::new("git")
-            .args(["rev-parse", "--absolute-git-dir"])
-            .current_dir(root)
-            .output()
-            .ok()
-            .filter(|o| o.status.success())?;
-        let dir = String::from_utf8(out.stdout).ok()?;
-        Some(EventLog::at(PathBuf::from(dir.trim()).join("fairlead")))
+        crate::git::git_dir(root).map(|dir| EventLog::at(dir.join("fairlead")))
     }
 
     pub fn at(dir: PathBuf) -> EventLog {

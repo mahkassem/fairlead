@@ -73,6 +73,7 @@ pub struct Config {
     pub plan: Plan,
     pub replay: Replay,
     pub guard: Guard,
+    pub hooks: Hooks,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
@@ -418,6 +419,9 @@ pub struct Guard {
     pub on_finding: OnFinding,
     /// Where hook and commit decisions are recorded.
     pub events: Events,
+    /// The write hook's own time, in milliseconds; past it the write goes
+    /// ahead and the event log says so.
+    pub budget_ms: u32,
     /// A note appended to each finding of a rule, by rule id, such as the
     /// section of a style guide it enforces.
     pub cite: std::collections::BTreeMap<String, String>,
@@ -558,6 +562,7 @@ impl Default for Guard {
             findings: Findings::default(),
             on_finding: OnFinding::default(),
             events: Events::default(),
+            budget_ms: 40,
             cite: Default::default(),
             size: None,
             comments: None,
@@ -578,6 +583,23 @@ pub enum Findings {
     Added,
     /// Every finding in a file the change touches.
     All,
+}
+
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields, default)]
+pub struct Hooks {
+    /// Where `fairlead hooks install` puts the Claude Code hook.
+    pub claude: HooksTarget,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "kebab-case")]
+pub enum HooksTarget {
+    /// `.claude/settings.json`, committed, so everyone who clones is guarded.
+    #[default]
+    Shared,
+    /// `.claude/settings.local.json`, for one person, ignored by git.
+    Local,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, JsonSchema)]
