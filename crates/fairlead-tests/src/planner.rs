@@ -4,7 +4,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use fairlead_core::config::{Config, LockfileMode, Unresolved};
+use fairlead_core::config::{Config, LockfileMode, TestClass, Unresolved};
 use fairlead_core::plan::{Change, Plan, Reason, Status, Warning, VERSION};
 use fairlead_lang::deleted::attach_deleted;
 use fairlead_lang::tree::{parent, Tree};
@@ -157,12 +157,24 @@ pub fn plan(scan: &mut Scan, config: &Config, input: Input) -> Result<Plan, Stri
         lockfile,
     };
     let run_all = patterns(config.plan.run_all.items())?;
-    let trigger = cx
-        .changed
+    // Only tests a claim selects count: `demand` never runs on a claim.
+    let test_paths: Vec<&str> = cx
+        .tests
         .iter()
-        .filter(|p| !(cx.lockfile.is_some() && p.as_str() == LOCKFILE))
-        .find(|p| run_all.iter().any(|g| g.is_match(p)))
-        .cloned();
+        .filter(|t| matches!(t.class, TestClass::Unit | TestClass::Own))
+        .map(|t| t.path.as_str())
+        .collect();
+    let mut trigger = None;
+    for path in &cx.changed {
+        let scoped = cx.lockfile.is_some() && path == LOCKFILE;
+        if scoped || !run_all.iter().any(|g| g.is_match(path)) {
+            continue;
+        }
+        if !cx.owners.overrides_run_all(path, &test_paths)? {
+            trigger = Some(path.clone());
+            break;
+        }
+    }
     let mut warnings = Vec::new();
     if cx.lockfile.as_ref().is_some_and(|l| l.manifests.is_empty()) {
         warnings.push(Warning {

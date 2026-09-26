@@ -63,6 +63,17 @@ match = "services/{name}/test/integration/**"
 covers = ["services/{name}/src/**"]
 ```
 
+A path an owner rule covers still selects everything when it matches `plan.run_all`, unless the rule sets `overrides_run_all = true`. Then it selects that rule's tests, plus whatever depends on it. That fits a fixture project's runner config, which `**/vitest.config.*` matches but only one suite's tests load:
+
+```toml
+[[tests.owners]]
+match = "test/{suite}/**"
+covers = ["test/{suite}/**/fixtures/**", "test/{suite}/vitest.config.*"]
+overrides_run_all = true
+```
+
+Don't set it for a file something outside the rule's tests reads, such as a config another package's config imports or a script names with `--config`. When the rule claims no test for the path, it runs everything as before.
+
 ## Unreached files
 
 A changed file that isn't a test and has no test anywhere among the files depending on it is *unreached* (a deleted test file and a package manifest aren't, since there's nothing left to run for one and the other already stands for its package): something the graph can't see uses it, like a setup file named only in a runner config. It's always listed under `unreached` with a warning, so you can write the owner rule that covers it. Unless one already does, `tests.unreached` decides what it selects:

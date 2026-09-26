@@ -102,6 +102,8 @@ def repo_section(slug, report, rows, fetch_line):
                 f"{q['absorbed']} failures absorbed ({q['would_hit']} would-be hits, {q['would_miss']} would-be misses), "
                 f"{q['pulls']} pull requests, until {plain(q['until'])}. {plain(q['reason'], 300)}"
             )
+            if q.get("jobs"):
+                lines.append(f"  - Absorbed in: {', '.join(f'`{plain(j)}`' for j in q['jobs'])}")
             if q.get("other_jobs"):
                 lines.append(f"  - Also failed in: {', '.join(f'`{plain(j)}`' for j in q['other_jobs'])}")
     if report.get("widened_by"):
