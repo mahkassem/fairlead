@@ -115,14 +115,27 @@ pub fn git_dir(root: &Path) -> Option<std::path::PathBuf> {
     for dir in root.ancestors() {
         let dot = dir.join(".git");
         if dot.is_dir() {
-            return Some(dot);
+            return Some(plain(dot));
         }
         if let Ok(text) = std::fs::read_to_string(&dot) {
             let target = text.lines().find_map(|l| l.strip_prefix("gitdir:"))?.trim();
-            return std::fs::canonicalize(dir.join(target)).ok();
+            return std::fs::canonicalize(dir.join(target)).ok().map(plain);
         }
     }
     None
+}
+
+/// Windows' `\\?\C:\...` form of a canonical path as `C:\...`: git and other
+/// tools given the path can't read the verbatim form.
+fn plain(path: std::path::PathBuf) -> std::path::PathBuf {
+    let text = path.to_string_lossy();
+    if let Some(rest) = text.strip_prefix(r"\\?\UNC\") {
+        return format!(r"\\{rest}").into();
+    }
+    match text.strip_prefix(r"\\?\") {
+        Some(rest) if rest.as_bytes().get(1) == Some(&b':') => rest.into(),
+        _ => path,
+    }
 }
 
 /// Whether `path`, relative to `root`, is in `rev`'s tree.
@@ -161,6 +174,18 @@ fn blob(root: &Path, spec: &str) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_verbatim_windows_path_is_given_back_plain() {
+        let p = |s: &str| {
+            plain(std::path::PathBuf::from(s))
+                .to_string_lossy()
+                .into_owned()
+        };
+        assert_eq!(p(r"\\?\C:\repo\.git"), r"C:\repo\.git");
+        assert_eq!(p(r"\\?\UNC\server\share\.git"), r"\\server\share\.git");
+        assert_eq!(p("/home/r/.git"), "/home/r/.git");
+    }
 
     #[test]
     fn the_git_dir_is_found_from_a_subdirectory_and_through_a_gitdir_file() {
