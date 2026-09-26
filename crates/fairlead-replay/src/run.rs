@@ -15,7 +15,7 @@ use regex::Regex;
 use crate::attribute::{attribute, Attribution, Repo};
 use crate::dataset::{Job, Row};
 use crate::extract::{extract, Extractor};
-use crate::git::{has_commit, merge_base, tree_of, Worktree};
+use crate::git::{has_commit, merge_base, patch_id, tree_of, Worktree};
 use crate::window::Window;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -26,7 +26,7 @@ pub enum Outcome {
     Miss,
     /// Another attempt of the same run passed the same job.
     Flaky,
-    /// A later push passed the same job with a change that doesn't reach it.
+    /// A later run of the same change (a re-run or a rebase) passed the job.
     Unconfirmed,
     /// The job failed, but no test file or check could be named.
     Unattributed,
@@ -34,6 +34,18 @@ pub enum Outcome {
     Unavailable,
     /// The planner refused the commit, such as a test with no runner.
     Error,
+    /// No `[[replay.failures]]` or `[[replay.checks]]` entry names the job.
+    Unwatched,
+    /// `replay.ignore` names the job.
+    Ignored,
+}
+
+/// How a hit's target came to be in the plan.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum HitBy {
+    Selected,
+    RunAll,
+    Check,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -47,11 +59,13 @@ pub enum Target {
 pub struct Failure {
     pub run_id: u64,
     pub attempt: u32,
+    pub event: String,
     pub pr: Option<u64>,
     pub head_sha: String,
     pub job: String,
     pub target: Target,
     pub outcome: Outcome,
+    pub hit_by: Option<HitBy>,
     pub detail: String,
     /// The changed paths of the plan it was judged against.
     pub changed: Vec<String>,
@@ -77,6 +91,7 @@ pub struct Replayed {
 pub struct Sources {
     failures: Vec<(Regex, Extractor)>,
     checks: Vec<(Regex, Regex, String)>,
+    ignore: Vec<Regex>,
 }
 
 impl Sources {
@@ -111,7 +126,27 @@ impl Sources {
                 Ok((job, step, c.check.clone()))
             })
             .collect::<Result<_, String>>()?;
-        Ok(Sources { failures, checks })
+        let ignore = config
+            .replay
+            .ignore
+            .items()
+            .iter()
+            .map(|p| Regex::new(p).map_err(|e| e.to_string()))
+            .collect::<Result<_, String>>()?;
+        Ok(Sources {
+            failures,
+            checks,
+            ignore,
+        })
+    }
+
+    fn ignores(&self, job: &Job) -> bool {
+        self.ignore.iter().any(|re| re.is_match(&job.name))
+    }
+
+    fn watches(&self, job: &Job) -> bool {
+        self.failures.iter().any(|(re, _)| re.is_match(&job.name))
+            || self.checks.iter().any(|(re, _, _)| re.is_match(&job.name))
     }
 }
 
@@ -129,12 +164,10 @@ fn targets(
             found.push(t);
         }
     };
-    let mut watched = false;
     for (job_re, extractor) in &sources.failures {
         if !job_re.is_match(&job.name) {
             continue;
         }
-        watched = true;
         for note in &job.annotations {
             if tests.contains(&note.path) {
                 push(Target::Test(note.path.clone()));
@@ -149,24 +182,22 @@ fn targets(
         }
     }
     for (job_re, step_re, check) in &sources.checks {
-        if job_re.is_match(&job.name) {
-            watched = true;
-            if job.failed_steps.iter().any(|s| step_re.is_match(s)) {
-                push(Target::Check(check.clone()));
-            }
+        if job_re.is_match(&job.name) && job.failed_steps.iter().any(|s| step_re.is_match(s)) {
+            push(Target::Check(check.clone()));
         }
     }
-    if watched && found.is_empty() {
+    if found.is_empty() {
         found.push(Target::Job);
     }
     found
 }
 
-fn in_plan(plan: &Plan, target: &Target) -> bool {
+fn in_plan(plan: &Plan, target: &Target) -> Option<HitBy> {
     match target {
-        Target::Test(path) => plan.all || plan.tests.iter().any(|t| &t.path == path),
-        Target::Check(id) => plan.checks.iter().any(|c| &c.id == id),
-        Target::Job => false,
+        Target::Test(path) if plan.tests.iter().any(|t| &t.path == path) => Some(HitBy::Selected),
+        Target::Test(_) if plan.all => Some(HitBy::RunAll),
+        Target::Check(id) if plan.checks.iter().any(|c| &c.id == id) => Some(HitBy::Check),
+        _ => None,
     }
 }
 
@@ -269,18 +300,40 @@ fn record(
     out.failures.push(Failure {
         run_id: row.run_id,
         attempt: row.attempt,
+        event: row.event.clone(),
         pr: row.pr,
         head_sha: row.head_sha.clone(),
         job: job.to_string(),
         target,
         outcome,
+        hit_by: None,
         detail: detail.into(),
         changed: changed.to_vec(),
     });
 }
 
 fn replay_row(r: &Replayer, row: &Row, all: &[&Row], out: &mut Replayed) {
-    let failed: Vec<&Job> = row.jobs.iter().filter(|j| j.failed()).collect();
+    let mut failed: Vec<&Job> = Vec::new();
+    for job in row.jobs.iter().filter(|j| j.failed()) {
+        if r.sources.ignores(job) {
+            record(out, row, &job.name, Target::Job, Outcome::Ignored, "", &[]);
+        } else if !r.sources.watches(job) {
+            record(
+                out,
+                row,
+                &job.name,
+                Target::Job,
+                Outcome::Unwatched,
+                "",
+                &[],
+            );
+        } else {
+            failed.push(job);
+        }
+    }
+    if failed.is_empty() {
+        return;
+    }
     let unavailable = |out: &mut Replayed, why: &str| {
         for job in &failed {
             record(
@@ -340,26 +393,34 @@ fn replay_row(r: &Replayer, row: &Row, all: &[&Row], out: &mut Replayed) {
     };
     let root = r.worktree.path.clone();
     let read = move |f: &str| std::fs::read_to_string(root.join(f)).ok();
-    // Every job is attributed before any outcome, since judging one can
-    // check out another commit, and attribution reads the worktree.
+    // Attribution reads the worktree, so every job is attributed before
+    // anything else can touch it.
     let named: Vec<(&Job, Vec<Target>)> = failed
         .into_iter()
         .map(|job| (job, targets(job, &r.sources, &repo, &tests, &read)))
         .collect();
     for (job, found) in named {
+        let flaky = passed_on_another_attempt(row, job, all);
+        let mut retried = None;
         for target in found {
+            let hit_by = in_plan(&plan, &target);
             let outcome = if target == Target::Job {
                 Outcome::Unattributed
-            } else if passed_on_another_attempt(row, job, all) {
+            } else if flaky {
                 Outcome::Flaky
-            } else if in_plan(&plan, &target) {
+            } else if hit_by.is_some() {
                 Outcome::Hit
-            } else if passed_later_unreached(r, row, job, &target, all) {
+            } else if *retried
+                .get_or_insert_with(|| passed_with_same_change(r, row, &base, job, all))
+            {
                 Outcome::Unconfirmed
             } else {
                 Outcome::Miss
             };
             record(out, row, &job.name, target, outcome, "", &changed);
+            if outcome == Outcome::Hit {
+                out.failures.last_mut().expect("just recorded").hit_by = hit_by;
+            }
         }
     }
 }
@@ -375,34 +436,33 @@ fn passed_on_another_attempt(row: &Row, job: &Job, all: &[&Row]) -> bool {
     })
 }
 
-/// A later push of the same pull request passed the job, and the change
-/// between the two heads doesn't reach the target: the failure went away
-/// without anything that could have fixed it.
-fn passed_later_unreached(
-    r: &Replayer,
-    row: &Row,
-    job: &Job,
-    target: &Target,
-    all: &[&Row],
-) -> bool {
+/// A later run of the same pull request passed the job with the same change:
+/// the same head, or a head whose diff from its merge base has the same
+/// patch id (a rebase). The change can't be what failed.
+fn passed_with_same_change(r: &Replayer, row: &Row, base: &str, job: &Job, all: &[&Row]) -> bool {
     let Some(pr) = row.pr else {
         return false;
     };
-    let later = all.iter().find(|other| {
-        other.pr == Some(pr)
+    let mut ours: Option<Option<String>> = None;
+    all.iter().any(|other| {
+        let passed = other.pr == Some(pr)
             && other.created_at > row.created_at
-            && other.head_sha != row.head_sha
             && other
                 .jobs
                 .iter()
-                .any(|j| j.name == job.name && j.conclusion == "success")
-            && has_commit(r.clone, &other.head_sha)
-    });
-    let Some(later) = later else {
-        return false;
-    };
-    match r.plan_between(&row.head_sha, &later.head_sha) {
-        Ok(at) => !in_plan(&at.plan, target),
-        Err(_) => false,
-    }
+                .any(|j| j.name == job.name && j.conclusion == "success");
+        if !passed {
+            return false;
+        }
+        if other.head_sha == row.head_sha {
+            return true;
+        }
+        let theirs = other
+            .base_sha
+            .as_deref()
+            .and_then(|b| merge_base(r.clone, b, &other.head_sha))
+            .and_then(|mb| patch_id(r.clone, &mb, &other.head_sha));
+        let ours = ours.get_or_insert_with(|| patch_id(r.clone, base, &row.head_sha));
+        theirs.is_some() && &theirs == ours
+    })
 }

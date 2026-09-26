@@ -64,7 +64,8 @@ fairlead.toml: tests.unreachd: unknown field `unreachd`, expected one of ...
 | `replay.min_failures` | `30` | Failures needed before a replay result counts |
 | `replay.failures` | `[]` | `runner`, `extractor` (`vitest`, `jest`, `regex`), `job`, `pattern` |
 | `replay.checks` | `[]` | Map a CI `job` and `step` to a `check` |
+| `replay.ignore` | `[]` | CI job names (regexes) whose failures replay leaves out on purpose, such as a job that only aggregates others |
 
 Commands are always argv arrays, never shell strings, and `{files}` expands to one argument per file. In `tests.runners.cwd`, `{module}` is the module's root path and `{module.id}` its id.
 
-`config check` validates every key's type, the ids, placeholders and references between sections today. Checks that need the repository's files, such as every test file mapping to exactly one runner, arrive with the planner. In `tests.owners`, a placeholder used in `covers` must be captured in `match`.
+`config check` validates every key's type, the ids, placeholders and references between sections, and lists test files that match no runner or more than one. In `tests.owners`, a placeholder used in `covers` must be captured in `match`.

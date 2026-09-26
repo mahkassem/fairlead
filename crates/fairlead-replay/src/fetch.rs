@@ -12,6 +12,7 @@ use serde_json::Value;
 
 use crate::dataset::{log_excerpt, Annotation, Job, Row};
 use crate::github::Http;
+use crate::window::add_days;
 
 const PER_PAGE: usize = 100;
 /// GitHub stops adding annotations past a per-step limit; a job with this
@@ -27,6 +28,21 @@ pub struct Options<'a> {
     pub clone: Option<&'a Path>,
     /// Stop after this many run attempts, for a partial fetch.
     pub limit: Option<usize>,
+    /// Only runs of these workflows, by name; every workflow when empty.
+    pub workflows: Vec<String>,
+    /// The last day to list; the listing runs to the present without one.
+    pub until: Option<&'a str>,
+}
+
+/// Why a fetch stopped.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Stop {
+    /// Every run in the window is recorded.
+    Complete,
+    /// `limit` new attempts were recorded; more remain.
+    Limit,
+    /// The API refused or failed; the rows so far are still good.
+    Error(String),
 }
 
 fn get(http: &dyn Http, path: &str) -> Result<Value, String> {
@@ -148,41 +164,73 @@ fn job_of(http: &dyn Http, repo: &str, job: &Value) -> Result<Job, String> {
     Ok(out)
 }
 
-fn runs(http: &dyn Http, repo: &str, event: &str, since: &str) -> Result<Vec<Value>, String> {
+/// One listing query returns at most 1,000 runs, so the window is listed a
+/// week at a time.
+fn runs(http: &dyn Http, opts: &Options, event: &str) -> Result<Vec<Value>, String> {
     let mut all = Vec::new();
-    for page in 1.. {
-        let path = format!("/repos/{repo}/actions/runs?event={event}&status=completed&created=%3E%3D{since}&per_page={PER_PAGE}&page={page}");
-        let body = get(http, &path)?;
-        let batch = body
-            .get("workflow_runs")
-            .and_then(Value::as_array)
-            .cloned()
-            .unwrap_or_default();
-        let total = body.get("total_count").and_then(Value::as_u64).unwrap_or(0) as usize;
-        let done = batch.len() < PER_PAGE || page * PER_PAGE >= total;
-        all.extend(batch);
-        if done {
+    let mut from = opts.since.to_string();
+    loop {
+        let to = add_days(&from, 6).ok_or_else(|| format!("`{from}` isn't a date"))?;
+        let last = opts.until.is_some_and(|u| to.as_str() >= u);
+        let created = match (last, opts.until) {
+            (true, Some(until)) => format!("{from}..{until}"),
+            _ => format!("{from}..{to}"),
+        };
+        for page in 1.. {
+            let path = format!(
+                "/repos/{}/actions/runs?event={event}&status=completed&created={created}&per_page={PER_PAGE}&page={page}",
+                opts.repo
+            );
+            let body = get(http, &path)?;
+            let batch = body
+                .get("workflow_runs")
+                .and_then(Value::as_array)
+                .cloned()
+                .unwrap_or_default();
+            let total = body.get("total_count").and_then(Value::as_u64).unwrap_or(0) as usize;
+            let done = batch.len() < PER_PAGE || page * PER_PAGE >= total;
+            all.extend(batch.into_iter().filter(|run| wanted(opts, run)));
+            if done {
+                break;
+            }
+        }
+        if last || opts.until.is_none() && to.as_str() >= today().as_str() {
             break;
         }
+        from = add_days(&to, 1).expect("a date plus one day");
     }
     Ok(all)
+}
+
+/// A run worth a row: of a listed workflow, and not a first attempt that was
+/// cancelled or skipped, which ran nothing.
+fn wanted(opts: &Options, run: &Value) -> bool {
+    let name = str_of(run, "name");
+    let workflow_ok = opts.workflows.is_empty() || opts.workflows.iter().any(|w| w == name);
+    let first = run.get("run_attempt").and_then(Value::as_u64).unwrap_or(1) == 1;
+    let empty = matches!(str_of(run, "conclusion"), "cancelled" | "skipped");
+    workflow_ok && !(first && empty)
+}
+
+/// Today in UTC, from the system clock.
+fn today() -> String {
+    let secs = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_secs());
+    add_days("1970-01-01", (secs / 86_400) as i64).expect("a valid epoch date")
 }
 
 /// New rows for the runs in the window; `seen` holds (run, attempt) pairs
 /// already recorded. On an API error the rows gathered so far come back
 /// with it, so a partial fetch is never lost.
-pub fn fetch(
-    http: &dyn Http,
-    opts: &Options,
-    seen: &BTreeSet<(u64, u32)>,
-) -> (Vec<Row>, Option<String>) {
+pub fn fetch(http: &dyn Http, opts: &Options, seen: &BTreeSet<(u64, u32)>) -> (Vec<Row>, Stop) {
     let mut rows = Vec::new();
     let mut seen = seen.clone();
     let mut pulls: BTreeMap<String, Option<(u64, String)>> = BTreeMap::new();
     for event in EVENTS {
-        let listed = match runs(http, opts.repo, event, opts.since) {
+        let listed = match runs(http, opts, event) {
             Ok(r) => r,
-            Err(e) => return (rows, Some(e)),
+            Err(e) => return (rows, Stop::Error(e)),
         };
         for run in listed {
             let id = run.get("id").and_then(Value::as_u64).unwrap_or(0);
@@ -193,16 +241,16 @@ pub fn fetch(
                     continue;
                 }
                 if opts.limit.is_some_and(|l| rows.len() >= l) {
-                    return (rows, None);
+                    return (rows, Stop::Limit);
                 }
                 match row_of(http, opts, &run, event, attempt, &mut pulls) {
                     Ok(row) => rows.push(row),
-                    Err(e) => return (rows, Some(e)),
+                    Err(e) => return (rows, Stop::Error(e)),
                 }
             }
         }
     }
-    (rows, None)
+    (rows, Stop::Complete)
 }
 
 fn row_of(

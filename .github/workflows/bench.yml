@@ -1,0 +1,176 @@
+# Records the benchmark repositories' CI runs, replays their failures against
+# this commit's planner, and proposes the grown datasets and the results page
+# as one rolling pull request from the `bench-data` branch. Replay only parses
+# the benchmark repositories' files; it never runs or installs them.
+name: bench
+
+on:
+  schedule:
+    - cron: "17 5 * * 1"
+  workflow_dispatch:
+    inputs:
+      since:
+        description: First day to list, YYYY-MM-DD (default 97 days ago)
+        required: false
+        default: ""
+      limit:
+        description: New run attempts to record per repository in this run
+        required: false
+        default: "300"
+
+permissions: {}
+
+concurrency:
+  group: bench
+  cancel-in-progress: false
+
+jobs:
+  replay:
+    name: replay (${{ matrix.repo }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    permissions:
+      actions: read
+      checks: read
+      contents: read
+    strategy:
+      fail-fast: false
+      # The workflow token's API budget is shared by every job in the run.
+      max-parallel: 1
+      matrix:
+        include:
+          - { repo: Effect-TS/effect, slug: Effect-TS_effect, workflow: Check }
+          - { repo: pnpm/pnpm, slug: pnpm_pnpm, workflow: TS CI }
+          - { repo: vitest-dev/vitest, slug: vitest-dev_vitest, workflow: CI }
+    env:
+      REPO: ${{ matrix.repo }}
+      SLUG: ${{ matrix.slug }}
+      WORKFLOW: ${{ matrix.workflow }}
+      SINCE: ${{ inputs.since }}
+      LIMIT: ${{ inputs.limit || '300' }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@02cb101ec7c40f2c49e1d9714d64511d8e1b74de # master
+        with:
+          toolchain: "1.94.1"
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+      - run: cargo build --release --locked -p fairlead
+      - name: Start from the recorded dataset
+        shell: bash
+        run: |
+          mkdir -p out
+          if git fetch --quiet --depth=1 origin bench-data 2>/dev/null \
+            && git cat-file -e "FETCH_HEAD:bench/data/$SLUG.jsonl" 2>/dev/null; then
+            git show "FETCH_HEAD:bench/data/$SLUG.jsonl" > out/data.jsonl
+          elif [ -f "bench/data/$SLUG.jsonl" ]; then
+            cp "bench/data/$SLUG.jsonl" out/data.jsonl
+          else
+            : > out/data.jsonl
+          fi
+          echo "starting from $(wc -l < out/data.jsonl) recorded run attempts"
+      - name: Clone the repository, full history without blobs
+        shell: bash
+        run: git clone --quiet --filter=blob:none --no-checkout "https://github.com/$REPO" clone
+      - name: Record new runs
+        continue-on-error: true
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.BENCH_READ_TOKEN || github.token }}
+        run: |
+          since="${SINCE:-$(date -u -d '97 days ago' +%F)}"
+          [[ "$since" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]] || { echo "since must be YYYY-MM-DD"; exit 1; }
+          [[ "$LIMIT" =~ ^[0-9]+$ ]] || { echo "limit must be a whole number"; exit 1; }
+          ./target/release/fairlead replay fetch --repo "$REPO" --workflow "$WORKFLOW" \
+            --since "$since" --limit "$LIMIT" --data out/data.jsonl --clone clone | tee out/fetch.txt
+      - name: API budget left
+        if: ${{ !cancelled() }}
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.BENCH_READ_TOKEN || github.token }}
+        run: |
+          printf 'header = "Authorization: Bearer %s"\n' "$GITHUB_TOKEN" \
+            | curl -q -fsS -K - https://api.github.com/rate_limit | jq -c '.resources.core'
+      - name: Replay
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: |
+          if [ ! -s out/data.jsonl ]; then echo "no recorded runs yet"; exit 0; fi
+          ./target/release/fairlead replay run --data out/data.jsonl --clone clone \
+            --config "bench/$SLUG.toml" --fetch-missing --json-out out/report.json | tee out/report.txt
+          {
+            echo "### $REPO"
+            echo
+            echo '~~~text'
+            tr -d '~' < out/fetch.txt 2>/dev/null || true
+            tr -d '~' < out/report.txt
+            echo '~~~'
+          } >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        if: ${{ !cancelled() }}
+        with:
+          name: bench-${{ matrix.slug }}
+          path: out/
+          retention-days: 14
+          if-no-files-found: ignore
+
+  publish:
+    needs: replay
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          persist-credentials: false
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          pattern: bench-*
+          path: artifacts
+      - name: Start from the recorded datasets
+        shell: bash
+        run: |
+          if git fetch --quiet --depth=1 origin bench-data 2>/dev/null; then
+            git checkout FETCH_HEAD -- bench/data 2>/dev/null || true
+          fi
+      - name: Write the datasets and the results page
+        shell: bash
+        env:
+          COMMIT: ${{ github.sha }}
+        run: python3 scripts/bench_publish.py artifacts --commit "$COMMIT"
+      - name: Push the bench-data branch
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -B bench-data
+          git add bench/data docs/src/benchmarks.md
+          if git diff --cached --quiet; then echo "nothing new"; exit 0; fi
+          git commit --quiet -m "chore: record benchmark runs and results"
+          # The credential reaches git through its environment, never argv.
+          basic=$(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)
+          echo "::add-mask::$basic"
+          GIT_CONFIG_COUNT=1 \
+            GIT_CONFIG_KEY_0="http.https://github.com/.extraheader" \
+            GIT_CONFIG_VALUE_0="AUTHORIZATION: basic $basic" \
+            git push --force --quiet "https://github.com/$REPOSITORY" bench-data
+      - name: Open the pull request if none is open
+        continue-on-error: true
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          open=$(gh pr list --repo "$REPOSITORY" --head bench-data --state open --json number --jq length)
+          if [ "$open" = "0" ]; then
+            gh pr create --repo "$REPOSITORY" --base main --head bench-data \
+              --title "chore: record benchmark runs and results" \
+              --body "Written by the bench workflow. The results page is docs/src/benchmarks.md."
+          fi

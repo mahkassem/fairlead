@@ -8,6 +8,7 @@ use std::process::ExitCode;
 use clap::Subcommand;
 use fairlead_core::config;
 use fairlead_replay::dataset;
+use fairlead_replay::fetch::Stop;
 use fairlead_replay::git::Worktree;
 use fairlead_replay::report::{report, text};
 use fairlead_replay::run::{replay, Replayer, Sources};
@@ -33,6 +34,9 @@ pub enum ReplayAction {
         /// Stop after this many run attempts.
         #[arg(long)]
         limit: Option<usize>,
+        /// Only runs of this workflow, by name; repeat for several.
+        #[arg(long = "workflow", value_name = "NAME")]
+        workflows: Vec<String>,
     },
     /// Re-plan every recorded failure in the window and report recall.
     Run {
@@ -51,6 +55,12 @@ pub enum ReplayAction {
         /// Print the report as JSON.
         #[arg(long)]
         json: bool,
+        /// Also write the report as JSON to this file.
+        #[arg(long, value_name = "PATH")]
+        json_out: Option<PathBuf>,
+        /// Fetch the recorded heads and bases the clone lacks first.
+        #[arg(long)]
+        fetch_missing: bool,
     },
 }
 
@@ -62,14 +72,27 @@ pub fn run(action: ReplayAction) -> ExitCode {
             config,
             until,
             json,
-        } => run_replay(&data, &clone, &config, until.as_deref(), json),
+            json_out,
+            fetch_missing,
+        } => run_replay(
+            &data,
+            &clone,
+            &config,
+            until.as_deref(),
+            Output {
+                json,
+                json_out,
+                fetch_missing,
+            },
+        ),
         ReplayAction::Fetch {
             repo,
             data,
             since,
             clone,
             limit,
-        } => run_fetch(&repo, &data, &since, clone.as_deref(), limit),
+            workflows,
+        } => run_fetch(&repo, &data, &since, clone.as_deref(), limit, workflows),
     };
     match result {
         Ok(()) => ExitCode::SUCCESS,
@@ -86,6 +109,7 @@ fn run_fetch(
     since: &str,
     clone: Option<&Path>,
     limit: Option<usize>,
+    workflows: Vec<String>,
 ) -> Result<(), String> {
     let seen = dataset::read(data)?
         .iter()
@@ -97,11 +121,27 @@ fn run_fetch(
         since,
         clone,
         limit,
+        workflows,
+        until: None,
     };
-    let (rows, error) = fairlead_replay::fetch::fetch(&http, &opts, &seen);
+    let (rows, stop) = fairlead_replay::fetch::fetch(&http, &opts, &seen);
     let added = dataset::append(data, &rows)?;
-    println!("{added} new rows in {}", data.display());
-    error.map_or(Ok(()), Err)
+    let at = data.display();
+    match stop {
+        Stop::Complete => println!("fetch complete: {added} new rows in {at}"),
+        Stop::Limit => println!("fetch partial: {added} new rows in {at}; run again to continue"),
+        Stop::Error(e) => {
+            println!("fetch stopped: {added} new rows in {at}");
+            return Err(e);
+        }
+    }
+    Ok(())
+}
+
+struct Output {
+    json: bool,
+    json_out: Option<PathBuf>,
+    fetch_missing: bool,
 }
 
 fn run_replay(
@@ -109,7 +149,7 @@ fn run_replay(
     clone: &Path,
     config_path: &Path,
     until: Option<&str>,
-    json: bool,
+    output: Output,
 ) -> Result<(), String> {
     let loaded = config::load_file(config_path, &[]).map_err(|e| e.to_string())?;
     let rows = dataset::read(data)?;
@@ -131,6 +171,17 @@ fn run_replay(
             .map(|n| n.to_string_lossy().into_owned())
             .unwrap_or_default()
     ));
+    if output.fetch_missing {
+        let shas: Vec<String> = rows
+            .iter()
+            .filter(|r| window.contains(&r.created_at))
+            .flat_map(|r| std::iter::once(r.head_sha.clone()).chain(r.base_sha.clone()))
+            .collect::<std::collections::BTreeSet<_>>()
+            .into_iter()
+            .collect();
+        let missing = fairlead_replay::git::fetch_missing(&clone, &shas);
+        eprintln!("{} recorded commits, {missing} still missing", shas.len());
+    }
     let start = rows
         .iter()
         .find(|r| fairlead_replay::git::has_commit(&clone, &r.head_sha))
@@ -144,11 +195,13 @@ fn run_replay(
     };
     let replayed = replay(&replayer, &rows, &window);
     let result = report(&repo, &window, loaded.config.replay.min_failures, &replayed);
-    if json {
-        println!(
-            "{}",
-            serde_json::to_string_pretty(&result).expect("report prints")
-        );
+    let pretty = serde_json::to_string_pretty(&result).expect("report prints");
+    if let Some(path) = &output.json_out {
+        std::fs::write(path, format!("{pretty}\n"))
+            .map_err(|e| format!("could not write {}: {e}", path.display()))?;
+    }
+    if output.json {
+        println!("{pretty}");
     } else {
         print!("{}", text(&result));
     }

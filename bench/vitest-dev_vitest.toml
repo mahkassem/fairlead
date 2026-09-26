@@ -1,0 +1,72 @@
+# vitest-dev/vitest's CI: each suite under test/ is a workspace package run
+# from its own directory, with examples and the UI package alongside. Fixture
+# projects under a suite are run by that suite's tests, never directly.
+
+[tests]
+exclude = ["**/node_modules/**", "**/fixtures/**", "**/__snapshots__/**", "docs/**"]
+
+[[tests.runners]]
+id = "playwright-ui"
+match = ["test/ui/**"]
+invoke = "per-module"
+cwd = "{module}"
+command = ["pnpm", "exec", "playwright", "test", "{files}"]
+
+[[tests.runners]]
+id = "node-test"
+match = ["test/node-runner/**"]
+invoke = "per-module"
+cwd = "{module}"
+command = ["node", "--test", "{files}"]
+
+[[tests.runners]]
+id = "vitest"
+match = ["test/{unit,e2e,coverage-test,browser,workspaces,workspaces-browser,typescript,test-utils}/**", "examples/**", "packages/**"]
+invoke = "per-module"
+cwd = "{module}"
+command = ["pnpm", "vitest", "run", "{files}"]
+
+[[tests.owners]]
+match = "test/{suite}/**"
+covers = ["test/{suite}/fixtures/**"]
+
+[[checks]]
+id = "lint"
+command = ["pnpm", "run", "lint"]
+paths = ["**/*.{ts,tsx,js,mjs,cjs,vue,json,md}"]
+
+[[checks]]
+id = "typecheck"
+command = ["pnpm", "run", "typecheck"]
+paths = ["**/*.{ts,tsx,vue}", "**/tsconfig*.json", "**/package.json"]
+
+[[checks]]
+id = "build"
+command = ["pnpm", "run", "build"]
+paths = ["packages/**", "scripts/**", "*.{ts,mjs,json}"]
+
+[replay]
+window_days = 90
+min_failures = 30
+# The changed-files probe and the browser image build, not tests.
+ignore = ["^Diff: ", "^Image: "]
+
+[[replay.failures]]
+runner = "vitest"
+extractor = "vitest"
+job = "^(Test|Browsers): "
+
+[[replay.checks]]
+job = "^Lint: "
+step = "^Lint$"
+check = "lint"
+
+[[replay.checks]]
+job = "^Lint: "
+step = "^Typecheck( UI)?$"
+check = "typecheck"
+
+[[replay.checks]]
+job = "^Lint: "
+step = "^Build$"
+check = "build"
