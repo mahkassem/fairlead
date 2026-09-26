@@ -10,8 +10,8 @@ description = "Test selection for Fairlead: modules, test files, owner rules and
 publish = false
 
 [dependencies]
-fairlead-core = { version = "0.1.1", path = "../fairlead-core" }
-fairlead-lang = { version = "0.1.1", path = "../fairlead-lang" }
+fairlead-core = { version = "0.2.0", path = "../fairlead-core" }
+fairlead-lang = { version = "0.2.0", path = "../fairlead-lang" }
 globset = "0.4"
 regex = "1"
 schemars = "1.2.2"
