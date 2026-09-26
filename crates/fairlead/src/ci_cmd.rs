@@ -71,22 +71,27 @@ fn default_out() -> PathBuf {
         .join("fairlead-plan.json")
 }
 
-fn head_matches(cwd: &Path, expected: &str) -> Result<(), String> {
+fn rev_parse(cwd: &Path, rev: &str) -> Option<String> {
     let out = Command::new("git")
         .arg("-C")
         .arg(cwd)
-        .args(["rev-parse", "HEAD"])
+        .args(["rev-parse", "--verify", "--quiet", "--end-of-options"])
+        .arg(format!("{rev}^{{commit}}"))
         .output()
-        .map_err(|e| format!("couldn't run git: {e}"))?;
-    let actual = String::from_utf8_lossy(&out.stdout).trim().to_string();
-    let same = !actual.is_empty()
-        && !expected.is_empty()
-        && (actual.starts_with(expected) || expected.starts_with(&actual));
-    if same {
+        .ok()?;
+    let sha = String::from_utf8_lossy(&out.stdout).trim().to_string();
+    (out.status.success() && !sha.is_empty()).then_some(sha)
+}
+
+fn head_matches(cwd: &Path, expected: &str) -> Result<(), String> {
+    let actual = rev_parse(cwd, "HEAD").ok_or("couldn't read HEAD")?;
+    let wanted = rev_parse(cwd, expected)
+        .ok_or_else(|| format!("--head {expected} isn't a commit in this clone"))?;
+    if actual == wanted {
         return Ok(());
     }
     Err(format!(
-        "HEAD is {actual}, not {expected}: check out the head commit before planning, since the plan reads the working tree"
+        "HEAD is {actual}, not {wanted}: check out the head commit before planning, since the plan reads the working tree"
     ))
 }
 

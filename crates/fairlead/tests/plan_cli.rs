@@ -227,11 +227,25 @@ fn ci_plan_writes_the_plan_file_and_github_outputs() {
 #[test]
 fn ci_plan_refuses_a_head_that_isnt_checked_out() {
     let dir = project("ci-head");
-    let out = fairlead_in(
-        &dir,
-        &["ci", "plan", "--base", "main", "--head", "0123456789abcdef"],
-    );
-    assert_eq!(out.status.code(), Some(2));
+    let sha = |dir: &Path| {
+        let out = Command::new("git")
+            .args(["rev-parse", "HEAD"])
+            .current_dir(dir)
+            .output()
+            .unwrap();
+        String::from_utf8(out.stdout).unwrap().trim().to_string()
+    };
+    let first = sha(&dir);
+    std::fs::write(dir.join("later.txt"), "later\n").unwrap();
+    git(&dir, &["add", "-A"]);
+    git(&dir, &["commit", "-q", "-m", "later"]);
+    let head = sha(&dir);
+    let plan = |rev: &str| fairlead_in(&dir, &["ci", "plan", "--base", "main", "--head", rev]);
+    assert_eq!(plan(&head[..7]).status.code(), Some(0));
+    for rev in [first.as_str(), &head[..1], "0123456789abcdef"] {
+        assert_eq!(plan(rev).status.code(), Some(2), "--head {rev}");
+    }
+    let out = plan(&first);
     assert!(String::from_utf8_lossy(&out.stderr).contains("check out the head commit"));
 }
 

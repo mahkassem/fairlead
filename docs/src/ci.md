@@ -21,7 +21,9 @@ jobs:
             --head ${{ github.event.pull_request.head.sha }}
       - run: npm ci
         if: steps.plan.outputs.tests != '0' || steps.plan.outputs.checks != ''
-      - run: fairlead ci run --plan "${{ steps.plan.outputs.plan }}"
+      - run: fairlead ci run --plan "$PLAN"
+        env:
+          PLAN: ${{ steps.plan.outputs.plan }}
 ```
 
 Pin the action and `actions/checkout` to a commit SHA in your own workflows.
@@ -54,3 +56,5 @@ Nothing is keyed to a runner name or folder layout. `invocations` can feed a job
 ## `fairlead ci run --plan PATH`
 
 Runs each invocation's argv in its working directory, in order, without a shell, and exits 1 if any failed, after running the rest. `--fail-fast` stops at the first failure. A plan of another version is refused with exit code 2.
+
+Without a shell, Windows finds only `.exe` programs on `PATH`: a runner that starts `npx` or another `.cmd` shim needs the full name, such as `npx.cmd`, in its argv.
