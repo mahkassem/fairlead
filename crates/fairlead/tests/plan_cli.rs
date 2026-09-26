@@ -152,3 +152,18 @@ fn config_check_names_test_files_no_runner_matches() {
     assert!(String::from_utf8_lossy(&out.stderr)
         .contains("test/b.test.ts: no [[tests.runners]] matches it"));
 }
+
+#[test]
+fn explicit_files_resolve_dot_dot_and_expand_directories() {
+    let dir = project("files-norm");
+    let up = fairlead_in(&dir.join("test"), &["plan", "--files", "../src/a.ts", "--json"]);
+    let plan: serde_json::Value = serde_json::from_slice(&up.stdout).unwrap();
+    assert_eq!(plan["changed"][0]["path"], "src/a.ts");
+    assert_eq!(plan["tests"][0]["path"], "test/a.test.ts");
+    let folder = fairlead_in(&dir, &["plan", "--files", "src", "--json"]);
+    let plan: serde_json::Value = serde_json::from_slice(&folder.stdout).unwrap();
+    assert_eq!(plan["changed"].as_array().unwrap().len(), 2);
+    assert_eq!(plan["tests"].as_array().unwrap().len(), 2);
+    let outside = fairlead_in(&dir, &["plan", "--files", "../../elsewhere.ts"]);
+    assert_eq!(outside.status.code(), Some(2));
+}

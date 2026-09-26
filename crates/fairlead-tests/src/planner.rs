@@ -7,7 +7,7 @@ use std::collections::BTreeSet;
 use fairlead_core::config::{Config, Unresolved};
 use fairlead_core::plan::{Change, Plan, Reason, Status, Warning, VERSION};
 use fairlead_lang::deleted::attach_deleted;
-use fairlead_lang::tree::parent;
+use fairlead_lang::tree::{parent, Tree};
 use fairlead_lang::Scan;
 
 use crate::checks::checks;
@@ -93,7 +93,7 @@ pub fn plan(scan: &mut Scan, config: &Config, input: Input) -> Result<Plan, Stri
     let ignore = patterns(config.plan.ignore.items())?;
     let ignored = changed
         .iter()
-        .filter(|p| ignore.iter().any(|g| g.is_match(p)))
+        .filter(|p| !Tree::is_source(p) && ignore.iter().any(|g| g.is_match(p)))
         .filter(|p| {
             scan.graph
                 .id(p)
@@ -164,6 +164,12 @@ pub fn plan(scan: &mut Scan, config: &Config, input: Input) -> Result<Plan, Stri
     })
 }
 
+/// A workspace package's own `package.json`, which stands for the package.
+pub fn is_manifest(cx: &Context, path: &str) -> bool {
+    let dir = parent(path);
+    path.ends_with("package.json") && cx.scan.packages.iter().any(|p| p.dir == dir)
+}
+
 /// The walk from every changed path that isn't ignored, with a changed
 /// package manifest standing for every file in its package.
 pub fn start_walk(cx: &Context) -> Walk {
@@ -173,10 +179,8 @@ pub fn start_walk(cx: &Context) -> Walk {
         if let Some(id) = graph.id(path) {
             starts.push((id, Via::Start));
         }
-        let dir = parent(path);
-        let is_manifest =
-            path.ends_with("package.json") && cx.scan.packages.iter().any(|p| p.dir == dir);
-        if is_manifest {
+        if is_manifest(cx, path) {
+            let dir = parent(path);
             let prefix = format!("{dir}/");
             for (id, file) in graph.files.iter().enumerate() {
                 if file.starts_with(&prefix) && file != path {

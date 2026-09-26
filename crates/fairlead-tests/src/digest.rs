@@ -38,7 +38,8 @@ pub fn plan_id(
     changes: &[Change],
 ) -> String {
     let mut hasher = Sha256::new();
-    for part in [config_digest, tree_hash, base.unwrap_or("")] {
+    let version = env!("CARGO_PKG_VERSION");
+    for part in [version, config_digest, tree_hash, base.unwrap_or("")] {
         hasher.update(part.as_bytes());
         hasher.update([0]);
     }

@@ -23,7 +23,6 @@
       "type": "object"
     },
     "CheckSelection": {
-      "additionalProperties": false,
       "properties": {
         "id": {
           "type": "string"
@@ -39,7 +38,6 @@
       "type": "object"
     },
     "Invocation": {
-      "additionalProperties": false,
       "properties": {
         "argv": {
           "items": {
@@ -78,7 +76,6 @@
       "description": "The first reason a test or check was selected.",
       "oneOf": [
         {
-          "additionalProperties": false,
           "description": "A changed path matched `plan.run_all`.",
           "properties": {
             "kind": {
@@ -96,7 +93,6 @@
           "type": "object"
         },
         {
-          "additionalProperties": false,
           "description": "The test file itself changed.",
           "properties": {
             "kind": {
@@ -110,7 +106,6 @@
           "type": "object"
         },
         {
-          "additionalProperties": false,
           "description": "The test depends on a changed file: the chain runs from that file\nto the test, one edge per step.",
           "properties": {
             "chain": {
@@ -131,7 +126,6 @@
           "type": "object"
         },
         {
-          "additionalProperties": false,
           "description": "An owner rule's `covers` matched a changed path.",
           "properties": {
             "changed": {
@@ -159,7 +153,6 @@
           "type": "object"
         },
         {
-          "additionalProperties": false,
           "description": "Canary tests run in every plan.",
           "properties": {
             "kind": {
@@ -173,7 +166,6 @@
           "type": "object"
         },
         {
-          "additionalProperties": false,
           "description": "A changed file nothing reaches widened to this test.",
           "properties": {
             "kind": {
@@ -195,7 +187,6 @@
           "type": "object"
         },
         {
-          "additionalProperties": false,
           "description": "A check's `paths` matched this many changed files.",
           "properties": {
             "kind": {
@@ -215,7 +206,6 @@
           "type": "object"
         },
         {
-          "additionalProperties": false,
           "description": "A check watches a module the change affects.",
           "properties": {
             "kind": {
@@ -236,7 +226,6 @@
           "type": "object"
         },
         {
-          "additionalProperties": false,
           "description": "A check with no `paths` or `modules` runs in every plan.",
           "properties": {
             "kind": {
@@ -270,7 +259,6 @@
       "type": "string"
     },
     "TestSelection": {
-      "additionalProperties": false,
       "properties": {
         "class": {
           "$ref": "#/$defs/TestClass"
@@ -302,7 +290,6 @@
       "type": "object"
     },
     "UnreachedFile": {
-      "additionalProperties": false,
       "properties": {
         "module": {
           "type": [
@@ -325,7 +312,6 @@
       "type": "object"
     },
     "Warning": {
-      "additionalProperties": false,
       "properties": {
         "code": {
           "type": "string"
@@ -348,7 +334,6 @@
     }
   },
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "additionalProperties": false,
   "properties": {
     "all": {
       "description": "Everything is selected.",

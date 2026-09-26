@@ -1,6 +1,7 @@
 //! The plan, version 1: a public contract with its own JSON Schema. New
-//! fields are additive; anything else bumps `version`. It lives in core so
-//! replay and receipts can read plans without the planner.
+//! fields are additive, so readers accept fields they don't know and optional
+//! fields are left out when empty; anything else bumps `version`. It lives in
+//! core so replay and receipts can read plans without the planner.
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -30,7 +31,6 @@ pub struct Change {
 pub const VERSION: u32 = 1;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
-#[serde(deny_unknown_fields)]
 pub struct Plan {
     pub version: u32,
     /// Stable for the same config, tree, base and changes.
@@ -42,6 +42,7 @@ pub struct Plan {
     /// `worktree:` and a hash of every file's path and blob id.
     pub tree_hash: String,
     /// The commit changes were measured from, when there is one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub base: Option<String>,
     /// HEAD's commit when the working tree matches it, else `worktree`.
     pub head: String,
@@ -60,17 +61,17 @@ pub struct Plan {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
-#[serde(deny_unknown_fields)]
 pub struct TestSelection {
     pub path: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub module: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub runner: Option<String>,
     pub class: TestClass,
     pub reason: Reason,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
-#[serde(deny_unknown_fields)]
 pub struct CheckSelection {
     pub id: String,
     pub reason: Reason,
@@ -84,7 +85,6 @@ pub enum InvocationKind {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
-#[serde(deny_unknown_fields)]
 pub struct Invocation {
     /// The runner or check id.
     pub id: String,
@@ -95,9 +95,9 @@ pub struct Invocation {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
-#[serde(deny_unknown_fields)]
 pub struct UnreachedFile {
     pub path: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub module: Option<String>,
     /// What was selected for it: `module`, `all`, or `none` under `warn`.
     pub selected: String,
@@ -105,7 +105,7 @@ pub struct UnreachedFile {
 
 /// The first reason a test or check was selected.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
-#[serde(tag = "kind", rename_all = "kebab-case", deny_unknown_fields)]
+#[serde(tag = "kind", rename_all = "kebab-case")]
 pub enum Reason {
     /// A changed path matched `plan.run_all`.
     RunAll { path: String },
@@ -133,7 +133,6 @@ pub enum Reason {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
-#[serde(deny_unknown_fields)]
 pub struct Warning {
     pub code: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]

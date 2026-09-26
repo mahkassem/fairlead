@@ -325,3 +325,23 @@ fn a_test_no_runner_matches_fails_the_plan_naming_it() {
         "{err}"
     );
 }
+
+#[test]
+fn an_ignored_location_never_swallows_a_source_file() {
+    let mut files = WORKSPACE.to_vec();
+    files.push(("docs/site.config.ts", "export default {};\n"));
+    let dir = repo("ignore-source", &files);
+    let plan = run(&dir, &config(VITEST), vec![modified("docs/site.config.ts")]);
+    assert!(plan.ignored.is_empty());
+    assert_eq!(plan.unreached[0].path, "docs/site.config.ts");
+    assert!(plan.all, "an unreached root file widens to everything");
+}
+
+#[test]
+fn deleting_a_test_or_changing_a_manifest_is_not_reported_unreached() {
+    let dir = repo("not-unreached", WORKSPACE);
+    let gone = run(&dir, &config(VITEST), vec![deleted("packages/core/test/gone.test.ts")]);
+    assert!(gone.unreached.is_empty() && !gone.all, "{:?}", gone.unreached);
+    let manifest = run(&dir, &config(VITEST), vec![modified("packages/docs/package.json")]);
+    assert!(manifest.unreached.is_empty(), "{:?}", manifest.unreached);
+}

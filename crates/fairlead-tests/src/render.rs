@@ -16,7 +16,7 @@ pub fn reason(reason: &Reason) -> String {
             covers,
             changed,
         } => {
-            format!("owner rule {}: covers {covers} ({changed})", rule + 1)
+            format!("tests.owners[{rule}]: covers {covers} ({changed})")
         }
         Reason::Canary => "canary".into(),
         Reason::Unreached { path, policy } => format!("unreached {path} ({policy})"),

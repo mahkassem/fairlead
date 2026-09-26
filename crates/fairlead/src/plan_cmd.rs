@@ -7,6 +7,7 @@ use std::process::ExitCode;
 use clap::Args;
 use fairlead_core::config::{self, Config, LoadOptions};
 use fairlead_core::plan::{json_schema, Change, Plan, Status};
+use fairlead_lang::tree::Tree;
 use fairlead_lang::{build, Scan};
 use fairlead_tests::{digest, explain::explain, git, plan, render, Input};
 
@@ -30,27 +31,49 @@ pub struct Planned {
     pub config: Config,
 }
 
-fn explicit(root: &Path, cwd: &Path, files: &[String]) -> Vec<Change> {
-    files
-        .iter()
-        .map(|f| {
-            let abs = cwd.join(f);
-            let rel = abs
-                .strip_prefix(root)
-                .map(|r| r.to_string_lossy().replace('\\', "/"))
-                .unwrap_or_else(|_| f.replace('\\', "/"));
-            let status = if abs.exists() {
-                Status::Modified
-            } else {
-                Status::Deleted
-            };
-            Change {
+/// Explicit paths as changes: relative to `cwd`, `..` resolved, a directory
+/// standing for every file under it, and a missing path counted as deleted.
+fn explicit(root: &Path, cwd: &Path, tree: &Tree, files: &[String]) -> Result<Vec<Change>, String> {
+    let base = fairlead_lang::tree::relative(root, cwd).unwrap_or_default();
+    let mut changes = Vec::new();
+    for f in files {
+        let given = Path::new(f);
+        let rel = if given.is_absolute() {
+            let abs = std::fs::canonicalize(given).unwrap_or_else(|_| given.to_path_buf());
+            fairlead_lang::tree::relative(root, &abs)
+        } else {
+            fairlead_lang::tree::normalize(&base, &f.replace('\\', "/"))
+        };
+        let rel = rel.ok_or_else(|| format!("{f} is outside the repository"))?;
+        let prefix = format!("{rel}/");
+        let under: Vec<&String> = tree
+            .files
+            .iter()
+            .filter(|p| p.starts_with(&prefix))
+            .collect();
+        if tree.contains(&rel) {
+            changes.push(Change {
                 path: rel,
-                status,
+                status: Status::Modified,
                 from: None,
-            }
-        })
-        .collect()
+            });
+        } else if !under.is_empty() {
+            changes.extend(under.into_iter().map(|p| Change {
+                path: p.clone(),
+                status: Status::Modified,
+                from: None,
+            }));
+        } else {
+            changes.push(Change {
+                path: rel,
+                status: Status::Deleted,
+                from: None,
+            });
+        }
+    }
+    changes.sort();
+    changes.dedup();
+    Ok(changes)
 }
 
 pub fn make(cwd: &Path, changes: &Changes) -> Result<Planned, String> {
@@ -74,6 +97,8 @@ pub fn make(cwd: &Path, changes: &Changes) -> Result<Planned, String> {
     };
     let root = std::fs::canonicalize(&root).unwrap_or(root);
     let cwd = std::fs::canonicalize(cwd).unwrap_or_else(|_| cwd.to_path_buf());
+    let mut scan = build(&root, &loaded.config)
+        .map_err(|e| format!("could not read {}: {e}", root.display()))?;
     let (changes, base) = if changes.files.is_empty() {
         let base = match &changes.base {
             Some(b) => b.clone(),
@@ -84,10 +109,8 @@ pub fn make(cwd: &Path, changes: &Changes) -> Result<Planned, String> {
         })?;
         (git::changes(&root, &merge_base)?, Some(merge_base))
     } else {
-        (explicit(&root, &cwd, &changes.files), None)
+        (explicit(&root, &cwd, &scan.tree, &changes.files)?, None)
     };
-    let mut scan = build(&root, &loaded.config)
-        .map_err(|e| format!("could not read {}: {e}", root.display()))?;
     let clean = git::clean_tree_id(&root);
     let head = match &clean {
         Some(_) => git::head(&root).unwrap_or_else(|| "worktree".into()),

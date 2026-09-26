@@ -5,7 +5,7 @@
 ```sh
 fairlead plan                      # changes since the remote's default branch
 fairlead plan --base main --json   # the plan as JSON (schema below)
-fairlead plan --files src/a.ts     # plan for these paths, no git needed
+fairlead plan --files src/a.ts     # plan for these files or directories, no git needed
 fairlead test --explain test/a.test.ts   # why a test or check is in, or isn't
 ```
 
@@ -15,7 +15,7 @@ The working tree is always the head: in CI that's the checked-out commit. The ba
 
 1. **Changed paths.** `git diff --name-status --find-renames` from the base to the working tree, plus untracked files. A rename counts both paths; its old path counts as deleted.
 2. **Run everything.** A changed path matching `plan.run_all` selects every test and check. The defaults are lockfiles, root manifests, tsconfig files, test-runner and task-runner config, and CI workflows.
-3. **Ignored paths.** A changed path matching `plan.ignore` selects nothing by itself and is listed under `ignored`, unless a file references it, in which case it counts like any other change. The defaults are root Markdown, `docs/**`, READMEs, changelogs and licences.
+3. **Ignored paths.** A changed path matching `plan.ignore` selects nothing by itself and is listed under `ignored`, unless a file references it, in which case it counts like any other change. A source file is never ignored, so a config file under `docs/` still counts. The defaults are root Markdown, `docs/**`, READMEs, changelogs and licences.
 4. **Deleted files.** A deleted file goes back into the graph as a phantom, joined to every import that now fails but would resolve to it, every path literal that names it, and its package, so whatever depended on it still counts.
 5. **Package manifests.** A changed `<package>/package.json` counts as every file in that package changing.
 6. **The walk.** From every changed file to everything that depends on it, over [import graph](graph.md) edges. A file with a non-literal dynamic import, a local import that doesn't resolve, or a tsconfig that couldn't be applied depends on every file in its module; at the root, on every file.
@@ -46,7 +46,7 @@ covers = ["services/{name}/src/**"]
 
 ## Unreached files
 
-A changed file that isn't a test and has no test anywhere among the files depending on it is *unreached*: something the graph can't see uses it, like a setup file named only in a runner config. It's always listed under `unreached` with a warning, so you can write the owner rule that covers it. Unless one already does, `tests.unreached` decides what it selects:
+A changed file that isn't a test and has no test anywhere among the files depending on it is *unreached* (a deleted test file and a package manifest aren't, since there's nothing left to run for one and the other already stands for its package): something the graph can't see uses it, like a setup file named only in a runner config. It's always listed under `unreached` with a warning, so you can write the owner rule that covers it. Unless one already does, `tests.unreached` decides what it selects:
 
 | `tests.unreached` | Selects |
 | --- | --- |
@@ -73,9 +73,9 @@ Every test and check carries the reason that put it in first: `run-all`, `change
 
 ## Plan JSON, version 1
 
-`fairlead plan --json` prints the plan; `--out plan.json` also writes it. The shape is a public contract with a version field: new fields are additive, anything else bumps the version. The schema is committed as [`plan-v1.schema.json`](plan-v1.schema.json) and printed by `fairlead plan --schema`.
+`fairlead plan --json` prints the plan; `--out PATH` also writes it. Write it outside the working tree, or ignore it in git, or the next plan counts it as a change. The shape is a public contract with a version field: new fields are additive, so a reader must accept fields it doesn't know, and optional fields are left out when empty; anything else bumps the version. The schema is committed as [`plan-v1.schema.json`](plan-v1.schema.json) and printed by `fairlead plan --schema`.
 
-- `plan_id`: stable for the same config, tree, base and changes.
+- `plan_id`: stable for the same Fairlead version, config, tree, base and changes.
 - `config_digest`: `sha256:` of the merged config.
 - `tree_hash`: `HEAD`'s git tree id when the working tree is clean, else `worktree:` and a hash of every file's path and blob id.
 - `head`: `HEAD`'s commit when the working tree is clean, else `worktree`.
