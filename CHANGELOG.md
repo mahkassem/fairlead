@@ -31,20 +31,20 @@ Replayed from each project's CI history (run 5 of the weekly benchmarks, planned
 
 Selection is recorded, not yet a gate: the median plan still selects most test files (Effect 98.6%, pnpm 100.0%, vitest 98.7%), and 31.7%, 84.8% and 34.9% of plans ran everything, mostly for CI config, lockfile and `package.json` changes. Narrowing that is the next milestone's work.
 
-A full graph build without the parse cache takes 1.33 s on Effect (1,679 sources), 1.10 s on pnpm (1,973) and 0.48 s on vitest (2,293) on 4 cores, with the files already in the OS cache; the first read from a cold disk took 2.3 to 2.6 s.
+A full graph build without the parse cache takes 1.19 s on Effect, 1.02 s on pnpm and 0.41 s on vitest on 4 cores, under the 1.5 s budget, which CI checks on every pull request ([Import graph](https://mahkassem.github.io/fairlead/docs/graph.html#speed)). That's with the files already in the operating system's cache; a first read from a cold disk takes longer.
 
 Quarantined, each until 2026-12-31 and applied only while the data bears it out:
 
 - Effect `packages/sql/mysql2/test/Persistence.test.ts` in the first test shard: times out after 30 s waiting on MySQL on changes that touch neither; 21 failures across 19 pull requests.
 - Effect `packages/sql/mysql2/test/KeyValueStore.test.ts` in the second test shard: its setup hook times out waiting on MySQL; 9 failures across 9 pull requests.
 - Effect `packages/sql/d1/test/Resolver.test.ts` in the second Node shard: times out after 5 s against the local D1 engine; 7 failures across 7 pull requests.
-- vitest `test/typescript/test/typechecker.test.ts` in the Windows unit job only: out-of-memory crashes and missing-command cases; 100 failures across 54 pull requests, while the same job passed 356 times.
+- vitest `test/typescript/test/typechecker.test.ts` in the Windows unit job only: out-of-memory crashes and missing-command cases. It was declared on 60 failures across 36 pull requests, while the same job passed 356 times, and has absorbed 100 failures across 54 pull requests.
 
 Every miss, with its cause:
 
 - Effect, 10: database and service tests failing together on unrelated changes (`sql-libsql` Client 3, `platform-node` NodeRedis 1, SqlRunnerStorage 1, `sql-pg` Client 1 on a LISTEN notification timeout, `sql-libsql` Resolver 1 on a 5 s timeout); `toArbitrary.test.ts` 1, a property test that failed after 8 random cases; `openapi-generator` 2, a native module error (`Failed to recover TsconfigCache type from napi value`) under Deno on a change to `platform-deno`.
 - pnpm, 2: `releasing/commands/test/change/index.test.ts` on Linux and Windows, a missing `CHANGELOG.md` fixture, on a pull request that only edited a test helper in another package.
-- vitest, 23: headless browser specs 14 (`runner.test.ts` 9, mostly a 249 ms locator click timeout that recurs across unrelated pull requests; `trace.test.ts`, `bail-out.test.ts`, `locators.test.ts`, `server-url.test.ts` and `to-match-screenshot.test.ts` 1 each, timing and Windows snapshot mismatches); `detect-async-leaks.test.ts` 6, the same leak assertion across unrelated pull requests and bases; `list.test.ts` and `open-telemetry.test.ts` 2, a browser that didn't close within 10 s; `coverage-test/reporters.test.ts` 1, a 15 s timeout on Windows.
+- vitest, 23: headless browser specs 14 (`runner.test.ts` 9, fixtures failing inside it: a 249 ms locator click timeout in 5, a CDP events test in 3 and a clipboard test in 1, each recurring across unrelated pull requests; `trace.test.ts`, `bail-out.test.ts`, `locators.test.ts`, `server-url.test.ts` and `to-match-screenshot.test.ts` 1 each, timing and Windows snapshot mismatches); `detect-async-leaks.test.ts` 6, the same leak assertion across unrelated pull requests and bases; `list.test.ts` and `open-telemetry.test.ts` 2, a browser that didn't close within 10 s; `coverage-test/reporters.test.ts` 1, a 15 s timeout on Windows.
 
 The bar we set for this release was 100% recall on failures a change could have caused. By our reading of the logs, none of these misses is one, but that's a judgement, not a measurement: literal 100% recall wasn't reached on any repository, and the misses above are the whole list.
 
