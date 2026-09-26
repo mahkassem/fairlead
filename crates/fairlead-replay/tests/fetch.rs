@@ -4,32 +4,68 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Mutex;
 
 use fairlead_replay::fetch::{fetch, merge_queue_branch, Options, Stop};
-use fairlead_replay::github::Http;
+use fairlead_replay::github::{Http, Reply};
 use serde_json::{json, Value};
 
 struct Recorded {
     responses: BTreeMap<String, Value>,
     /// Paths answered with this status instead.
     status: BTreeMap<String, u16>,
+    /// Answers given once each, before the ones above, in order; a path of
+    /// `log:<job id>` answers that job's log.
+    once: Mutex<Vec<(String, Reply<Value>)>>,
+    paused: Mutex<Vec<u64>>,
     logs: BTreeMap<u64, String>,
     asked: Mutex<Vec<String>>,
 }
 
 impl Http for Recorded {
-    fn get_json(&self, path: &str) -> Result<(u16, Value), String> {
+    fn get_json(&self, path: &str) -> Result<Reply<Value>, String> {
         self.asked.lock().unwrap().push(path.to_string());
         let key = path.split('?').next().unwrap();
+        if let Some(reply) = self.take_once(key) {
+            return Ok(reply);
+        }
         if let Some(status) = self.status.get(key) {
-            return Ok((*status, Value::Null));
+            return Ok(Reply::new(*status, Value::Null));
         }
         Ok(self
             .responses
             .get(key)
-            .map_or((404, Value::Null), |v| (200, v.clone())))
+            .map_or(Reply::new(404, Value::Null), |v| Reply::new(200, v.clone())))
     }
 
-    fn get_log(&self, _repo: &str, job_id: u64) -> Result<Option<String>, String> {
-        Ok(self.logs.get(&job_id).cloned())
+    fn get_log(&self, _repo: &str, job_id: u64) -> Result<Reply<Option<String>>, String> {
+        self.asked.lock().unwrap().push(format!("log:{job_id}"));
+        if let Some(reply) = self.take_once(&format!("log:{job_id}")) {
+            return Ok(Reply {
+                body: reply.body.as_str().map(str::to_string),
+                status: reply.status,
+                message: reply.message,
+                retry_after: reply.retry_after,
+                remaining: reply.remaining,
+            });
+        }
+        Ok(match self.logs.get(&job_id) {
+            Some(log) => Reply::new(200, Some(log.clone())),
+            None => Reply::new(404, None),
+        })
+    }
+
+    fn pause(&self, seconds: u64) {
+        self.paused.lock().unwrap().push(seconds);
+    }
+}
+
+impl Recorded {
+    fn take_once(&self, key: &str) -> Option<Reply<Value>> {
+        let mut once = self.once.lock().unwrap();
+        let i = once.iter().position(|(p, _)| p == key)?;
+        Some(once.remove(i).1)
+    }
+
+    fn answer_once(&self, key: &str, reply: Reply<Value>) {
+        self.once.lock().unwrap().push((key.to_string(), reply));
     }
 }
 
@@ -80,6 +116,8 @@ fn api() -> Recorded {
     Recorded {
         responses,
         status: BTreeMap::new(),
+        once: Mutex::new(Vec::new()),
+        paused: Mutex::new(Vec::new()),
         logs,
         asked: Mutex::new(Vec::new()),
     }
@@ -280,4 +318,115 @@ fn a_fork_pull_request_is_found_by_its_head_branch() {
     assert!(asked
         .iter()
         .any(|p| p.contains("/pulls?head=someone:fix-thing")));
+}
+
+fn limited() -> Reply<Value> {
+    Reply {
+        message: "You have exceeded a secondary rate limit. Please wait a few minutes.".into(),
+        ..Reply::new(403, Value::Null)
+    }
+}
+
+#[test]
+fn a_secondary_rate_limit_is_waited_out_and_retried() {
+    let http = api();
+    http.answer_once("/repos/o/r/check-runs/101/annotations", limited());
+    let (rows, stop) = fetch(&http, &opts(None), &BTreeSet::new());
+    assert_eq!(stop, Stop::Complete);
+    assert_eq!(*http.paused.lock().unwrap(), [60]);
+    let first = rows
+        .iter()
+        .find(|r| r.run_id == 11 && r.attempt == 1)
+        .unwrap();
+    assert_eq!(
+        first.jobs[0].annotations.len(),
+        1,
+        "the retry's answer is used"
+    );
+}
+
+#[test]
+fn a_limit_that_persists_stops_after_three_waits_and_a_plain_refusal_at_once() {
+    let http = api();
+    for _ in 0..4 {
+        http.answer_once("/repos/o/r/commits/aaa/pulls", limited());
+    }
+    let (_, stop) = fetch(&http, &opts(None), &BTreeSet::new());
+    assert!(matches!(stop, Stop::Error(e) if e.contains("403")));
+    assert_eq!(*http.paused.lock().unwrap(), [60, 120, 180]);
+    let mut plain = api();
+    plain
+        .status
+        .insert("/repos/o/r/commits/aaa/pulls".into(), 403);
+    let (_, stop) = fetch(&plain, &opts(None), &BTreeSet::new());
+    assert!(matches!(stop, Stop::Error(_)));
+    assert!(
+        plain.paused.lock().unwrap().is_empty(),
+        "no message, no wait"
+    );
+}
+
+#[test]
+fn each_lookup_is_one_request() {
+    let http = api();
+    let _ = fetch(&http, &opts(None), &BTreeSet::new());
+    let asked = http.asked.lock().unwrap();
+    let annotations = asked
+        .iter()
+        .filter(|p| p.contains("/check-runs/101/annotations"))
+        .count();
+    let pulls = asked
+        .iter()
+        .filter(|p| p.contains("/commits/aaa/pulls"))
+        .count();
+    assert_eq!((annotations, pulls), (1, 1), "{asked:?}");
+}
+
+#[test]
+fn a_rate_limited_log_is_waited_for_not_recorded_empty() {
+    let http = api();
+    http.answer_once("log:101", limited());
+    let (rows, stop) = fetch(&http, &opts(None), &BTreeSet::new());
+    assert_eq!(stop, Stop::Complete);
+    let first = rows
+        .iter()
+        .find(|r| r.run_id == 11 && r.attempt == 1)
+        .unwrap();
+    assert_eq!(first.jobs[0].log.len(), 3, "the retry's log is kept");
+    assert_eq!(*http.paused.lock().unwrap(), [60]);
+    let refused = api();
+    refused.answer_once("log:101", Reply::new(403, Value::Null));
+    let (rows, stop) = fetch(&refused, &opts(None), &BTreeSet::new());
+    assert!(matches!(stop, Stop::Error(e) if e.contains("log of job 101")));
+    assert!(
+        rows.iter().all(|r| !(r.run_id == 11 && r.attempt == 1)),
+        "no row without its log"
+    );
+}
+
+#[test]
+fn retry_after_is_honoured_and_an_exhausted_budget_stops_at_once() {
+    let http = api();
+    http.answer_once(
+        "/repos/o/r/commits/aaa/pulls",
+        Reply {
+            retry_after: Some(7),
+            ..limited()
+        },
+    );
+    let (_, stop) = fetch(&http, &opts(None), &BTreeSet::new());
+    assert_eq!(stop, Stop::Complete);
+    assert_eq!(*http.paused.lock().unwrap(), [7]);
+    let spent = api();
+    spent.answer_once(
+        "/repos/o/r/commits/aaa/pulls",
+        Reply {
+            remaining: Some(0),
+            message: "API rate limit exceeded for installation".into(),
+            ..Reply::new(403, Value::Null)
+        },
+    );
+    let (_, stop) = fetch(&spent, &opts(None), &BTreeSet::new());
+    assert!(matches!(stop, Stop::Error(e) if e.contains("API rate limit exceeded")));
+    assert!(spent.paused.lock().unwrap().is_empty());
 }

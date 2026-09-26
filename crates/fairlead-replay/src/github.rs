@@ -7,11 +7,39 @@ use std::process::{Command, Stdio};
 
 use serde_json::Value;
 
+/// A response: its status and body, GitHub's `message` when it sent one,
+/// and the headers that say whether and how long to wait.
+#[derive(Debug, Clone, Default)]
+pub struct Reply<T> {
+    pub status: u16,
+    pub body: T,
+    pub message: String,
+    pub retry_after: Option<u64>,
+    pub remaining: Option<u64>,
+}
+
+impl<T> Reply<T> {
+    pub fn new(status: u16, body: T) -> Reply<T> {
+        Reply {
+            status,
+            body,
+            message: String::new(),
+            retry_after: None,
+            remaining: None,
+        }
+    }
+}
+
 pub trait Http {
-    /// `(status, body)` for an API path such as `/repos/o/r/actions/runs`.
-    fn get_json(&self, path: &str) -> Result<(u16, Value), String>;
-    /// A job's raw log, or `None` when GitHub no longer has it.
-    fn get_log(&self, repo: &str, job_id: u64) -> Result<Option<String>, String>;
+    /// The JSON at an API path such as `/repos/o/r/actions/runs`.
+    fn get_json(&self, path: &str) -> Result<Reply<Value>, String>;
+    /// A job's raw log: `Some` with status 200, `None` with 404 or 410 when
+    /// GitHub no longer has it, or the API's refusal.
+    fn get_log(&self, repo: &str, job_id: u64) -> Result<Reply<Option<String>>, String>;
+    /// Waits before a retry.
+    fn pause(&self, seconds: u64) {
+        std::thread::sleep(std::time::Duration::from_secs(seconds));
+    }
 }
 
 pub struct Curl {
@@ -93,38 +121,58 @@ fn split_response(text: &str) -> (u16, &str, &str) {
     }
 }
 
-fn location(head: &str) -> Option<String> {
+fn header(head: &str, name: &str) -> Option<String> {
     head.lines()
         .find_map(|l| {
             l.split_once(':')
-                .filter(|(k, _)| k.eq_ignore_ascii_case("location"))
+                .filter(|(k, _)| k.trim().eq_ignore_ascii_case(name))
         })
         .map(|(_, v)| v.trim().to_string())
 }
 
+fn location(head: &str) -> Option<String> {
+    header(head, "location")
+}
+
+fn reply<T>(status: u16, head: &str, raw: &str, body: T) -> Reply<T> {
+    let message = serde_json::from_str::<Value>(raw)
+        .ok()
+        .and_then(|v| v.get("message").and_then(Value::as_str).map(str::to_string))
+        .unwrap_or_default();
+    Reply {
+        status,
+        body,
+        message,
+        retry_after: header(head, "retry-after").and_then(|v| v.parse().ok()),
+        remaining: header(head, "x-ratelimit-remaining").and_then(|v| v.parse().ok()),
+    }
+}
+
 impl Http for Curl {
-    fn get_json(&self, path: &str) -> Result<(u16, Value), String> {
-        let (status, _, body) = self.request(&format!("{}{path}", self.api), true)?;
+    fn get_json(&self, path: &str) -> Result<Reply<Value>, String> {
+        let (status, head, body) = self.request(&format!("{}{path}", self.api), true)?;
         let value = serde_json::from_str(&body).unwrap_or(Value::Null);
-        Ok((status, value))
+        Ok(reply(status, &head, &body, value))
     }
 
-    fn get_log(&self, repo: &str, job_id: u64) -> Result<Option<String>, String> {
+    fn get_log(&self, repo: &str, job_id: u64) -> Result<Reply<Option<String>>, String> {
         let (status, head, body) = self.request(
             &format!("{}/repos/{repo}/actions/jobs/{job_id}/logs", self.api),
             true,
         )?;
-        match status {
-            200 => Ok(Some(body)),
+        Ok(match status {
+            200 => Reply::new(200, Some(body)),
+            // Log storage refusing a signed URL means the log is gone.
             301 | 302 | 303 | 307 | 308 => match location(&head) {
-                Some(url) => {
-                    let (status, _, body) = self.request(&url, false)?;
-                    Ok((status == 200).then_some(body))
-                }
-                None => Ok(None),
+                Some(url) => match self.request(&url, false)? {
+                    (200, _, body) => Reply::new(200, Some(body)),
+                    _ => Reply::new(410, None),
+                },
+                None => Reply::new(410, None),
             },
-            _ => Ok(None),
-        }
+            403 | 429 => reply(status, &head, &body, None),
+            _ => Reply::new(410, None),
+        })
     }
 }
 
@@ -143,6 +191,19 @@ mod tests {
         let plain = "HTTP/2 200\r\nx: y\r\n\r\nHTTP/1.1 is in the body";
         assert_eq!(split_response(plain).0, 200);
         assert_eq!(split_response(plain).2, "HTTP/1.1 is in the body");
+    }
+
+    #[test]
+    fn a_refusal_carries_its_message_and_wait_headers() {
+        let head = "HTTP/2 403\r\nRetry-After: 42\r\nx-ratelimit-remaining: 17";
+        let r = reply(
+            403,
+            head,
+            r#"{"message":"You have exceeded a secondary rate limit."}"#,
+            (),
+        );
+        assert_eq!((r.retry_after, r.remaining), (Some(42), Some(17)));
+        assert!(r.message.contains("secondary rate limit"));
     }
 
     #[test]
