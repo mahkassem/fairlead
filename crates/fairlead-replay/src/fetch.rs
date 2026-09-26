@@ -11,7 +11,7 @@ use std::process::Command;
 use serde_json::Value;
 
 use crate::dataset::{log_excerpt, Annotation, Job, Row};
-use crate::github::Http;
+use crate::github::{Http, Reply};
 use crate::window::add_days;
 
 const PER_PAGE: usize = 100;
@@ -46,32 +46,50 @@ pub enum Stop {
 }
 
 /// Retries after GitHub's secondary rate limit, which refuses bursts with a
-/// 403 or 429 however much of the hourly budget is left.
+/// 403 or 429 however much of the hourly budget is left. An exhausted
+/// hourly budget (`X-RateLimit-Remaining: 0`) resets up to an hour later, so
+/// it stops the fetch instead.
 const RETRIES: u32 = 3;
 
-fn request(http: &dyn Http, path: &str, gone_ok: bool) -> Result<Value, String> {
+fn with_retry<T>(
+    http: &dyn Http,
+    what: &str,
+    mut call: impl FnMut() -> Result<Reply<T>, String>,
+) -> Result<Reply<T>, String> {
     let mut attempt = 0;
     loop {
-        let (status, body) = http.get_json(path)?;
-        let limited = || {
-            body.get("message")
-                .and_then(Value::as_str)
-                .is_some_and(|m| m.to_ascii_lowercase().contains("rate limit"))
-        };
-        match status {
-            200 => return Ok(body),
-            404 | 410 if gone_ok => return Ok(Value::Null),
-            403 | 429 if attempt < RETRIES && limited() => {
-                attempt += 1;
-                http.pause(60 * u64::from(attempt));
-            }
-            403 | 429 => {
-                return Err(format!(
-                    "GitHub refused {path} with {status} (rate limit or permissions); rows so far are kept"
-                ))
-            }
-            _ => return Err(format!("GitHub answered {status} for {path}")),
+        let reply = call()?;
+        if !matches!(reply.status, 403 | 429) {
+            return Ok(reply);
         }
+        let limited = reply.message.to_ascii_lowercase().contains("rate limit");
+        if !limited || reply.remaining == Some(0) || attempt >= RETRIES {
+            let why = if reply.message.is_empty() {
+                "no message"
+            } else {
+                &reply.message
+            };
+            return Err(format!(
+                "GitHub refused {what} with {} ({why}); rows so far are kept",
+                reply.status
+            ));
+        }
+        attempt += 1;
+        let wait = reply.retry_after.unwrap_or(60 * u64::from(attempt));
+        eprintln!(
+            "fetch: GitHub limited {what} ({}); waiting {wait} s",
+            reply.message
+        );
+        http.pause(wait);
+    }
+}
+
+fn request(http: &dyn Http, path: &str, gone_ok: bool) -> Result<Value, String> {
+    let reply = with_retry(http, path, || http.get_json(path))?;
+    match reply.status {
+        200 => Ok(reply.body),
+        404 | 410 if gone_ok => Ok(Value::Null),
+        status => Err(format!("GitHub answered {status} for {path}")),
     }
 }
 
@@ -240,7 +258,10 @@ fn job_of(http: &dyn Http, repo: &str, job: &Value) -> Result<Job, String> {
             title: str_of(n, "title").to_string(),
         })
         .collect();
-    if let Some(log) = http.get_log(repo, id)? {
+    let log = with_retry(http, &format!("the log of job {id}"), || {
+        http.get_log(repo, id)
+    })?;
+    if let Some(log) = log.body {
         out.log = log_excerpt(&log);
     }
     Ok(out)
