@@ -1,0 +1,81 @@
+# Installs a released tag through each installer on each OS and checks the
+# version it prints. Runs when the release workflow finishes a tag, or by hand
+# for any tag. The release is created with the workflow token, which starts no
+# `release` event, hence `workflow_run`. npm publishing waits for an approval,
+# so the npm legs wait for the package too.
+name: install-smoke
+
+on:
+  workflow_run:
+    workflows: [Release]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: The release tag to install, such as v0.1.1
+        required: true
+
+permissions: {}
+
+jobs:
+  install:
+    name: ${{ matrix.installer }} (${{ matrix.os }})
+    # A tag push that released, not the release workflow's pull request plan.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.event == 'push' &&
+       github.event.workflow_run.conclusion == 'success')
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-latest, installer: shell }
+          - { os: macos-latest, installer: shell }
+          - { os: windows-latest, installer: powershell }
+          - { os: ubuntu-latest, installer: npm }
+          - { os: macos-latest, installer: npm }
+          - { os: windows-latest, installer: npm }
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 75
+    env:
+      TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.event.workflow_run.head_branch }}
+      BASE: https://github.com/mahkassem/fairlead/releases/download
+    steps:
+      - name: Check the tag
+        shell: bash
+        run: |
+          [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$ ]] || { echo "not a release tag: $TAG"; exit 1; }
+      - name: Install with the shell installer
+        if: matrix.installer == 'shell'
+        shell: bash
+        run: |
+          curl --proto '=https' --tlsv1.2 -LsSf "$BASE/$TAG/fairlead-installer.sh" | sh
+          "${CARGO_HOME:-$HOME/.cargo}/bin/fairlead" --version | tee version.txt
+      - name: Install with the PowerShell installer
+        if: matrix.installer == 'powershell'
+        shell: pwsh
+        run: |
+          Invoke-RestMethod "$env:BASE/$env:TAG/fairlead-installer.ps1" | Invoke-Expression
+          $cargo = if ($env:CARGO_HOME) { $env:CARGO_HOME } else { Join-Path $HOME '.cargo' }
+          & (Join-Path $cargo 'bin\fairlead.exe') --version | Tee-Object -FilePath version.txt
+      - name: Install from npm
+        if: matrix.installer == 'npm'
+        shell: bash
+        run: |
+          version="${TAG#v}"
+          if [[ "$version" == *-* ]]; then
+            echo "prereleases aren't published to npm"
+            echo "fairlead $version" > version.txt
+            exit 0
+          fi
+          for _ in $(seq 60); do
+            npm view "fairlead@$version" version >/dev/null 2>&1 && break
+            echo "fairlead@$version isn't on npm yet; waiting for the publish approval"
+            sleep 60
+          done
+          npx --yes "fairlead@$version" --version | tee version.txt
+      - name: The installed binary prints the tag's version
+        shell: bash
+        run: |
+          version="${TAG#v}"
+          grep -qxF "fairlead $version" <(tr -d '\r' < version.txt) || { echo "expected fairlead $version"; exit 1; }
