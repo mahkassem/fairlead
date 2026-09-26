@@ -7,22 +7,22 @@ or stretch them. The wordmark is outlined, so no font is needed.
 
 ## Files
 
-| File | Use |
-| --- | --- |
-| `fairlead-primary-horizontal-light.svg` | Primary logo, for light backgrounds |
-| `fairlead-reversed-horizontal-dark.svg` | White logo with the green guide, for dark backgrounds |
-| `fairlead-icon-light.svg` | Icon only, for light backgrounds |
-| `fairlead-icon-dark.svg` | Icon only, for dark backgrounds |
-| `fairlead-icon-accent-green.svg` | Two-tone green icon |
-| `fairlead-monochrome-black.svg` | One-color logo, black |
-| `fairlead-monochrome-white.svg` | One-color logo, white |
-| `fairlead-app-icon-square.svg` | App icon, dark rounded square |
-| `fairlead-app-icon-square-dark.svg` | App icon, dark square, square corners |
-| `fairlead-app-icon-square-light.svg` | App icon, white square, square corners |
-| `png/fairlead-app-icon-*-1024.png` | The app icons at 1024 px, for places that take only PNG |
-| `png/fairlead-social-preview-1280x640.png` | The repository's social preview image |
+| File | Use | Preview |
+| --- | --- | --- |
+| `fairlead-primary-horizontal-light.svg` | Primary logo, for light backgrounds | <img src="previews/fairlead-primary-horizontal-light.png" width="150" alt=""> |
+| `fairlead-reversed-horizontal-dark.svg` | White logo with the green guide, for dark backgrounds | <img src="previews/fairlead-reversed-horizontal-dark.png" width="150" alt=""> |
+| `fairlead-icon-light.svg` | Icon only, for light backgrounds | <img src="previews/fairlead-icon-light.png" width="150" alt=""> |
+| `fairlead-icon-dark.svg` | Icon only, for dark backgrounds | <img src="previews/fairlead-icon-dark.png" width="150" alt=""> |
+| `fairlead-icon-accent-green.svg` | Two-tone green icon | <img src="previews/fairlead-icon-accent-green.png" width="150" alt=""> |
+| `fairlead-monochrome-black.svg` | One-color logo, black | <img src="previews/fairlead-monochrome-black.png" width="150" alt=""> |
+| `fairlead-monochrome-white.svg` | One-color logo, white | <img src="previews/fairlead-monochrome-white.png" width="150" alt=""> |
+| `fairlead-app-icon-square.svg` | App icon, dark rounded square | <img src="previews/fairlead-app-icon-square.png" width="150" alt=""> |
+| `fairlead-app-icon-square-dark.svg` | App icon, dark square, square corners | <img src="previews/fairlead-app-icon-square-dark.png" width="150" alt=""> |
+| `fairlead-app-icon-square-light.svg` | App icon, white square, square corners | <img src="previews/fairlead-app-icon-square-light.png" width="150" alt=""> |
+| `png/fairlead-app-icon-*-1024.png` | The app icons at 1024 px, for places that take only PNG | <img src="png/fairlead-app-icon-rounded-1024.png" width="75" alt=""> |
+| `png/fairlead-social-preview-1280x640.png` | The repository's social preview image | <img src="png/fairlead-social-preview-1280x640.png" width="150" alt=""> |
 
-The SVGs are the source; the PNGs are rendered from them.
+The SVGs are the source; the PNGs are rendered from them. Each preview shows its file on the background it is meant for.
 
 ## Colors
 
