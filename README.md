@@ -55,7 +55,7 @@ agent works like a member of the team, not a stranger trying things.
   have caught real CI failures, rework, escaped defects, tokens and cost.
   *Today:* `fairlead replay` re-plans real failures from a repository's CI
   history, and the [benchmarks](https://mahkassem.github.io/fairlead/benchmarks.html)
-  publish that recall every week.
+  measure that recall every week.
 - **Fast because it remembers.** No rereading the codebase to rediscover what
   was learned last week. The graph, the plan and the lessons are already there.
   *Today:* the import graph is built without installing dependencies and
@@ -64,7 +64,7 @@ agent works like a member of the team, not a stranger trying things.
   so and points at the rule that's missing, so the team's knowledge grows
   exactly where it was thin.
   *Today:* `fairlead plan` lists every file no test depends on, and replay
-  suggests the owner rule that would have caught each miss.
+  suggests the owner rule or check path that would have caught a miss.
 - **Stopped before the mistake, not after.** Your rules run as the agent
   works, catching a wrong move in seconds instead of minutes later in CI.
   *Coming in K2.*
