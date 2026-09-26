@@ -11,8 +11,3 @@
 }
 .light, .rust { --links: #008F67; --sidebar-active: #008F67; }
 .coal, .navy, .ayu { --links: #00AE7B; --sidebar-active: #00AE7B; }
-
-.brand-logo { display: block; width: 320px; max-width: 80%; margin: 1rem 0 2rem; }
-.brand-logo.dark { display: none; }
-.coal .brand-logo.light, .navy .brand-logo.light, .ayu .brand-logo.light { display: none; }
-.coal .brand-logo.dark, .navy .brand-logo.dark, .ayu .brand-logo.dark { display: block; }
