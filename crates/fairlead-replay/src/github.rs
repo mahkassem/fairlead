@@ -38,7 +38,8 @@ impl Curl {
         }
         config.push_str(&format!("url = \"{url}\"\n"));
         let mut child = Command::new("curl")
-            .args(["--config", "-", "--max-time", "120"])
+            // `-q` first: no `.curlrc` can add redirects or change the output.
+            .args(["-q", "--config", "-", "--max-time", "120"])
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())

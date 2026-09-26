@@ -40,6 +40,14 @@ fn get(http: &dyn Http, path: &str) -> Result<Value, String> {
     }
 }
 
+/// Like `get`, but a resource GitHub no longer has (404, 410) reads as `null`.
+fn get_gone_ok(http: &dyn Http, path: &str) -> Result<Value, String> {
+    match http.get_json(path)? {
+        (404 | 410, _) => Ok(Value::Null),
+        _ => get(http, path),
+    }
+}
+
 fn str_of<'v>(v: &'v Value, key: &str) -> &'v str {
     v.get(key).and_then(Value::as_str).unwrap_or("")
 }
@@ -65,18 +73,24 @@ pub fn merge_queue_branch(branch: &str) -> Option<(u64, String)> {
 }
 
 /// The pull request a head commit belongs to, and its base branch.
-fn pull_for(http: &dyn Http, repo: &str, sha: &str) -> Option<(u64, String)> {
-    let pulls = get(http, &format!("/repos/{repo}/commits/{sha}/pulls")).ok()?;
-    let first = pulls.as_array()?.first()?;
-    Some((
-        first.get("number")?.as_u64()?,
-        first.get("base")?.get("ref")?.as_str()?.to_string(),
-    ))
+/// A refusal (rate limit) is an error, so the row isn't written without it.
+fn pull_for(http: &dyn Http, repo: &str, sha: &str) -> Result<Option<(u64, String)>, String> {
+    let pulls = get_gone_ok(http, &format!("/repos/{repo}/commits/{sha}/pulls"))?;
+    let first = pulls.as_array().and_then(|a| a.first());
+    Ok(first.and_then(|first| {
+        Some((
+            first.get("number")?.as_u64()?,
+            first.get("base")?.get("ref")?.as_str()?.to_string(),
+        ))
+    }))
 }
 
 /// The base branch's first-parent commit when the run started.
 fn base_at(clone: &Path, branch: &str, created_at: &str) -> Option<String> {
-    git(clone, &["fetch", "-q", "origin", branch])?;
+    git(
+        clone,
+        &["fetch", "-q", "origin", "--end-of-options", branch],
+    )?;
     git(
         clone,
         &[
@@ -112,7 +126,7 @@ fn job_of(http: &dyn Http, repo: &str, job: &Value) -> Result<Job, String> {
         .map(|s| str_of(s, "name").to_string())
         .collect();
     let id = job.get("id").and_then(Value::as_u64).unwrap_or(0);
-    let notes = get(
+    let notes = get_gone_ok(
         http,
         &format!("/repos/{repo}/check-runs/{id}/annotations?per_page=50"),
     )?;
@@ -163,6 +177,7 @@ pub fn fetch(
     seen: &BTreeSet<(u64, u32)>,
 ) -> (Vec<Row>, Option<String>) {
     let mut rows = Vec::new();
+    let mut seen = seen.clone();
     let mut pulls: BTreeMap<String, Option<(u64, String)>> = BTreeMap::new();
     for event in EVENTS {
         let listed = match runs(http, opts.repo, event, opts.since) {
@@ -173,7 +188,8 @@ pub fn fetch(
             let id = run.get("id").and_then(Value::as_u64).unwrap_or(0);
             let attempts = run.get("run_attempt").and_then(Value::as_u64).unwrap_or(1) as u32;
             for attempt in 1..=attempts {
-                if seen.contains(&(id, attempt)) {
+                // A run can shift onto the next page while listing.
+                if !seen.insert((id, attempt)) {
                     continue;
                 }
                 if opts.limit.is_some_and(|l| rows.len() >= l) {
@@ -218,10 +234,14 @@ fn row_of(
         merge_queue_branch(str_of(run, "head_branch"))
             .map_or((None, None), |(n, sha)| (Some(n), Some(sha)))
     } else {
-        let found = pulls
-            .entry(head_sha.clone())
-            .or_insert_with(|| pull_for(http, opts.repo, &head_sha))
-            .clone();
+        let found = match pulls.get(&head_sha) {
+            Some(found) => found.clone(),
+            None => {
+                let found = pull_for(http, opts.repo, &head_sha)?;
+                pulls.insert(head_sha.clone(), found.clone());
+                found
+            }
+        };
         let base = found
             .as_ref()
             .zip(opts.clone)
@@ -229,7 +249,10 @@ fn row_of(
         (found.map(|(n, _)| n), base)
     };
     if let Some(clone) = opts.clone {
-        let _ = git(clone, &["fetch", "-q", "origin", &head_sha]);
+        let _ = git(
+            clone,
+            &["fetch", "-q", "origin", "--end-of-options", &head_sha],
+        );
     }
     let conclusion = if jobs.iter().any(Job::failed) {
         "failure"

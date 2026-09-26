@@ -40,7 +40,8 @@ fn parse(date: &str) -> Option<(i64, i64, i64)> {
 impl Window {
     pub fn ending(until: &str, window_days: u32) -> Option<Window> {
         let (y, m, d) = parse(until)?;
-        let (fy, fm, fd) = civil(days(y, m, d) - i64::from(window_days));
+        let span = i64::from(window_days.max(1)) - 1;
+        let (fy, fm, fd) = civil(days(y, m, d) - span);
         Some(Window {
             from: format!("{fy:04}-{fm:02}-{fd:02}"),
             until: until[..10].to_string(),
@@ -60,13 +61,14 @@ mod tests {
     #[test]
     fn the_window_counts_back_across_months_and_leap_days() {
         assert_eq!(
-            Window::ending("2026-03-01T10:00:00Z", 1).unwrap().from,
+            Window::ending("2026-03-01T10:00:00Z", 2).unwrap().from,
             "2026-02-28"
         );
-        assert_eq!(Window::ending("2024-03-01", 1).unwrap().from, "2024-02-29");
-        assert_eq!(Window::ending("2026-09-26", 90).unwrap().from, "2026-06-28");
+        assert_eq!(Window::ending("2024-03-01", 2).unwrap().from, "2024-02-29");
+        assert_eq!(Window::ending("2026-09-26", 1).unwrap().from, "2026-09-26");
         let w = Window::ending("2026-09-26", 90).unwrap();
-        assert!(w.contains("2026-06-28T00:00:00Z") && w.contains("2026-09-26T23:59:59Z"));
-        assert!(!w.contains("2026-06-27T23:59:59Z"));
+        assert_eq!(w.from, "2026-06-29", "90 days, both ends included");
+        assert!(w.contains("2026-06-29T00:00:00Z") && w.contains("2026-09-26T23:59:59Z"));
+        assert!(!w.contains("2026-06-28T23:59:59Z"));
     }
 }

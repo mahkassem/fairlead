@@ -122,7 +122,8 @@ fn run_replay(
     let window = Window::ending(&until, loaded.config.replay.window_days)
         .ok_or_else(|| format!("`{until}` isn't a date"))?;
     let repo = rows[0].repo.clone();
-    let clone = std::fs::canonicalize(clone).map_err(|e| format!("{}: {e}", clone.display()))?;
+    // Not canonicalize: on Windows that gives a `\\?\` path git may refuse.
+    let clone = std::path::absolute(clone).map_err(|e| format!("{}: {e}", clone.display()))?;
     let wt_path = clone.with_file_name(format!(
         "{}-fairlead-replay",
         clone

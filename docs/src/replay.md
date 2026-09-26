@@ -27,7 +27,7 @@ For each failed row in the window, replay checks out the head commit into a work
 | --- | --- |
 | hit | the test file or check is in the plan, or the plan selects everything |
 | miss | it isn't, and nothing below explains it; recall is hits over hits and misses |
-| flaky | another attempt of the same run passed the same job |
+| flaky | another attempt of the same run passed the same job; decided before hit, so a flaky failure never raises recall |
 | unconfirmed | a later push of the same pull request passed the job, and the change between the two heads doesn't reach it |
 | unattributed | the job failed, but no test file or check could be named from its annotations or log |
 | unavailable | the head commit, or the history to its merge base, isn't in the clone |
@@ -35,7 +35,7 @@ For each failed row in the window, replay checks out the head commit into a work
 
 Failing test files come from annotations and from the log, through the extractors named in `[[replay.failures]]`: `vitest`, `jest`, or `regex` with a pattern that has a named `file` group (and optionally `project` and `title`). A printed path is matched to a file at that commit: as it stands, under the named project or package, by a unique suffix, or among the suffix matches by the one whose source contains the failing test's title. Anything still ambiguous is unattributed. Failing checks come from `[[replay.checks]]`, which map a job and step name to a check id.
 
-The window is `replay.window_days` ending at the newest recorded run, or at `--until`, so the same dataset always gives the same report. The report says whether `replay.min_failures` attributed failures were reached.
+The window is the `replay.window_days` days ending at the newest recorded run, or at `--until`, so the same dataset always gives the same report. The report says whether `replay.min_failures` attributed failures were reached.
 
 ```toml
 [replay]

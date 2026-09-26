@@ -272,3 +272,89 @@ fn a_synthetic_history_replays_to_the_expected_outcomes() {
     assert_eq!(r.errors, 1, "run 10's commit has a test two runners match");
     assert_eq!(r.recall, Some(0.5));
 }
+
+#[test]
+fn every_job_is_attributed_at_the_failing_commit_even_after_judging_another() {
+    let dir = std::env::temp_dir().join(format!("fairlead-replay-order-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    git(&dir, &["init", "-q", "-b", "main"]);
+    write(&dir, "src/b.ts", "export const b = 1;\n");
+    write(&dir, "test/a.test.ts", "it('a works', () => {});\n");
+    write(&dir, "test/b.test.ts", "import { b } from '../src/b';\n");
+    write(&dir, "one/x.test.ts", "it('special title', () => {});\n");
+    write(&dir, "two/x.test.ts", "it('other title', () => {});\n");
+    let base = commit(&dir, "base");
+    git(&dir, &["checkout", "-q", "-b", "pr11"]);
+    write(&dir, "src/b.ts", "export const b = 2;\n");
+    let first = commit(&dir, "pr11: change b");
+    write(&dir, "one/x.test.ts", "it('other title', () => {});\n");
+    write(&dir, "two/x.test.ts", "it('special title', () => {});\n");
+    let later = commit(&dir, "pr11: swap the titles");
+    git(&dir, &["checkout", "-q", "main"]);
+    let rows = vec![
+        row(
+            1,
+            1,
+            11,
+            &first,
+            &base,
+            10,
+            vec![
+                job("test", "failure", &[" FAIL  test/a.test.ts > a works"]),
+                job("test2", "failure", &[" FAIL  x.test.ts > special title"]),
+            ],
+        ),
+        row(
+            2,
+            1,
+            11,
+            &later,
+            &base,
+            11,
+            vec![job("test", "success", &[])],
+        ),
+    ];
+    let config_text = r#"
+[[tests.runners]]
+id = "vitest"
+match = ["**"]
+command = ["vitest", "run", "{files}"]
+
+[[replay.failures]]
+runner = "vitest"
+extractor = "vitest"
+job = "^test2?$"
+"#;
+    let mut config: Config = toml::from_str(config_text).unwrap();
+    config.graph.cache = false;
+    let wt_path =
+        std::env::temp_dir().join(format!("fairlead-replay-order-wt-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&wt_path);
+    let replayer = Replayer {
+        clone: &dir,
+        worktree: Worktree::open(&dir, &wt_path, &base).unwrap(),
+        config: &config,
+        sources: Sources::new(&config).unwrap(),
+    };
+    let window = Window::ending("2026-09-11", 7).unwrap();
+    let replayed = replay(&replayer, &rows, &window);
+    let named: Vec<String> = replayed
+        .failures
+        .iter()
+        .filter(|f| f.job == "test2")
+        .map(|f| format!("{:?}", f.target))
+        .collect();
+    assert_eq!(
+        named,
+        [r#"Test("one/x.test.ts")"#],
+        "{:?}",
+        replayed.failures
+    );
+    let a = replayed.failures.iter().find(|f| f.job == "test").unwrap();
+    assert_eq!(
+        format!("{:?}", a.outcome),
+        "Unconfirmed",
+        "the probe checked out the later head"
+    );
+}

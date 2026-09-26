@@ -28,7 +28,7 @@ pub fn has_commit(clone: &Path, sha: &str) -> bool {
 }
 
 pub fn merge_base(clone: &Path, a: &str, b: &str) -> Option<String> {
-    git(clone, &["merge-base", a, b])
+    git(clone, &["merge-base", "--end-of-options", a, b])
         .ok()
         .filter(|s| !s.is_empty())
 }

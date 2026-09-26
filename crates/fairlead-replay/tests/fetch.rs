@@ -9,6 +9,8 @@ use serde_json::{json, Value};
 
 struct Recorded {
     responses: BTreeMap<String, Value>,
+    /// Paths answered with this status instead.
+    status: BTreeMap<String, u16>,
     logs: BTreeMap<u64, String>,
     asked: Mutex<Vec<String>>,
 }
@@ -17,6 +19,9 @@ impl Http for Recorded {
     fn get_json(&self, path: &str) -> Result<(u16, Value), String> {
         self.asked.lock().unwrap().push(path.to_string());
         let key = path.split('?').next().unwrap();
+        if let Some(status) = self.status.get(key) {
+            return Ok((*status, Value::Null));
+        }
         Ok(self
             .responses
             .get(key)
@@ -74,6 +79,7 @@ fn api() -> Recorded {
     );
     Recorded {
         responses,
+        status: BTreeMap::new(),
         logs,
         asked: Mutex::new(Vec::new()),
     }
@@ -91,7 +97,11 @@ fn every_attempt_is_a_row_with_its_failures_pull_request_and_base() {
     let (rows, error) = fetch(&http, &opts, &BTreeSet::new());
     assert!(error.is_none(), "{error:?}");
     // The runs listing ignores the event filter in this recording, so the
-    // pull request run appears under both events; rows are deduplicated later.
+    // pull request run is listed under both events but recorded once.
+    let mut keys: Vec<(u64, u32)> = rows.iter().map(|r| (r.run_id, r.attempt)).collect();
+    let listed = keys.len();
+    keys.dedup();
+    assert_eq!(keys.len(), listed, "{keys:?}");
     let first = rows
         .iter()
         .find(|r| r.run_id == 11 && r.attempt == 1)
@@ -144,4 +154,48 @@ fn a_merge_queue_branch_names_its_pull_request_and_base() {
         Some((7, "abc".into()))
     );
     assert_eq!(merge_queue_branch("feature/x"), None);
+}
+
+fn opts(limit: Option<usize>) -> Options<'static> {
+    Options {
+        repo: "o/r",
+        since: "2026-09-01",
+        clone: None,
+        limit,
+    }
+}
+
+#[test]
+fn a_purged_check_run_reads_as_no_annotations() {
+    let mut http = api();
+    http.status
+        .insert("/repos/o/r/check-runs/101/annotations".into(), 404);
+    let (rows, error) = fetch(&http, &opts(None), &BTreeSet::new());
+    assert!(error.is_none(), "{error:?}");
+    let first = rows
+        .iter()
+        .find(|r| r.run_id == 11 && r.attempt == 1)
+        .unwrap();
+    let test = first.jobs.iter().find(|j| j.name == "test").unwrap();
+    assert!(test.annotations.is_empty());
+    assert_eq!(test.log.len(), 3, "the log is still read");
+}
+
+#[test]
+fn a_rate_limit_stops_the_fetch_before_writing_a_row_without_its_pull_request() {
+    let mut http = api();
+    http.status
+        .insert("/repos/o/r/commits/aaa/pulls".into(), 403);
+    let (rows, error) = fetch(&http, &opts(None), &BTreeSet::new());
+    assert!(error.unwrap().contains("403"));
+    assert!(rows
+        .iter()
+        .all(|r| r.pr.is_some() || r.event == "merge_group"));
+}
+
+#[test]
+fn a_limit_stops_after_that_many_attempts() {
+    let (rows, error) = fetch(&api(), &opts(Some(1)), &BTreeSet::new());
+    assert!(error.is_none());
+    assert_eq!(rows.len(), 1);
 }

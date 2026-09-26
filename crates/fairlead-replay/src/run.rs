@@ -340,14 +340,20 @@ fn replay_row(r: &Replayer, row: &Row, all: &[&Row], out: &mut Replayed) {
     };
     let root = r.worktree.path.clone();
     let read = move |f: &str| std::fs::read_to_string(root.join(f)).ok();
-    for job in failed {
-        for target in targets(job, &r.sources, &repo, &tests, &read) {
+    // Every job is attributed before any outcome, since judging one can
+    // check out another commit, and attribution reads the worktree.
+    let named: Vec<(&Job, Vec<Target>)> = failed
+        .into_iter()
+        .map(|job| (job, targets(job, &r.sources, &repo, &tests, &read)))
+        .collect();
+    for (job, found) in named {
+        for target in found {
             let outcome = if target == Target::Job {
                 Outcome::Unattributed
-            } else if in_plan(&plan, &target) {
-                Outcome::Hit
             } else if passed_on_another_attempt(row, job, all) {
                 Outcome::Flaky
+            } else if in_plan(&plan, &target) {
+                Outcome::Hit
             } else if passed_later_unreached(r, row, job, &target, all) {
                 Outcome::Unconfirmed
             } else {

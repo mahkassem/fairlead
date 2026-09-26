@@ -90,11 +90,11 @@ pub fn read(path: &Path) -> Result<Vec<Row>, String> {
 
 /// Appends the rows not already present by (run, attempt); returns how many.
 pub fn append(path: &Path, rows: &[Row]) -> Result<usize, String> {
-    let existing: BTreeSet<(u64, u32)> =
+    let mut existing: BTreeSet<(u64, u32)> =
         read(path)?.iter().map(|r| (r.run_id, r.attempt)).collect();
     let fresh: Vec<&Row> = rows
         .iter()
-        .filter(|r| !existing.contains(&(r.run_id, r.attempt)))
+        .filter(|r| existing.insert((r.run_id, r.attempt)))
         .collect();
     if let Some(dir) = path.parent().filter(|d| !d.as_os_str().is_empty()) {
         std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
