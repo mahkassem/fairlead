@@ -101,7 +101,10 @@ fn repo(name: &str, config: &str, files: &[(&str, String)]) -> PathBuf {
     dir
 }
 
-const SIZE: &str = "[guard.size]\nfiles = [\"src/**\"]\nfile_lines = 3\nratchet = false\n";
+/// Tests judge decisions, not speed, so a slow machine's process start can't
+/// push a call past the budget and let it through.
+const BUDGET: &str = "[guard]\nbudget_ms = 10000\n";
+const SIZE: &str = "[guard]\nbudget_ms = 10000\n[guard.size]\nfiles = [\"src/**\"]\nfile_lines = 3\nratchet = false\n";
 
 fn events(dir: &Path) -> Vec<Value> {
     std::fs::read_to_string(dir.join(".git/fairlead/events.jsonl"))
@@ -182,7 +185,7 @@ fn an_edit_that_cannot_be_rebuilt_or_an_unknown_shape_goes_ahead() {
 
 #[test]
 fn warn_adds_a_note_and_never_grants_permission() {
-    let config = format!("[guard]\non_finding = \"warn\"\n{SIZE}");
+    let config = SIZE.replace("[guard]\n", "[guard]\non_finding = \"warn\"\n");
     let dir = repo("warn", &config, &[("src/a.ts", lines(2))]);
     let path = dir.join("src/a.ts");
     let answer = hook(
@@ -240,8 +243,12 @@ fn a_command_rule_denies_a_shell_command_with_its_reason() {
 
 #[test]
 fn editing_a_migration_that_exists_is_denied_and_adding_one_is_not() {
-    let config = "[guard.migrations]\nfiles = [\"db/*.sql\"]\n";
-    let dir = repo("migration", config, &[("db/001.sql", "select 1;\n".into())]);
+    let config = format!("{BUDGET}[guard.migrations]\nfiles = [\"db/*.sql\"]\n");
+    let dir = repo(
+        "migration",
+        &config,
+        &[("db/001.sql", "select 1;\n".into())],
+    );
     let existing =
         json!({"file_path": dir.join("db/001.sql"), "old_string": "1", "new_string": "2"});
     let answer = hook(&dir, call(&dir, "Edit", existing)).unwrap();
