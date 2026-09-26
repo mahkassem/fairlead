@@ -203,7 +203,7 @@ fn check_staged(root: &Path, guard: &Guard, settings: &config::Guard, list: bool
             })
         };
         let now = lint(&after);
-        if settings.deny == config::Deny::Any {
+        if settings.findings == config::Findings::All {
             new.extend(now);
             continue;
         }
@@ -244,9 +244,9 @@ fn check_staged(root: &Path, guard: &Guard, settings: &config::Guard, list: bool
             println!("{f}");
         }
     }
-    let what = match settings.deny {
-        config::Deny::Added => "the staged changes add",
-        config::Deny::Any => "the staged files have",
+    let what = match settings.findings {
+        config::Findings::Added => "the staged changes add",
+        config::Findings::All => "the staged files have",
     };
     if new.is_empty() {
         println!("guard: {read} staged file(s), {what} no findings");

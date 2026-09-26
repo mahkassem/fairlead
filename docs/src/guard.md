@@ -18,7 +18,7 @@ Every preset is off until configured, and each one names the files it reads.
 [guard]
 baseline = "fairlead-baseline.json"   # the default
 exclude = ["vendor/**"]               # tracked files no rule reads
-deny = "added"                        # the default; "any" fails on every finding in a touched file
+findings = "added"                    # the default; "all" counts every finding in a touched file
 on_finding = "deny"                   # the default; "warn" shows the findings and lets the commit through
 events = "local"                      # the default; "off" records nothing
 
@@ -68,7 +68,7 @@ the working tree, and the two lists are compared:
 A renamed file is compared with its old self, and before the first commit
 everything staged is new.
 
-`deny = "any"` makes a file you touch pass every rule instead: the commit stage
+`findings = "all"` makes a file you touch pass every rule instead: the commit stage
 fails on any finding in a staged file, old or new. It suits a codebase with no
 debt to carry; the default suits one that has some.
 

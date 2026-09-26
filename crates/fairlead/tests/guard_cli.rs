@@ -222,9 +222,9 @@ fn before_the_first_commit_everything_staged_is_new() {
 }
 
 #[test]
-fn deny_any_fails_a_commit_on_every_finding_in_a_file_it_touches() {
-    let config = format!("{ZERO}[guard]\ndeny = \"any\"\n");
-    let dir = repo("deny-any", &config, &[("src/long.ts", lines(5))]);
+fn findings_all_fails_a_commit_on_every_finding_in_a_file_it_touches() {
+    let config = format!("{ZERO}[guard]\nfindings = \"all\"\n");
+    let dir = repo("findings-all", &config, &[("src/long.ts", lines(5))]);
     std::fs::write(
         dir.join("src/long.ts"),
         lines(5).replace("line 2", "line two"),
@@ -257,4 +257,23 @@ fn on_finding_warn_shows_what_a_commit_adds_and_lets_it_through() {
     assert!(err.contains("add 1 finding(s), committing anyway"), "{err}");
     let log = std::fs::read_to_string(dir.join(".git/fairlead/events.jsonl")).unwrap();
     assert!(log.contains("\"decision\":\"warn\""), "{log}");
+}
+
+#[test]
+fn a_config_in_a_subdirectory_checks_its_files_and_logs_to_the_repository() {
+    let dir = repo(
+        "subdir",
+        "",
+        &[
+            ("app/fairlead.toml", ZERO.to_string()),
+            ("app/src/ok.ts", lines(1)),
+        ],
+    );
+    let app = dir.join("app");
+    std::fs::write(app.join("src/ok.ts"), lines(4)).unwrap();
+    git(&dir, &["add", "-A"]);
+    let (ok, _, err) = guard(&app, &["--staged"]);
+    assert!(!ok);
+    assert!(err.contains("src/ok.ts:1 file-length"), "{err}");
+    assert!(dir.join(".git/fairlead/events.jsonl").exists());
 }

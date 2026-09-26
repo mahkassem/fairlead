@@ -12,7 +12,8 @@ use serde::Serialize;
 const FILE: &str = "events.jsonl";
 const OLD_FILE: &str = "events.1.jsonl";
 const MAX_BYTES: u64 = 5 * 1024 * 1024;
-/// Appends up to this size don't interleave when two hooks write at once.
+/// One `write` of a line this short isn't split by another hook's on a
+/// local filesystem; a network filesystem makes no such promise.
 const MAX_LINE: usize = 4096;
 
 #[derive(Debug, Clone, Serialize)]
@@ -67,6 +68,8 @@ impl Event {
             return text + "\n";
         }
         let short = Event {
+            event: None,
+            tool: None,
             file: None,
             session: None,
             rules: Vec::new(),
@@ -82,9 +85,17 @@ pub struct EventLog {
 }
 
 impl EventLog {
-    /// The log for the repository at `root`, or none outside a repository.
+    /// The log for the repository holding `root`, which may be a
+    /// subdirectory or a worktree, or none outside a repository.
     pub fn open(root: &Path) -> Option<EventLog> {
-        fairlead_lang::cache::dir_for(root).map(EventLog::at)
+        let out = std::process::Command::new("git")
+            .args(["rev-parse", "--absolute-git-dir"])
+            .current_dir(root)
+            .output()
+            .ok()
+            .filter(|o| o.status.success())?;
+        let dir = String::from_utf8(out.stdout).ok()?;
+        Some(EventLog::at(PathBuf::from(dir.trim()).join("fairlead")))
     }
 
     pub fn at(dir: PathBuf) -> EventLog {
@@ -95,7 +106,9 @@ impl EventLog {
         self.dir.join(FILE)
     }
 
-    /// Appends one event, first moving a full log aside so one old file is kept.
+    /// Appends one event, first moving a full log aside so one old file is
+    /// kept. Two hooks rotating at once can lose the old file; the log is a
+    /// record, so that costs history, never a decision.
     pub fn append(&self, event: &Event) -> std::io::Result<()> {
         std::fs::create_dir_all(&self.dir)?;
         let path = self.path();

@@ -2,50 +2,83 @@
 //! finding already in the file doesn't block an unrelated fix; the check
 //! stage still reports it against the baseline.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
+use std::hash::Hash;
 
 use crate::finding::Finding;
 
 /// The findings in `after` that `before` doesn't account for. Findings
 /// compare as multisets of (rule, message, anchor), so one that only moved
-/// lines isn't new and two identical ones count twice. A measured finding
-/// is new when nothing of its rule and anchor was over the limit before,
-/// or when it grew.
+/// lines isn't new and two identical ones count twice; what's left then
+/// compares without the anchor, so rewording a comment that keeps its
+/// finding doesn't add one. A measured finding pairs the same way, in the
+/// order they appear, and is new when it has no partner or grew.
 pub fn added(before: &[Finding], after: &[Finding]) -> Vec<Finding> {
-    let mut plain: HashMap<(&str, &str, &str), usize> = HashMap::new();
-    let mut measured: HashMap<(&str, &str), Vec<&Finding>> = HashMap::new();
-    for f in before {
-        match f.measure {
-            None => *plain.entry((f.rule, &f.message, &f.anchor)).or_default() += 1,
-            Some(_) => measured.entry((f.rule, &f.anchor)).or_default().push(f),
-        }
-    }
-    let mut new = Vec::new();
-    let mut grown: HashMap<(&str, &str), Vec<&Finding>> = HashMap::new();
-    for f in after {
-        match f.measure {
-            None => match plain.get_mut(&(f.rule, f.message.as_str(), f.anchor.as_str())) {
-                Some(n) if *n > 0 => *n -= 1,
-                _ => new.push(f.clone()),
-            },
-            Some(_) => grown.entry((f.rule, &f.anchor)).or_default().push(f),
-        }
-    }
-    // Same-named things pair in the order they appear, which an edit
-    // elsewhere in the file doesn't change.
+    let exact = |f: &Finding| (f.rule, f.message.clone(), f.anchor.clone());
+    let loose = |f: &Finding| (f.rule, f.message.clone(), String::new());
+    let (_, was, now) = matched(by_line(before, false), by_line(after, false), exact);
+    let (_, _, mut new) = matched(was, now, loose);
+
     let size = |f: &Finding| f.measure.map_or(0, |m| m.size);
-    for (key, mut now) in grown {
-        now.sort_by_key(|f| f.line);
-        let mut was = measured.remove(&key).unwrap_or_default();
-        was.sort_by_key(|f| f.line);
-        for (i, f) in now.into_iter().enumerate() {
-            if was.get(i).is_none_or(|w| size(f) > size(w)) {
-                new.push(f.clone());
-            }
-        }
-    }
+    let (pairs, was, now) = matched(by_line(before, true), by_line(after, true), |f| {
+        (f.rule, f.anchor.clone())
+    });
+    let (more, _, unpaired) = matched(was, now, |f| (f.rule, String::new()));
+    new.extend(unpaired);
+    new.extend(
+        pairs
+            .into_iter()
+            .chain(more)
+            .filter(|(w, n)| size(n) > size(w))
+            .map(|(_, n)| n),
+    );
+
+    let mut new: Vec<Finding> = new.into_iter().cloned().collect();
     crate::finding::sort(&mut new);
     new
+}
+
+/// The measured or unmeasured findings, in the order they appear.
+fn by_line(findings: &[Finding], sized: bool) -> Vec<&Finding> {
+    let mut out: Vec<&Finding> = findings
+        .iter()
+        .filter(|f| f.measure.is_some() == sized)
+        .collect();
+    out.sort_by_key(|f| f.line);
+    out
+}
+
+type Pairs<'a> = Vec<(&'a Finding, &'a Finding)>;
+
+/// Pairs each finding in `now` with the first unpaired one in `was` of the
+/// same key, and returns the pairs and what's left on each side, in order.
+fn matched<'a, K: Hash + Eq>(
+    was: Vec<&'a Finding>,
+    now: Vec<&'a Finding>,
+    key: impl Fn(&Finding) -> K,
+) -> (Pairs<'a>, Vec<&'a Finding>, Vec<&'a Finding>) {
+    let mut open: HashMap<K, VecDeque<usize>> = HashMap::new();
+    for (i, f) in was.iter().enumerate() {
+        open.entry(key(f)).or_default().push_back(i);
+    }
+    let mut used = vec![false; was.len()];
+    let (mut pairs, mut left_now) = (Vec::new(), Vec::new());
+    for f in now {
+        match open.get_mut(&key(f)).and_then(VecDeque::pop_front) {
+            Some(i) => {
+                used[i] = true;
+                pairs.push((was[i], f));
+            }
+            None => left_now.push(f),
+        }
+    }
+    let left_was = was
+        .into_iter()
+        .zip(used)
+        .filter(|(_, u)| !u)
+        .map(|(f, _)| f)
+        .collect();
+    (pairs, left_was, left_now)
 }
 
 #[cfg(test)]
@@ -90,10 +123,32 @@ mod tests {
     }
 
     #[test]
-    fn a_different_message_or_anchor_is_new() {
+    fn a_different_message_is_new() {
         let before = [plain(3, "a date", "x")];
-        let after = [plain(3, "a name", "x"), plain(4, "a date", "y")];
-        assert_eq!(added(&before, &after).len(), 2);
+        let after = [plain(3, "a name", "x")];
+        assert_eq!(added(&before, &after).len(), 1);
+    }
+
+    #[test]
+    fn rewording_a_comment_that_keeps_its_finding_adds_none() {
+        let before = [plain(3, "a date", "old words"), plain(9, "a date", "other")];
+        let after = [plain(3, "a date", "new words"), plain(9, "a date", "other")];
+        assert!(added(&before, &after).is_empty());
+        let one_more = [
+            plain(3, "a date", "new words"),
+            plain(5, "a date", "x"),
+            plain(9, "a date", "other"),
+        ];
+        assert_eq!(added(&before, &one_more).len(), 1);
+    }
+
+    #[test]
+    fn a_measured_thing_edited_inside_pairs_by_order_and_counts_only_growth() {
+        let before = [sized(1, "old text", 12), sized(30, "g", 15)];
+        let shrank = [sized(1, "new text", 11), sized(30, "g", 15)];
+        assert!(added(&before, &shrank).is_empty());
+        let grew = [sized(1, "new text", 13), sized(30, "g", 15)];
+        assert_eq!(added(&before, &grew), vec![sized(1, "new text", 13)]);
     }
 
     #[test]

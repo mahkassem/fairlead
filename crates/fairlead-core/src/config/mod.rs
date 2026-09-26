@@ -410,9 +410,9 @@ pub struct Guard {
     pub baseline: String,
     /// Tracked files no rule reads.
     pub exclude: List<String>,
-    /// What stops a write or a commit: only findings the change adds, or
-    /// every finding in a file it touches.
-    pub deny: Deny,
+    /// Which findings count at a write or a commit: only those the change
+    /// adds, or every finding in a file it touches.
+    pub findings: Findings,
     /// Whether those findings stop the write or commit, or are only shown.
     pub on_finding: OnFinding,
     /// Where hook and commit decisions are recorded.
@@ -427,7 +427,7 @@ impl Default for Guard {
         Guard {
             baseline: "fairlead-baseline.json".into(),
             exclude: List::default(),
-            deny: Deny::default(),
+            findings: Findings::default(),
             on_finding: OnFinding::default(),
             events: Events::default(),
             size: None,
@@ -437,12 +437,12 @@ impl Default for Guard {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "kebab-case")]
-pub enum Deny {
+pub enum Findings {
     /// Only findings the change adds, so old debt doesn't block a fix.
     #[default]
     Added,
     /// Every finding in a file the change touches.
-    Any,
+    All,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, JsonSchema)]
