@@ -1,12 +1,14 @@
 //! Building the graph: list the tree, find the workspace packages, extract
 //! and resolve every source file in parallel, then add the edges.
 
+use std::collections::HashMap;
 use std::path::Path;
 
 use fairlead_core::config::Config;
 use rayon::prelude::*;
 
-use crate::extract::{extract, SpecKind};
+use crate::cache::{self, CacheStats, ParseCache};
+use crate::extract::{extract, Extracted, SpecKind};
 use crate::graph::{EdgeKind, Graph};
 use crate::resolve::{Resolver, Target};
 use crate::tree::{normalize, parent, Tree};
@@ -19,11 +21,20 @@ struct FileResult {
     unresolved: Vec<String>,
     unknown: bool,
     fell_back: bool,
+    parsed: Option<Parsed>,
+}
+
+/// A file's extraction, with its cache key when the cache is on.
+struct Parsed {
+    extracted: Extracted,
+    key: Option<String>,
+    hit: bool,
 }
 
 pub struct Scan {
     pub tree: Tree,
     pub graph: Graph,
+    pub cache: CacheStats,
 }
 
 pub fn build(root: &Path, config: &Config) -> std::io::Result<Scan> {
@@ -37,16 +48,46 @@ pub fn build(root: &Path, config: &Config) -> std::io::Result<Scan> {
         .map(|p| (p.name.clone(), p.dir.clone()))
         .collect();
     let mut graph = Graph::with_files(tree.files.clone(), named);
+    let parse_cache = if config.graph.cache {
+        ParseCache::open(&root)
+    } else {
+        ParseCache::disabled()
+    };
     let sources: Vec<&String> = tree.sources().collect();
-    let results: Vec<(String, FileResult)> = sources
+    let mut results: Vec<(String, FileResult)> = sources
         .par_iter()
         .map(|file| {
-            (
-                (*file).clone(),
-                scan_file(&tree, &resolver, file, config.graph.type_imports),
-            )
+            let result = scan_file(
+                &tree,
+                &resolver,
+                &parse_cache,
+                file,
+                config.graph.type_imports,
+            );
+            ((*file).clone(), result)
         })
         .collect();
+    let mut stats = CacheStats {
+        enabled: parse_cache.enabled(),
+        ..CacheStats::default()
+    };
+    let mut used = HashMap::new();
+    for (_, result) in &mut results {
+        if let Some(Parsed {
+            extracted,
+            key: Some(key),
+            hit,
+        }) = result.parsed.take()
+        {
+            if hit {
+                stats.hits += 1;
+            } else {
+                stats.misses += 1;
+            }
+            used.insert(key, extracted);
+        }
+    }
+    parse_cache.save(used);
     for (file, result) in results {
         let from = graph.id(&file).expect("every source is in the tree");
         for (to, kind) in result.edges {
@@ -68,14 +109,43 @@ pub fn build(root: &Path, config: &Config) -> std::io::Result<Scan> {
         }
     }
     add_snapshot_edges(&tree, &mut graph);
-    Ok(Scan { tree, graph })
+    Ok(Scan {
+        tree,
+        graph,
+        cache: stats,
+    })
 }
 
-fn scan_file(tree: &Tree, resolver: &Resolver, file: &str, type_imports: bool) -> FileResult {
+/// The file's extraction, from the cache when its bytes haven't changed.
+fn parse(cache: &ParseCache, file: &str, source: &[u8]) -> Parsed {
+    if !cache.enabled() {
+        return Parsed {
+            extracted: extract(file, source),
+            key: None,
+            hit: false,
+        };
+    }
+    let key = cache::key(file, source);
+    let cached = cache.get(&key).cloned();
+    Parsed {
+        hit: cached.is_some(),
+        extracted: cached.unwrap_or_else(|| extract(file, source)),
+        key: Some(key),
+    }
+}
+
+fn scan_file(
+    tree: &Tree,
+    resolver: &Resolver,
+    cache: &ParseCache,
+    file: &str,
+    type_imports: bool,
+) -> FileResult {
     let Ok(source) = std::fs::read(tree.abs(file)) else {
         return FileResult::default();
     };
-    let extracted = extract(file, &source);
+    let parsed = parse(cache, file, &source);
+    let extracted = &parsed.extracted;
     let mut result = FileResult {
         unknown: extracted.unknown_dynamic,
         ..FileResult::default()
@@ -104,6 +174,7 @@ fn scan_file(tree: &Tree, resolver: &Resolver, file: &str, type_imports: bool) -
             result.edges.push((to, EdgeKind::PathLiteral));
         }
     }
+    result.parsed = Some(parsed);
     result
 }
 

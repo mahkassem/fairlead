@@ -136,4 +136,7 @@ fn graph_why_prints_the_chain_and_importers_lists_the_edge() {
     let value: serde_json::Value = serde_json::from_slice(&stats.stdout).unwrap();
     assert_eq!(value["sources"], 3);
     assert_eq!(value["edges"], 2);
+    assert_eq!(value["cache"]["enabled"], true);
+    let off = fairlead_in(&dir, &["graph", "stats", "--set", "graph.cache=false"]);
+    assert!(String::from_utf8_lossy(&off.stdout).contains("parse cache: off"));
 }

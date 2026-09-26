@@ -12,6 +12,7 @@ use fairlead_lang::build;
 const PACKAGES: usize = 40;
 const FILES_PER_PACKAGE: usize = 50;
 const BUDGET_SECONDS: f64 = 1.5;
+const WARM_BUDGET_SECONDS: f64 = 0.5;
 const FILLER_FUNCTIONS: usize = 12;
 
 #[test]
@@ -64,5 +65,16 @@ fn a_two_thousand_file_workspace_builds_within_the_budget() {
     assert!(
         seconds <= BUDGET_SECONDS,
         "built in {seconds:.2} s, over the {BUDGET_SECONDS} s budget"
+    );
+
+    let started = Instant::now();
+    let warm = build(&dir, &Config::default()).unwrap();
+    let warm_seconds = started.elapsed().as_secs_f64();
+    println!("rebuilt from the parse cache in {warm_seconds:.2} s");
+    assert_eq!(warm.cache.hits, PACKAGES * FILES_PER_PACKAGE);
+    assert_eq!(warm.graph.stats(), stats);
+    assert!(
+        warm_seconds <= WARM_BUDGET_SECONDS,
+        "rebuilt in {warm_seconds:.2} s, over the {WARM_BUDGET_SECONDS} s budget"
     );
 }

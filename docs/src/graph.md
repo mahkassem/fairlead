@@ -36,4 +36,14 @@ Files larger than 256 KB, almost always generated, are scanned for import string
 
 ## Speed
 
-A cold build of a 2,000-file workspace takes well under the 1.5 second budget on 4 cores, and CI checks it on every pull request.
+A cold build of a 2,000-file workspace takes well under the 1.5 second budget on 4 cores, and a warm one under half a second. CI checks both on every pull request.
+
+Parsing is most of a cold build. Fairlead keeps each file's parse result in `.git/fairlead/parse-cache.json`, keyed by the file's git blob id (the same id `git hash-object` prints) and its extension, so a file is parsed again only when its bytes change. The cache sits inside the git directory, so it's never committed and needs no `.gitignore` line; in a worktree it goes in that worktree's git directory. A new Fairlead version starts it over, entries for files that are gone drop out on the next build, and an unreadable cache is rebuilt. `graph stats` reports hits and files parsed. To turn it off, set `graph.cache = false`, or `FAIRLEAD_GRAPH__CACHE=false` for one run.
+
+On the benchmark repositories, 4 cores:
+
+| Repository | Cold | Warm |
+| --- | --- | --- |
+| Effect-TS/effect | 1.19 s | 0.07 s |
+| pnpm/pnpm | 1.02 s | 0.26 s |
+| vitest-dev/vitest | 0.41 s | 0.05 s |

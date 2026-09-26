@@ -1,6 +1,7 @@
 //! Source scanning and import resolution: which files exist, what each one
 //! refers to, and what those references resolve to without an install.
 
+pub mod cache;
 pub mod extract;
 pub mod fs;
 pub mod graph;
