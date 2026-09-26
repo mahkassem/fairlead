@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.4.0 (2026-09-27)
 
 ### New
 
@@ -8,15 +8,15 @@
 - The git hook: `fairlead hooks install --git` adds the commit stage to `lefthook.yml` by inserting lines, keeping its comments and layout, and uninstall restores it byte for byte. Plain `install` adds it wherever a lefthook config already exists. `fairlead doctor` reports both hooks, whether lefthook will run the git one, whether `fairlead` is on the PATH, and the event log: write-hook decisions, denies by rule, p50 and p95 time, time-outs, errors and commit-stage runs. See [The git hook](https://mahkassem.github.io/fairlead/docs/guard.html#the-git-hook).
 - The write stage: `fairlead hooks install` adds a Claude Code hook that runs `fairlead guard hook` before every edit, and denies one that adds a finding, with the findings as the reason the agent reads (or, with `guard.on_finding = "warn"`, lets it through with them as a note). It never answers "allow", lets a call through whenever it can't decide, and keeps to `guard.budget_ms` (40 by default). `[[guard.commands]]` deny shell commands. `hooks.claude` chooses `.claude/settings.json` (shared, the default) or `.claude/settings.local.json`; `fairlead hooks uninstall` restores the file byte for byte when nobody changed it since. See [The write hook](https://mahkassem.github.io/fairlead/docs/guard.html#the-write-hook).
 
-### Changed
-
-- A plan's config digest leaves out `guard` and `hooks`, which never change a plan, so digests are the same as 0.3.0's for the same config.
-- `[[guard.external]]` refuses `stages = ["write"]`: when the write hook runs, the file isn't written yet.
-
 - More guard rules: `[guard.test_names]` (file names and test titles), `[guard.citations]` (a pointer in a comment must name a heading in a Markdown file), `[guard.migrations]` (a migration that exists at the base may not change, move or go, and numbers are unique), `[[guard.commands]]` (commands an agent may not run, for the write stage), and `[[guard.external]]` (any tool that prints `file:line message` becomes a rule, at the check stage by default or at commit). `guard check --base REV` checks migrations against a base. See [Guard rules](https://mahkassem.github.io/fairlead/docs/guard.html#test-names).
 - Guard presets: `[guard.comments]` checks comment block length by context, comment density, history (dates, names, phrases, measurements), item references outside a pointer form, comments that address the next editor, and block markers, reading comments after code from the syntax tree. `[guard.size]` adds `function_lines`, counting a function's own lines without the functions nested in it. `[guard.cite]` appends a note to a rule's messages. See [Guard rules](https://mahkassem.github.io/fairlead/docs/guard.html#comments).
 - Environments: `FAIRLEAD_ENV=staging` or `--env staging` layers `fairlead.staging.toml` (shared) over the project file and `fairlead.staging.local.toml` (personal, ignored in CI) over the local one. Naming an environment with no file for it is an error. See [Configuration](https://mahkassem.github.io/fairlead/docs/config.html#environments).
 - `fairlead guard check` checks the project's own rules over every tracked file, with a ratchet: `--write-baseline` records today's counts for ratcheted rules and the check fails only when one rises. `--staged` is the commit stage, failing only on findings the staged change adds, compared by what each finding is about rather than its line. The first rule is `file-length` (`[guard.size]`). `guard.findings = "all"` counts every finding in a touched file instead, and `guard.on_finding = "warn"` shows the findings without stopping the commit. Commit-stage runs are recorded in `.git/fairlead/events.jsonl`, with rule ids and timings and never file contents; `guard.events = "off"` turns that off. See [Guard rules](https://mahkassem.github.io/fairlead/docs/guard.html).
+
+### Changed
+
+- A plan's config digest leaves out `guard` and `hooks`, which never change a plan, so digests are the same as 0.3.0's for the same config.
+- `[[guard.external]]` refuses `stages = ["write"]`: when the write hook runs, the file isn't written yet.
 
 ## 0.3.0 (2026-09-26)
 
