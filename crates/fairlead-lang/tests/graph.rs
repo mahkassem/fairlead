@@ -360,3 +360,92 @@ fn workspace_globs_keep_star_within_one_segment_and_honour_negation() {
     let s = scan(&dir);
     assert_eq!(s.graph.packages, vec!["one".to_string()]);
 }
+
+#[test]
+fn a_second_build_reuses_every_parse_and_reparses_only_what_changed() {
+    let dir = repo(
+        "cache",
+        &[
+            ("src/a.ts", "import { b } from './b';\n"),
+            ("src/b.ts", "export const b = 1;\n"),
+            ("src/c.ts", "export const c = 1;\n"),
+        ],
+    );
+    let first = scan(&dir);
+    assert_eq!((first.cache.hits, first.cache.misses), (0, 3));
+    assert!(dir.join(".git/fairlead/parse-cache.json").is_file());
+    let second = scan(&dir);
+    assert_eq!((second.cache.hits, second.cache.misses), (3, 0));
+    assert_eq!(first.graph.stats(), second.graph.stats());
+
+    fs::write(dir.join("src/a.ts"), "import { c } from './c';\n").unwrap();
+    let third = scan(&dir);
+    assert_eq!((third.cache.hits, third.cache.misses), (2, 1));
+    assert_eq!(
+        deps(&third, "src/a.ts"),
+        vec![("src/c.ts".into(), EdgeKind::Import)]
+    );
+}
+
+#[test]
+fn an_unreadable_cache_is_rebuilt_and_a_disabled_one_is_never_written() {
+    let dir = repo("cache-bad", &[("a.ts", "import './b';\n"), ("b.ts", "")]);
+    fs::create_dir_all(dir.join(".git/fairlead")).unwrap();
+    fs::write(dir.join(".git/fairlead/parse-cache.json"), "{ not json").unwrap();
+    let s = scan(&dir);
+    assert_eq!((s.cache.hits, s.cache.misses), (0, 2));
+    assert_eq!(deps(&s, "a.ts"), vec![("b.ts".into(), EdgeKind::Import)]);
+    assert_eq!(scan(&dir).cache.hits, 2, "rewritten after the bad read");
+
+    let off = repo("cache-off", &[("a.ts", "")]);
+    let mut config = Config::default();
+    config.graph.cache = false;
+    let s = build(&off, &config).unwrap();
+    assert!(!s.cache.enabled);
+    assert!(!off.join(".git/fairlead").exists());
+}
+
+#[test]
+fn a_worktree_keeps_its_cache_in_the_git_dir_its_git_file_names() {
+    let dir = repo("cache-worktree", &[("a.ts", "")]);
+    fs::remove_dir_all(dir.join(".git")).unwrap();
+    let git_dir = dir.with_file_name(format!(
+        "{}-gitdir",
+        dir.file_name().unwrap().to_string_lossy()
+    ));
+    let _ = fs::remove_dir_all(&git_dir);
+    fs::create_dir_all(&git_dir).unwrap();
+    fs::write(dir.join(".git"), format!("gitdir: {}\n", git_dir.display())).unwrap();
+    let s = scan(&dir);
+    assert!(s.cache.enabled);
+    assert!(git_dir.join("fairlead/parse-cache.json").is_file());
+}
+
+#[test]
+fn a_solution_tsconfig_with_references_resolves_each_project_by_its_own_paths() {
+    let dir = repo(
+        "references",
+        &[
+            (
+                "tsconfig.json",
+                r#"{ "files": [], "references": [{ "path": "./packages/app" }, { "path": "./packages/lib" }] }"#,
+            ),
+            (
+                "packages/app/tsconfig.json",
+                r##"{ "compilerOptions": { "composite": true, "baseUrl": ".", "paths": { "#lib/*": ["../lib/src/*"] } }, "references": [{ "path": "../lib" }] }"##,
+            ),
+            ("packages/app/src/main.ts", "import { x } from '#lib/x';\n"),
+            (
+                "packages/lib/tsconfig.json",
+                r#"{ "compilerOptions": { "composite": true, "rootDir": "src" } }"#,
+            ),
+            ("packages/lib/src/x.ts", "export const x = 1;\n"),
+        ],
+    );
+    let s = scan(&dir);
+    assert_eq!(
+        deps(&s, "packages/app/src/main.ts"),
+        vec![("packages/lib/src/x.ts".into(), EdgeKind::Import)]
+    );
+    assert!(s.graph.unresolved.is_empty(), "{:?}", s.graph.unresolved);
+}

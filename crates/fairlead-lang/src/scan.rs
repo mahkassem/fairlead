@@ -1,12 +1,14 @@
 //! Building the graph: list the tree, find the workspace packages, extract
 //! and resolve every source file in parallel, then add the edges.
 
+use std::collections::HashMap;
 use std::path::Path;
 
 use fairlead_core::config::Config;
 use rayon::prelude::*;
 
-use crate::extract::{extract, SpecKind};
+use crate::cache::{self, CacheStats, ParseCache};
+use crate::extract::{extract, Extracted, SpecKind};
 use crate::graph::{EdgeKind, Graph};
 use crate::resolve::{Resolver, Target};
 use crate::tree::{normalize, parent, Tree};
@@ -19,11 +21,14 @@ struct FileResult {
     unresolved: Vec<String>,
     unknown: bool,
     fell_back: bool,
+    /// The cache key and extraction result, and whether it was a hit.
+    parsed: Option<(String, Extracted, bool)>,
 }
 
 pub struct Scan {
     pub tree: Tree,
     pub graph: Graph,
+    pub cache: CacheStats,
 }
 
 pub fn build(root: &Path, config: &Config) -> std::io::Result<Scan> {
@@ -37,16 +42,41 @@ pub fn build(root: &Path, config: &Config) -> std::io::Result<Scan> {
         .map(|p| (p.name.clone(), p.dir.clone()))
         .collect();
     let mut graph = Graph::with_files(tree.files.clone(), named);
+    let parse_cache = if config.graph.cache {
+        ParseCache::open(&root)
+    } else {
+        ParseCache::disabled()
+    };
     let sources: Vec<&String> = tree.sources().collect();
-    let results: Vec<(String, FileResult)> = sources
+    let mut results: Vec<(String, FileResult)> = sources
         .par_iter()
         .map(|file| {
-            (
-                (*file).clone(),
-                scan_file(&tree, &resolver, file, config.graph.type_imports),
-            )
+            let result = scan_file(
+                &tree,
+                &resolver,
+                &parse_cache,
+                file,
+                config.graph.type_imports,
+            );
+            ((*file).clone(), result)
         })
         .collect();
+    let mut stats = CacheStats {
+        enabled: parse_cache.enabled(),
+        ..CacheStats::default()
+    };
+    let mut used = HashMap::new();
+    for (_, result) in &mut results {
+        if let Some((key, extracted, hit)) = result.parsed.take() {
+            if hit {
+                stats.hits += 1;
+            } else {
+                stats.misses += 1;
+            }
+            used.insert(key, extracted);
+        }
+    }
+    parse_cache.save(used);
     for (file, result) in results {
         let from = graph.id(&file).expect("every source is in the tree");
         for (to, kind) in result.edges {
@@ -68,14 +98,36 @@ pub fn build(root: &Path, config: &Config) -> std::io::Result<Scan> {
         }
     }
     add_snapshot_edges(&tree, &mut graph);
-    Ok(Scan { tree, graph })
+    Ok(Scan {
+        tree,
+        graph,
+        cache: stats,
+    })
 }
 
-fn scan_file(tree: &Tree, resolver: &Resolver, file: &str, type_imports: bool) -> FileResult {
+/// The file's extraction, from the cache when its bytes haven't changed.
+fn parse(cache: &ParseCache, file: &str, source: &[u8]) -> (Extracted, Option<(String, bool)>) {
+    if !cache.enabled() {
+        return (extract(file, source), None);
+    }
+    let key = cache::key(file, source);
+    match cache.get(&key) {
+        Some(hit) => (hit.clone(), Some((key, true))),
+        None => (extract(file, source), Some((key, false))),
+    }
+}
+
+fn scan_file(
+    tree: &Tree,
+    resolver: &Resolver,
+    cache: &ParseCache,
+    file: &str,
+    type_imports: bool,
+) -> FileResult {
     let Ok(source) = std::fs::read(tree.abs(file)) else {
         return FileResult::default();
     };
-    let extracted = extract(file, &source);
+    let (extracted, keyed) = parse(cache, file, &source);
     let mut result = FileResult {
         unknown: extracted.unknown_dynamic,
         ..FileResult::default()
@@ -104,6 +156,7 @@ fn scan_file(tree: &Tree, resolver: &Resolver, file: &str, type_imports: bool) -
             result.edges.push((to, EdgeKind::PathLiteral));
         }
     }
+    result.parsed = keyed.map(|(key, hit)| (key, extracted, hit));
     result
 }
 

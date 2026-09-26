@@ -4,6 +4,7 @@
 
 use std::sync::OnceLock;
 
+use serde::{Deserialize, Serialize};
 use tree_sitter::{Language, Parser, Query, QueryCursor, StreamingIterator};
 
 /// Files larger than this are almost always generated; they get a lexical
@@ -11,7 +12,7 @@ use tree_sitter::{Language, Parser, Query, QueryCursor, StreamingIterator};
 pub const LEXICAL_ABOVE_BYTES: usize = 256 * 1024;
 const MAX_LITERAL_LEN: usize = 300;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub enum SpecKind {
     Import,
     TypeImport,
@@ -20,7 +21,7 @@ pub enum SpecKind {
     Mock,
 }
 
-#[derive(Debug, Clone, Default, PartialEq)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct Extracted {
     pub specs: Vec<(String, SpecKind)>,
     /// String literals that look like file paths.

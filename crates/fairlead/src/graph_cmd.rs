@@ -85,6 +85,7 @@ fn stats(scan: &Scan, seconds: f64, json: bool) -> ExitCode {
             "files": s.files, "sources": sources, "edges": s.edges, "edges_by_kind": by_kind,
             "package_edges": s.package_edges, "packages": s.packages, "unresolved": s.unresolved,
             "unknown_dynamic": s.unknown, "tsconfig_fallbacks": s.tsconfig_fallbacks, "seconds": seconds,
+            "cache": { "enabled": scan.cache.enabled, "hits": scan.cache.hits, "misses": scan.cache.misses },
         });
         println!(
             "{}",
@@ -106,6 +107,14 @@ fn stats(scan: &Scan, seconds: f64, json: bool) -> ExitCode {
             "unresolved: {}, unknown dynamic imports: {}, tsconfig fallbacks: {}",
             s.unresolved, s.unknown, s.tsconfig_fallbacks
         );
+        if scan.cache.enabled {
+            println!(
+                "parse cache: {} hits, {} parsed",
+                scan.cache.hits, scan.cache.misses
+            );
+        } else {
+            println!("parse cache: off");
+        }
         println!("built in {seconds:.2} s");
     }
     ExitCode::SUCCESS

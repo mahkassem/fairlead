@@ -112,6 +112,9 @@ pub struct Graph {
     pub unresolved: Unresolved,
     /// Package `exports` conditions, in priority order.
     pub conditions: List<String>,
+    /// Keep each file's parse result under `.git/fairlead`, keyed by its
+    /// git blob id, so unchanged files aren't parsed again.
+    pub cache: bool,
 }
 
 impl Default for Graph {
@@ -121,6 +124,7 @@ impl Default for Graph {
             type_imports: true,
             unresolved: Unresolved::Warn,
             conditions: strings(&["import", "node", "default"]),
+            cache: true,
         }
     }
 }
