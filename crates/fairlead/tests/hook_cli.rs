@@ -439,3 +439,124 @@ fn a_settings_file_that_is_not_json_is_left_alone() {
     assert!(err.contains("isn't valid JSON"), "{err}");
     assert_eq!(settings(&dir, "settings.json"), "{ not json");
 }
+
+const LEFTHOOK: &str = "# Shared git hooks.\npre-commit:\n  parallel: true\n  commands:\n    # lint first\n    lint:\n      run: npm run lint\n";
+
+fn file(dir: &Path, name: &str) -> Option<String> {
+    std::fs::read_to_string(dir.join(name)).ok()
+}
+
+#[test]
+fn install_adds_the_commit_stage_to_an_existing_lefthook_config_and_uninstall_restores_it() {
+    let dir = repo("lefthook", SIZE, &[("lefthook.yml", LEFTHOOK.to_string())]);
+    let (ok, out, err) = fairlead(&dir, &["hooks", "install"]);
+    assert!(ok, "{err}");
+    assert!(
+        out.contains("added the commit stage to") && out.contains("lefthook install"),
+        "{out}"
+    );
+    let added = file(&dir, "lefthook.yml").unwrap();
+    assert!(
+        added.contains("    fairlead-guard:\n      run: fairlead guard check --staged\n"),
+        "{added}"
+    );
+    assert!(
+        added.contains("# lint first") && added.starts_with("# Shared git hooks."),
+        "comments kept: {added}"
+    );
+    assert!(
+        dir.join(".claude/settings.json").exists(),
+        "the Claude hook goes in too"
+    );
+    let (_, out, _) = fairlead(&dir, &["hooks", "status", "--git"]);
+    assert!(
+        out.contains("byte for byte") && out.contains("won't run"),
+        "{out}"
+    );
+    let (ok, out, _) = fairlead(&dir, &["hooks", "uninstall"]);
+    assert!(ok && out.contains("back as it was"), "{out}");
+    assert_eq!(file(&dir, "lefthook.yml").unwrap(), LEFTHOOK);
+    assert!(!dir.join(".claude").exists());
+}
+
+#[test]
+fn without_git_install_leaves_a_repository_with_no_lefthook_config_alone() {
+    let dir = repo("nolefthook", SIZE, &[]);
+    assert!(fairlead(&dir, &["hooks", "install"]).0);
+    assert!(!dir.join("lefthook.yml").exists());
+    let (ok, _, _) = fairlead(&dir, &["hooks", "install", "--git"]);
+    assert!(ok);
+    let made = file(&dir, "lefthook.yml").unwrap();
+    assert!(
+        made.starts_with("pre-commit:\n  commands:\n    fairlead-guard:"),
+        "{made}"
+    );
+    assert!(fairlead(&dir, &["hooks", "uninstall", "--git"]).0);
+    assert!(
+        !dir.join("lefthook.yml").exists(),
+        "a config install made is taken away"
+    );
+    assert!(
+        dir.join(".claude/settings.json").exists(),
+        "--git leaves the Claude hook"
+    );
+}
+
+#[test]
+fn a_one_line_pre_commit_is_refused_and_left_as_it_was() {
+    let dir = repo(
+        "inline",
+        SIZE,
+        &[("lefthook.yml", "pre-commit: {}\n".into())],
+    );
+    let (ok, _, err) = fairlead(&dir, &["hooks", "install", "--git"]);
+    assert!(!ok);
+    assert!(err.contains("by hand"), "{err}");
+    assert_eq!(file(&dir, "lefthook.yml").unwrap(), "pre-commit: {}\n");
+}
+
+#[test]
+fn doctor_reports_the_hooks_and_what_the_event_log_recorded() {
+    let dir = repo("doctor", SIZE, &[]);
+    assert!(fairlead(&dir, &["hooks", "install", "--git"]).0);
+    std::fs::create_dir_all(dir.join(".git/hooks")).unwrap();
+    std::fs::write(
+        dir.join(".git/hooks/pre-commit"),
+        "#!/bin/sh\nlefthook run pre-commit\n",
+    )
+    .unwrap();
+    let mut log: Vec<String> = (1..=9)
+        .map(|i| {
+            json!({"stage": "write", "decision": "allow", "ms": i as f64, "rules": []}).to_string()
+        })
+        .collect();
+    log.push(
+        json!({"stage": "write", "decision": "deny", "ms": 20.0, "rules": ["file-length"]})
+            .to_string(),
+    );
+    log.push(json!({"stage": "commit", "decision": "allow", "ms": 5.0, "rules": []}).to_string());
+    std::fs::create_dir_all(dir.join(".git/fairlead")).unwrap();
+    std::fs::write(
+        dir.join(".git/fairlead/events.jsonl"),
+        log.join("\n") + "\n",
+    )
+    .unwrap();
+    let (ok, out, err) = fairlead(&dir, &["doctor"]);
+    assert!(ok, "{err}");
+    let tail: Vec<&str> = out
+        .lines()
+        .skip_while(|l| !l.starts_with("claude hook"))
+        .filter(|l| !l.starts_with("on PATH"))
+        .collect();
+    assert_eq!(
+        tail,
+        [
+            "claude hook: not installed in .claude/settings.json; `fairlead hooks install` adds it",
+            "git hook: installed in lefthook.yml, and lefthook runs it",
+            "write hook: 10 call(s): 9 allow, 1 deny",
+            "  latency: p50 5.0 ms, p95 20.0 ms",
+            "  denied by: 1 file-length",
+            "commit stage: 1 run(s): 1 allow",
+        ]
+    );
+}

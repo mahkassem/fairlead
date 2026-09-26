@@ -14,11 +14,13 @@ mod finding;
 mod functions;
 pub mod git;
 pub mod hook;
+pub mod lefthook;
 pub mod migrations;
 mod names;
 mod rules;
 mod size;
 pub mod stages;
+pub mod summary;
 
 pub use finding::{sort, Finding, Measure};
 pub use rules::{Guard, Preset, Source};

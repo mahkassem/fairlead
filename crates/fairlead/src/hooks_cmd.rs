@@ -8,6 +8,7 @@ use std::process::ExitCode;
 
 use clap::Subcommand;
 use fairlead_core::config::{self, HooksTarget, LoadOptions};
+use fairlead_guard::lefthook;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Map, Value};
 
@@ -41,6 +42,13 @@ pub enum HooksAction {
 
 #[derive(clap::Args)]
 pub struct Target {
+    /// Only the Claude Code hook.
+    #[arg(long, conflicts_with = "git")]
+    claude: bool,
+    /// Only the git pre-commit hook, through lefthook; install makes a
+    /// `lefthook.yml` when there's none.
+    #[arg(long)]
+    git: bool,
     /// `.claude/settings.local.json`, over `hooks.claude`.
     #[arg(long, conflicts_with = "shared")]
     local: bool,
@@ -93,15 +101,203 @@ pub fn run(action: HooksAction, cwd: &Path) -> ExitCode {
         .join("backups")
         .join(format!("claude-{name}"));
     let bash = !loaded.config.guard.commands.items().is_empty();
-    let result = match action {
-        HooksAction::Install { .. } => install(&file, &manifest, bash),
-        HooksAction::Status { .. } => status(&file, &manifest),
-        HooksAction::Uninstall { .. } => uninstall(&file, &manifest),
-    };
+    let backups = git_dir.join("fairlead").join("backups");
+    let lefthook = lefthook_file(&root);
+    let lefthook_manifest = backups.join(format!(
+        "lefthook-{}",
+        lefthook
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("lefthook.yml")
+    ));
+    let claude = !target.git;
+    // Without `--git`, install only touches a lefthook config that's already there.
+    let git = target.git
+        || (!target.claude
+            && (lefthook.exists() || !matches!(action, HooksAction::Install { .. })));
+    let mut result = Ok(());
+    if claude {
+        result = match action {
+            HooksAction::Install { .. } => install(&file, &manifest, bash),
+            HooksAction::Status { .. } => status(&file, &manifest),
+            HooksAction::Uninstall { .. } => uninstall(&file, &manifest),
+        };
+    }
+    if git && result.is_ok() {
+        result = match action {
+            HooksAction::Install { .. } => git_install(&lefthook, &lefthook_manifest, &git_dir),
+            HooksAction::Status { .. } => git_status(&lefthook, &lefthook_manifest, &git_dir),
+            HooksAction::Uninstall { .. } => git_uninstall(&lefthook, &lefthook_manifest),
+        };
+    }
     match result {
         Ok(()) => ExitCode::SUCCESS,
         Err(e) => fail(e),
     }
+}
+
+/// What `doctor` says about both hooks, one line each.
+pub fn describe(root: &Path, config: &fairlead_core::config::Config) -> Vec<String> {
+    let name = match config.hooks.claude {
+        HooksTarget::Shared => "settings.json",
+        HooksTarget::Local => "settings.local.json",
+    };
+    let file = root.join(".claude").join(name);
+    let claude = match read(&file).ok().flatten().map(|t| parse(&file, &t)) {
+        Some(Ok(settings)) if !installed(&settings).is_empty() => {
+            format!(
+                "claude hook: installed in .claude/{name} for {}",
+                installed(&settings).join(", ")
+            )
+        }
+        Some(Err(e)) => format!("claude hook: can't read it: {e}"),
+        _ => format!(
+            "claude hook: not installed in .claude/{name}; `fairlead hooks install` adds it"
+        ),
+    };
+    let lefthook = lefthook_file(root);
+    let shown = lefthook
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("lefthook.yml");
+    let git = match read(&lefthook).ok().flatten() {
+        Some(text) if lefthook::present(&text) => {
+            let active = fairlead_guard::git::git_dir(root).is_some_and(|d| lefthook_active(&d));
+            if active {
+                format!("git hook: installed in {shown}, and lefthook runs it")
+            } else {
+                format!("git hook: installed in {shown}, but lefthook isn't in .git/hooks; run `lefthook install`")
+            }
+        }
+        _ => "git hook: not installed; `fairlead hooks install --git` adds it through lefthook"
+            .to_string(),
+    };
+    vec![claude, git]
+}
+
+/// The lefthook config lefthook would read, or where a new one goes.
+pub fn lefthook_file(root: &Path) -> std::path::PathBuf {
+    lefthook::FILES
+        .iter()
+        .map(|n| root.join(n))
+        .find(|p| p.is_file())
+        .unwrap_or_else(|| root.join(lefthook::FILES[0]))
+}
+
+/// Whether lefthook has put its runner in the git hooks, so the entry runs.
+pub fn lefthook_active(git_dir: &Path) -> bool {
+    std::fs::read_to_string(git_dir.join("hooks").join("pre-commit"))
+        .is_ok_and(|t| t.contains("lefthook"))
+}
+
+fn write(path: &Path, text: &str) -> Result<(), String> {
+    std::fs::write(path, text).map_err(|e| format!("{}: {e}", path.display()))
+}
+
+fn keep_manifest(manifest: &Path, record: &Manifest) -> Result<(), String> {
+    // The first manifest is the one that knows the file before Fairlead.
+    if manifest.exists() {
+        return Ok(());
+    }
+    std::fs::create_dir_all(manifest.parent().expect("a manifest has a directory"))
+        .map_err(|e| format!("{}: {e}", manifest.display()))?;
+    write(
+        manifest,
+        &serde_json::to_string_pretty(record).expect("manifest serializes"),
+    )
+}
+
+fn git_install(file: &Path, manifest: &Path, git_dir: &Path) -> Result<(), String> {
+    let original = read(file)?;
+    let written = match lefthook::insert(original.as_deref().unwrap_or("")) {
+        lefthook::Insert::Already => {
+            println!("hooks: already in {}", file.display());
+            return Ok(());
+        }
+        lefthook::Insert::Refused(why) => return Err(format!("{}: {why}", file.display())),
+        lefthook::Insert::Text(text) => text,
+    };
+    keep_manifest(
+        manifest,
+        &Manifest {
+            original,
+            written: written.clone(),
+            made_dir: false,
+        },
+    )?;
+    write(file, &written)?;
+    println!("hooks: added the commit stage to {}", file.display());
+    if !lefthook_active(git_dir) {
+        println!("hooks: lefthook isn't in .git/hooks yet; run `lefthook install` so it runs");
+    }
+    Ok(())
+}
+
+fn git_status(file: &Path, manifest: &Path, git_dir: &Path) -> Result<(), String> {
+    let Some(text) = read(file)? else {
+        println!("hooks: no lefthook config, so no commit stage");
+        return Ok(());
+    };
+    if !lefthook::present(&text) {
+        println!("hooks: the commit stage isn't in {}", file.display());
+        return Ok(());
+    }
+    let exact = read_manifest(manifest)?.is_some_and(|m| m.written == text);
+    let restore = if exact {
+        "byte for byte"
+    } else {
+        "by removing only its lines"
+    };
+    println!(
+        "hooks: the commit stage is in {}; uninstall restores it {restore}",
+        file.display()
+    );
+    if !lefthook_active(git_dir) {
+        println!("hooks: lefthook isn't in .git/hooks, so it won't run; run `lefthook install`");
+    }
+    Ok(())
+}
+
+fn git_uninstall(file: &Path, manifest_path: &Path) -> Result<(), String> {
+    let current = read(file)?;
+    let manifest = read_manifest(manifest_path)?;
+    // Removed only once the file is dealt with, so a failed write keeps the original.
+    let done = || {
+        let _ = std::fs::remove_file(manifest_path);
+    };
+    if let (Some(text), Some(m)) = (&current, &manifest) {
+        if *text == m.written {
+            match &m.original {
+                Some(original) => write(file, original)?,
+                None => {
+                    std::fs::remove_file(file).map_err(|e| format!("{}: {e}", file.display()))?
+                }
+            }
+            done();
+            println!(
+                "hooks: removed the commit stage; {} is back as it was, byte for byte",
+                file.display()
+            );
+            return Ok(());
+        }
+    }
+    let Some(text) = current else {
+        done();
+        println!("hooks: no lefthook config, so no commit stage");
+        return Ok(());
+    };
+    match lefthook::remove(&text) {
+        Some(left) => {
+            write(file, &left)?;
+            println!(
+                "hooks: removed the commit stage's lines from {}",
+                file.display()
+            );
+        }
+        None => println!("hooks: the commit stage isn't in {}", file.display()),
+    }
+    done();
+    Ok(())
 }
 
 fn read(file: &Path) -> Result<Option<String>, String> {
