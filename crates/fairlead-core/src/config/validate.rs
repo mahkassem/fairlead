@@ -117,8 +117,53 @@ fn guard(config: &Config, problems: &mut Vec<Problem>) {
     if let Some(comments) = &guard.comments {
         comment_rules(comments, problems);
     }
+    if let Some(t) = &guard.test_names {
+        test_names(t, problems);
+    }
+    if let Some(c) = &guard.citations {
+        citations(c, problems);
+    }
+    if let Some(m) = &guard.migrations {
+        migrations(m, problems);
+    }
+    for (i, c) in guard.commands.items().iter().enumerate() {
+        regexes(
+            &format!("guard.commands[{i}].match"),
+            std::slice::from_ref(&c.matches),
+            problems,
+        );
+        if c.reason.trim().is_empty() {
+            problems.push(problem(
+                format!("guard.commands[{i}].reason"),
+                "must say why",
+            ));
+        }
+    }
+    let externals = guard.external.items();
+    for id in duplicates(externals.iter().map(|e| e.id.as_str())) {
+        problems.push(problem(
+            "guard.external",
+            format!("rule id `{id}` is used more than once"),
+        ));
+    }
+    for (i, e) in externals.iter().enumerate() {
+        let key = format!("guard.external[{i}]");
+        if GUARD_RULES.contains(&e.id.as_str()) || e.id.trim().is_empty() {
+            problems.push(problem(format!("{key}.id"), "must be a new rule id"));
+        }
+        if e.command.is_empty() {
+            problems.push(problem(format!("{key}.command"), "is empty"));
+        }
+        if e.stages.is_empty() {
+            problems.push(problem(
+                format!("{key}.stages"),
+                "names no stage, so it never runs",
+            ));
+        }
+    }
+    let external_ids: Vec<&str> = externals.iter().map(|e| e.id.as_str()).collect();
     for rule in guard.cite.keys() {
-        if !GUARD_RULES.contains(&rule.as_str()) {
+        if !GUARD_RULES.contains(&rule.as_str()) && !external_ids.contains(&rule.as_str()) {
             problems.push(problem(
                 format!("guard.cite.{rule}"),
                 format!("isn't a rule; the rules are {}", GUARD_RULES.join(", ")),
@@ -128,7 +173,7 @@ fn guard(config: &Config, problems: &mut Vec<Problem>) {
 }
 
 /// Every rule id a guard preset can report.
-pub const GUARD_RULES: [&str; 8] = [
+pub const GUARD_RULES: [&str; 13] = [
     "file-length",
     "function-length",
     "block-length",
@@ -137,7 +182,71 @@ pub const GUARD_RULES: [&str; 8] = [
     "item-code",
     "agent-instruction",
     "block-marker",
+    "test-file-name",
+    "test-title",
+    "citation",
+    "migration-edit",
+    "migration-prefix",
 ];
+
+fn test_names(t: &super::TestNames, problems: &mut Vec<Problem>) {
+    const KEY: &str = "guard.test_names";
+    if t.files.items().is_empty() {
+        problems.push(problem(format!("{KEY}.files"), "needs at least one glob"));
+    }
+    globs(&format!("{KEY}.files"), t.files.items(), problems);
+    globs(&format!("{KEY}.exclude"), t.exclude.items(), problems);
+    if t.file.is_none() && t.titles_without.is_none() {
+        problems.push(problem(KEY, "sets neither `file` nor `titles_without`"));
+    }
+    for (name, pattern) in [("file", &t.file), ("titles_without", &t.titles_without)] {
+        if let Some(p) = pattern {
+            regexes(&format!("{KEY}.{name}"), std::slice::from_ref(p), problems);
+        }
+    }
+}
+
+fn citations(c: &super::Citations, problems: &mut Vec<Problem>) {
+    const KEY: &str = "guard.citations";
+    if c.files.items().is_empty() {
+        problems.push(problem(format!("{KEY}.files"), "needs at least one glob"));
+    }
+    globs(&format!("{KEY}.files"), c.files.items(), problems);
+    globs(&format!("{KEY}.exclude"), c.exclude.items(), problems);
+    match regex::Regex::new(&c.pattern) {
+        Ok(re) if re.capture_names().flatten().any(|n| n == "code") => {}
+        Ok(_) => problems.push(problem(
+            format!("{KEY}.pattern"),
+            "needs a group named `code`",
+        )),
+        Err(e) => problems.push(problem(format!("{KEY}.pattern"), e.to_string())),
+    }
+    if c.headings_in.trim().is_empty() {
+        problems.push(problem(
+            format!("{KEY}.headings_in"),
+            "must name a Markdown file",
+        ));
+    }
+}
+
+fn migrations(m: &super::Migrations, problems: &mut Vec<Problem>) {
+    const KEY: &str = "guard.migrations";
+    if m.files.items().is_empty() {
+        problems.push(problem(format!("{KEY}.files"), "needs at least one glob"));
+    }
+    globs(&format!("{KEY}.files"), m.files.items(), problems);
+    if !m.immutable && m.unique_prefix.is_none() {
+        problems.push(problem(KEY, "turns on no rule"));
+    }
+    if let Some(u) = &m.unique_prefix {
+        if u.allow.iter().any(|group| group.len() < 2) {
+            problems.push(problem(
+                format!("{KEY}.unique_prefix.allow"),
+                "each group names two files or more",
+            ));
+        }
+    }
+}
 
 fn regexes(key: &str, patterns: &[String], problems: &mut Vec<Problem>) {
     for (i, pattern) in patterns.iter().enumerate() {

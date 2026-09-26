@@ -4,13 +4,19 @@
 
 pub mod added;
 pub mod baseline;
+mod citations;
+pub mod commands;
 mod comments;
 pub mod events;
+pub mod external;
 mod finding;
 mod functions;
 pub mod git;
+pub mod migrations;
+mod names;
 mod rules;
 mod size;
+pub mod stages;
 
 pub use finding::{sort, Finding, Measure};
 pub use rules::{Guard, Preset, Source};

@@ -26,7 +26,7 @@ fn the_fixture_corpus_gives_exactly_the_frozen_findings() {
     let config =
         fairlead_core::config::load_file(&Path::new(FIXTURES).join("comments.toml"), &[]).unwrap();
     assert!(config.problems.is_empty(), "{:?}", config.problems);
-    let guard = Guard::new(&config.config.guard).unwrap();
+    let guard = Guard::new(&config.config.guard, Path::new(FIXTURES)).unwrap();
     let root = Path::new(FIXTURES).join("comments");
     let mut found = Vec::new();
     for path in files(&root) {

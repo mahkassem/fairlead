@@ -38,49 +38,85 @@ pub struct Staged {
     pub path: String,
 }
 
+/// One path in a diff: its status letter (`A`, `C`, `D`, `M`, `R`, `T`),
+/// the path it came from for a rename or copy, and where it is now.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Change {
+    pub status: char,
+    pub before: Option<String>,
+    pub path: String,
+}
+
+/// What a diff compares the tree with.
+#[derive(Debug, Clone, Copy)]
+pub enum Against<'a> {
+    /// HEAD against the index: what the next commit changes.
+    Index,
+    /// A revision against the working tree.
+    Rev(&'a str),
+}
+
+pub fn changes(root: &Path, against: Against<'_>) -> Result<Vec<Change>, String> {
+    let mut args = vec!["diff", "--name-status", "-z", "-M", "--relative"];
+    match against {
+        Against::Index => args.push("--cached"),
+        Against::Rev(rev) => args.push(rev),
+    }
+    let fields = nul_split(&git(root, &args)?);
+    let mut out = Vec::new();
+    let mut i = 0;
+    while i < fields.len() {
+        let status = fields[i].chars().next().unwrap_or('?');
+        let pair = matches!(status, 'R' | 'C');
+        let (before, path) = if pair {
+            (fields.get(i + 1).cloned(), fields.get(i + 2))
+        } else {
+            (None, fields.get(i + 1))
+        };
+        if let Some(path) = path {
+            out.push(Change {
+                status,
+                before,
+                path: path.clone(),
+            });
+        }
+        i += if pair { 3 } else { 2 };
+    }
+    Ok(out)
+}
+
 /// Files the next commit adds, changes or renames. Before the first commit
 /// everything staged is added.
 pub fn staged(root: &Path) -> Result<Vec<Staged>, String> {
     let has_head = git(root, &["rev-parse", "--verify", "--quiet", "HEAD"]).is_ok();
-    let out = git(
-        root,
-        &[
-            "diff",
-            "--cached",
-            "--name-status",
-            "-z",
-            "-M",
-            "--diff-filter=ACMR",
-            "--relative",
-        ],
-    )?;
-    let fields = nul_split(&out);
-    let mut staged = Vec::new();
-    let mut i = 0;
-    while i < fields.len() {
-        let status = fields[i].as_bytes().first().copied().unwrap_or(b'?');
-        if status == b'R' || status == b'C' {
-            let (old, new) = (fields.get(i + 1), fields.get(i + 2));
-            if let (Some(old), Some(new)) = (old, new) {
-                let before = (status == b'R' && has_head).then(|| old.clone());
-                staged.push(Staged {
-                    before,
-                    path: new.clone(),
-                });
+    Ok(changes(root, Against::Index)?
+        .into_iter()
+        .filter(|c| matches!(c.status, 'A' | 'C' | 'M' | 'R'))
+        .map(|c| {
+            let before = match c.status {
+                'R' if has_head => c.before,
+                'M' if has_head => Some(c.path.clone()),
+                _ => None,
+            };
+            Staged {
+                before,
+                path: c.path,
             }
-            i += 3;
-        } else {
-            if let Some(path) = fields.get(i + 1) {
-                let before = (status == b'M' && has_head).then(|| path.clone());
-                staged.push(Staged {
-                    before,
-                    path: path.clone(),
-                });
-            }
-            i += 2;
-        }
-    }
-    Ok(staged)
+        })
+        .collect())
+}
+
+/// The commit HEAD and `rev` share.
+pub fn merge_base(root: &Path, rev: &str) -> Result<String, String> {
+    let out = git(root, &["merge-base", "HEAD", rev])?;
+    Ok(String::from_utf8_lossy(&out).trim().to_string())
+}
+
+/// Every path in a revision's tree, relative to `root`; none before the first commit.
+pub fn paths_at(root: &Path, rev: &str) -> std::collections::HashSet<String> {
+    git(root, &["ls-tree", "-r", "-z", "--name-only", rev])
+        .map(|out| nul_split(&out).into_iter().collect())
+        .unwrap_or_default()
 }
 
 /// A file's text at HEAD; `./` makes the path relative to `root`, as the listings are.

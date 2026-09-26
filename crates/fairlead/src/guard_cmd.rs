@@ -10,7 +10,7 @@ use clap::Subcommand;
 use fairlead_core::config::{self, LoadOptions};
 use fairlead_guard::baseline::{self, Counts};
 use fairlead_guard::events::{Event, EventLog};
-use fairlead_guard::{added, git, Finding, Guard, Source};
+use fairlead_guard::{added, git, stages, Finding, Guard, Source};
 use rayon::prelude::*;
 
 #[derive(Subcommand)]
@@ -26,6 +26,10 @@ pub enum GuardAction {
         /// Record the ratcheted counts as they are now.
         #[arg(long, conflicts_with = "staged")]
         write_baseline: bool,
+        /// Check migrations against the merge base with this revision,
+        /// over `guard.migrations.base`.
+        #[arg(long, value_name = "REV", conflicts_with = "staged")]
+        base: Option<String>,
     },
 }
 
@@ -50,7 +54,7 @@ pub fn run(action: GuardAction, sets: Vec<String>, cwd: &Path) -> ExitCode {
     } else {
         loaded.root.clone()
     };
-    let guard = match Guard::new(&loaded.config.guard) {
+    let guard = match Guard::new(&loaded.config.guard, &root) {
         Ok(guard) => guard,
         Err(e) => return fail(e),
     };
@@ -62,21 +66,29 @@ pub fn run(action: GuardAction, sets: Vec<String>, cwd: &Path) -> ExitCode {
         staged,
         list,
         write_baseline,
+        base,
     } = action;
     if staged {
         return check_staged(&root, &guard, &loaded.config.guard, list);
     }
     let baseline_path = root.join(&loaded.config.guard.baseline);
-    check_tree(&root, &guard, &baseline_path, list, write_baseline)
+    let tree = Tree {
+        list,
+        write: write_baseline,
+        base: base.as_deref(),
+    };
+    check_tree(&root, &guard, &baseline_path, tree)
 }
 
-fn check_tree(
-    root: &Path,
-    guard: &Guard,
-    baseline_path: &Path,
+/// How the check stage was asked to run.
+struct Tree<'a> {
     list: bool,
     write: bool,
-) -> ExitCode {
+    base: Option<&'a str>,
+}
+
+fn check_tree(root: &Path, guard: &Guard, baseline_path: &Path, how: Tree<'_>) -> ExitCode {
+    let Tree { list, write, base } = how;
     let files = match git::tracked(root) {
         Ok(files) => files,
         Err(e) => return fail(e),
@@ -94,6 +106,17 @@ fn check_tree(
         .into_iter()
         .flatten()
         .collect();
+    let mut findings = findings;
+    match stages::tree(guard, root, &files, base) {
+        Ok(more) => {
+            findings.extend(more.findings);
+            for note in more.notes {
+                eprintln!("guard: {note}");
+            }
+        }
+        Err(e) => return fail(e),
+    }
+    fairlead_guard::sort(&mut findings);
     if list {
         for f in &findings {
             println!("{f}");
@@ -215,6 +238,11 @@ fn check_staged(root: &Path, guard: &Guard, settings: &config::Guard, list: bool
             .map(|text| lint(&text))
             .unwrap_or_default();
         new.extend(added::added(&before, &now));
+    }
+    let paths: Vec<String> = staged.iter().map(|s| s.path.clone()).collect();
+    match stages::staged(guard, root, &paths) {
+        Ok(more) => new.extend(more),
+        Err(e) => return fail(e),
     }
     fairlead_guard::sort(&mut new);
     let warn = settings.on_finding == config::OnFinding::Warn;

@@ -277,3 +277,142 @@ fn a_config_in_a_subdirectory_checks_its_files_and_logs_to_the_repository() {
     assert!(err.contains("src/ok.ts:1 file-length"), "{err}");
     assert!(dir.join(".git/fairlead/events.jsonl").exists());
 }
+
+const MIGRATIONS: &str = "[guard.migrations]\nfiles = [\"db/*.sql\"]\nunique_prefix = { allow = [[\"002_a.sql\", \"002_b.sql\"]] }\n";
+
+#[test]
+fn a_commit_may_add_a_migration_but_not_change_one_that_exists() {
+    let dir = repo(
+        "mig-commit",
+        MIGRATIONS,
+        &[("db/001_init.sql", "create table a (id int);\n".into())],
+    );
+    std::fs::write(dir.join("db/003_next.sql"), "create table c (id int);\n").unwrap();
+    git(&dir, &["add", "-A"]);
+    let (ok, out, err) = guard(&dir, &["--staged"]);
+    assert!(ok, "{out}{err}");
+
+    std::fs::write(dir.join("db/001_init.sql"), "create table a (id bigint);\n").unwrap();
+    git(&dir, &["add", "-A"]);
+    let (ok, _, err) = guard(&dir, &["--staged"]);
+    assert!(!ok);
+    assert!(
+        err.contains("db/001_init.sql:1 migration-edit: changes a migration that existed at HEAD"),
+        "{err}"
+    );
+}
+
+#[test]
+fn a_commit_that_gives_two_migrations_one_number_fails_unless_they_are_allowed() {
+    let dir = repo(
+        "mig-prefix",
+        MIGRATIONS,
+        &[("db/001_init.sql", "select 1;\n".into())],
+    );
+    for name in ["002_a.sql", "002_b.sql"] {
+        std::fs::write(dir.join("db").join(name), "select 2;\n").unwrap();
+    }
+    git(&dir, &["add", "-A"]);
+    assert!(guard(&dir, &["--staged"]).0);
+    std::fs::write(dir.join("db/001_again.sql"), "select 3;\n").unwrap();
+    git(&dir, &["add", "-A"]);
+    let (ok, _, err) = guard(&dir, &["--staged"]);
+    assert!(!ok);
+    assert!(
+        err.contains(
+            "db/001_again.sql:1 migration-prefix: shares its number 001 with 001_init.sql"
+        ),
+        "{err}"
+    );
+}
+
+#[test]
+fn the_check_stage_compares_migrations_with_the_base_it_is_given() {
+    let dir = repo(
+        "mig-base",
+        MIGRATIONS,
+        &[("db/001_init.sql", "select 1;\n".into())],
+    );
+    git(&dir, &["checkout", "-q", "-b", "work"]);
+    std::fs::write(dir.join("db/001_init.sql"), "select 2;\n").unwrap();
+    git(&dir, &["commit", "-qam", "edit"]);
+    let (ok, _, err) = guard(&dir, &[]);
+    assert!(ok, "{err}");
+    assert!(err.contains("aren't checked here"), "{err}");
+    let (ok, _, err) = guard(&dir, &["--base", "main"]);
+    assert!(!ok);
+    assert!(
+        err.contains("db/001_init.sql:1 migration-edit: changes a migration that existed at main"),
+        "{err}"
+    );
+}
+
+#[test]
+fn test_names_and_citations_run_at_the_check_stage() {
+    let config = concat!(
+        "[guard.test_names]\nfiles = [\"test/**\"]\nfile = '^[a-z-]+\\.test\\.ts$'\ntitles_without = 'T[0-9]{4}'\n",
+        "[guard.citations]\nfiles = [\"src/**\"]\npattern = '\\((?P<code>T[0-9]{4})\\)'\nheadings_in = \"LESSONS.md\"\n",
+    );
+    let dir = repo(
+        "names-cite",
+        config,
+        &[
+            ("LESSONS.md", "## T1024\n".into()),
+            (
+                "test/Leave.test.ts",
+                "test(\"T1024 works\", () => {})\n".into(),
+            ),
+            (
+                "src/a.ts",
+                "// Why (T1024).\n// And why (T4040).\nexport const a = 1\n".into(),
+            ),
+        ],
+    );
+    let (ok, _, err) = guard(&dir, &[]);
+    assert!(!ok);
+    assert!(err.contains("test/Leave.test.ts:1 test-file-name"), "{err}");
+    assert!(
+        err.contains("test/Leave.test.ts:1 test-title: test title carries \"T1024\""),
+        "{err}"
+    );
+    assert!(
+        err.contains("src/a.ts:1 citation: cites \"T4040\""),
+        "{err}"
+    );
+    assert!(!err.contains("\"T1024\", which"), "{err}");
+}
+
+#[cfg(unix)]
+#[test]
+fn an_external_rule_runs_at_its_stages_and_its_findings_count() {
+    let config = "[[guard.external]]\nid = \"lint\"\ncommand = [\"sh\", \"-c\", \"echo 'src/a.ts:2 no-raw-color: use a token'; exit 1\"]\n";
+    let dir = repo("external", config, &[("src/a.ts", lines(3))]);
+    let (ok, _, err) = guard(&dir, &[]);
+    assert!(!ok);
+    assert!(
+        err.contains("src/a.ts:2 lint: no-raw-color: use a token"),
+        "{err}"
+    );
+    std::fs::write(dir.join("src/a.ts"), lines(4)).unwrap();
+    git(&dir, &["add", "-A"]);
+    let (ok, out, err) = guard(&dir, &["--staged"]);
+    assert!(ok, "{out}{err}");
+}
+
+#[test]
+fn a_migration_base_that_cannot_be_found_falls_back_to_head_at_commit() {
+    let config = format!("{MIGRATIONS}base = \"origin/missing\"\n");
+    let dir = repo(
+        "mig-nobase",
+        &config,
+        &[("db/001_init.sql", "select 1;\n".into())],
+    );
+    std::fs::write(dir.join("db/001_init.sql"), "select 2;\n").unwrap();
+    git(&dir, &["add", "-A"]);
+    let (ok, _, err) = guard(&dir, &["--staged"]);
+    assert!(!ok);
+    assert!(
+        err.contains("changes a migration that existed at HEAD"),
+        "{err}"
+    );
+}

@@ -427,6 +427,127 @@ pub struct Guard {
     /// Comment rules, zero-tolerance unless `ratchet = true`. Off until set.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub comments: Option<CommentRules>,
+    /// Test file names and titles. Off until set.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub test_names: Option<TestNames>,
+    /// Pointers in comments that must name a heading in a file. Off until set.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub citations: Option<Citations>,
+    /// Migrations that may not change once they exist. Off until set.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub migrations: Option<Migrations>,
+    /// Shell commands an agent may not run, checked at the write stage.
+    pub commands: List<CommandRule>,
+    /// Commands that print findings as `file:line message`.
+    pub external: List<ExternalRule>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields, default)]
+pub struct TestNames {
+    pub files: List<String>,
+    pub exclude: List<String>,
+    /// A regex the file's name must match.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub file: Option<String>,
+    /// A regex no test title may match.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub titles_without: Option<String>,
+    /// The calls whose first argument is a title.
+    pub title_calls: List<String>,
+}
+
+impl Default for TestNames {
+    fn default() -> Self {
+        TestNames {
+            files: List::default(),
+            exclude: List::default(),
+            file: None,
+            titles_without: None,
+            title_calls: strings(&["describe", "test", "it"]),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields, default)]
+pub struct Citations {
+    /// The files whose comments are read.
+    pub files: List<String>,
+    pub exclude: List<String>,
+    /// A regex for a pointer, with the cited name in a group called `code`.
+    pub pattern: String,
+    /// The Markdown file whose headings the pointers must name.
+    pub headings_in: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields, default)]
+pub struct Migrations {
+    pub files: List<String>,
+    /// A migration that exists at the base may not change, move or go.
+    pub immutable: bool,
+    /// What "exists" is measured against: the merge base with this ref.
+    /// Without it the commit stage uses HEAD and the check stage needs `--base`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub base: Option<String>,
+    /// Each file's leading number is unique, apart from the listed groups.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub unique_prefix: Option<UniquePrefix>,
+}
+
+impl Default for Migrations {
+    fn default() -> Self {
+        Migrations {
+            files: List::default(),
+            immutable: true,
+            base: None,
+            unique_prefix: None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields, default)]
+pub struct UniquePrefix {
+    /// File names allowed to share a number, one list per number.
+    pub allow: Vec<Vec<String>>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct CommandRule {
+    /// A regex over the whole command line.
+    #[serde(rename = "match")]
+    pub matches: String,
+    /// Why, shown to the agent.
+    pub reason: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "kebab-case")]
+pub enum Stage {
+    Write,
+    Commit,
+    Check,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct ExternalRule {
+    /// The rule id its findings carry.
+    pub id: String,
+    /// An argv array; `{files}` expands to the staged files at the commit
+    /// stage and to nothing at the check stage.
+    pub command: Vec<String>,
+    #[serde(default = "check_stage")]
+    pub stages: Vec<Stage>,
+    #[serde(default)]
+    pub ratchet: bool,
+}
+
+fn check_stage() -> Vec<Stage> {
+    vec![Stage::Check]
 }
 
 impl Default for Guard {
@@ -440,6 +561,11 @@ impl Default for Guard {
             cite: Default::default(),
             size: None,
             comments: None,
+            test_names: None,
+            citations: None,
+            migrations: None,
+            commands: List::default(),
+            external: List::default(),
         }
     }
 }

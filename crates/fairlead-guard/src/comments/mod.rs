@@ -141,6 +141,28 @@ impl Comments {
     }
 }
 
+/// Every comment in a file as (line, flattened text): each block, and each
+/// comment after code when the file has a syntax tree.
+pub(crate) fn texts(source: &Source<'_>) -> Vec<(u32, String)> {
+    let Some(style) = lines::style_of(source.path) else {
+        return Vec::new();
+    };
+    let lines = lines::lines(source.text);
+    let kinds = lines::classify(&lines, style);
+    let mut out: Vec<(u32, String)> = lines::blocks(&lines, &kinds, style)
+        .into_iter()
+        .map(|b| (b.start, b.flat))
+        .collect();
+    if let Some(tree) = source.tree().filter(|_| style == Style::C) {
+        out.extend(
+            trailing(tree, source.text)
+                .into_iter()
+                .map(|b| (b.start, b.flat)),
+        );
+    }
+    out
+}
+
 /// Each comment with code before it on its line, as a one-line block.
 fn trailing(tree: &Tree, text: &str) -> Vec<Block> {
     let mut out = Vec::new();

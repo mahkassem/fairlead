@@ -52,7 +52,7 @@ fn first_row(node: Node<'_>) -> usize {
 
 /// The name of the callee's base identifier: `it` for `it(...)`,
 /// `it.only(...)` and `it.each(...)(...)`.
-fn callee_name<'a>(node: Node<'_>, text: &'a str) -> Option<&'a str> {
+pub(crate) fn callee_name<'a>(node: Node<'_>, text: &'a str) -> Option<&'a str> {
     match node.kind() {
         "identifier" => node.utf8_text(text.as_bytes()).ok(),
         "member_expression" => callee_name(node.child_by_field_name("object")?, text),
