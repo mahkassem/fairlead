@@ -1,13 +1,80 @@
-/* Fairlead brand: the logo in the title bar and the guide green for links,
-   each in its light and dark form to match mdBook's theme. */
+@import url("https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700&family=Public+Sans:ital,wght@0,400;0,500;0,600;1,400&family=JetBrains+Mono:wght@400;500&display=swap");
+
+/* Fairlead brand for the book: the logo in the title bar, the brand type and
+   greens, a grouped sidebar and an on-this-page outline, in light and dark. */
+:root {
+  --mono-font: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  --content-max-width: 780px;
+  --fl-body: "Public Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --fl-display: Sora, "Public Sans", system-ui, sans-serif;
+}
+.light, .rust {
+  --links: #008F67; --sidebar-active: #008F67; --fl-guide: #008F67; --fl-soft: #E2F2EB;
+  --fl-line: #DCE4E1; --fl-muted: #52615D; --fl-surface: #FFFFFF;
+}
+.coal, .navy {
+  --bg: #0B1618; --fg: #DCE6E3; --sidebar-bg: #0E1C1E; --sidebar-fg: #C5D3CF; --sidebar-spacer: #1F3336;
+  --sidebar-non-existant: #5E7470; --scrollbar: #2A4043; --icons: #7F948E; --icons-hover: #E9F0EE;
+  --theme-popup-bg: #102022; --theme-popup-border: #1F3336; --theme-hover: #16292C;
+  --quote-bg: #102022; --quote-border: #1F3336; --table-border-color: #1F3336;
+  --table-header-bg: #102022; --table-alternate-bg: #0E1C1E;
+  --searchbar-bg: #102022; --searchbar-fg: #E9F0EE; --searchbar-border-color: #1F3336;
+  --searchresults-header-fg: #93A5A0; --searchresults-border-color: #1F3336; --search-mark-bg: #00AE7B;
+}
+.coal, .navy, .ayu {
+  --links: #00AE7B; --sidebar-active: #00AE7B; --fl-guide: #00AE7B; --fl-soft: #0F2C27;
+  --fl-line: #1F3336; --fl-muted: #93A5A0; --fl-surface: #102022;
+}
+
+html, body { font-family: var(--fl-body); }
+.content { font-size: 1.6rem; line-height: 1.7; }
+.content h1, .content h2, .content h3, .content h4 { font-family: var(--fl-display); letter-spacing: -.015em; }
+.content h1 { font-size: 3.4rem; font-weight: 600; margin-top: .6em; }
+.content h2 { font-size: 2.3rem; font-weight: 600; margin-top: 1.8em; padding-bottom: .3em; border-bottom: 1px solid var(--fl-line); }
+.content h3 { font-size: 1.8rem; font-weight: 600; margin-top: 1.5em; }
+.content a { text-decoration: none; }
+.content a:hover { text-decoration: underline; }
+
+/* title bar: the logo, and a hairline instead of a shadow */
+#mdbook-menu-bar, .menu-bar { border-bottom: 1px solid var(--fl-line); }
 .menu-title {
   color: transparent;
-  background: url("../images/fairlead-logo.svg") center / auto 55% no-repeat;
+  background: url("../images/fairlead-logo.svg") center / auto 50% no-repeat;
+  cursor: pointer;
 }
-.coal .menu-title,
-.navy .menu-title,
-.ayu .menu-title {
-  background-image: url("../images/fairlead-logo-dark.svg");
+.coal .menu-title, .navy .menu-title, .ayu .menu-title { background-image: url("../images/fairlead-logo-dark.svg"); }
+
+/* sidebar: part titles as small labels, the current chapter in the guide green */
+.sidebar { font-size: 1.45rem; }
+.chapter li.part-title {
+  margin: 1.8em 0 .4em; padding: 0 10px;
+  font: 600 1.1rem var(--fl-body); letter-spacing: .08em; text-transform: uppercase;
+  color: var(--fl-muted);
 }
-.light, .rust { --links: #008F67; --sidebar-active: #008F67; }
-.coal, .navy, .ayu { --links: #00AE7B; --sidebar-active: #00AE7B; }
+.chapter li a { padding: 5px 10px; border-radius: 6px; }
+.chapter li a.active { background: var(--fl-soft); color: var(--fl-guide); font-weight: 600; }
+.chapter li a:hover { color: var(--fl-guide); }
+
+/* code, tables, callouts */
+code { font-size: .9em; }
+pre { border: 1px solid var(--fl-line); border-radius: 10px; }
+pre > code { padding: 1.2rem 1.4rem; border-radius: 10px; }
+:not(pre) > code { padding: .1em .4em; border-radius: 4px; background: var(--fl-soft); }
+table { border-collapse: collapse; width: 100%; display: block; overflow-x: auto; }
+table thead th { font-size: 1.25rem; letter-spacing: .04em; text-transform: uppercase; color: var(--fl-muted); text-align: left; background: transparent; }
+table td, table th { border: 0; border-bottom: 1px solid var(--fl-line); padding: .7em 1em; }
+table tbody tr:nth-child(2n) { background: transparent; }
+blockquote { border: 1px solid var(--fl-line); border-left: 3px solid var(--fl-guide); background: var(--fl-surface); border-radius: 8px; margin: 1.4em 0; padding: .4em 1.2em; }
+
+/* on-this-page outline, built by brand.js on wide screens */
+.fl-outline { position: fixed; top: calc(var(--menu-bar-height) + 32px); right: 24px; width: 210px; font-size: 1.3rem; line-height: 1.5; display: none; }
+.fl-outline b { display: block; margin-bottom: .6em; font: 600 1.1rem var(--fl-body); letter-spacing: .08em; text-transform: uppercase; color: var(--fl-muted); }
+.fl-outline a { display: block; padding: .25em 0 .25em .9em; border-left: 2px solid var(--fl-line); color: var(--fl-muted); text-decoration: none; }
+.fl-outline a.sub { padding-left: 1.8em; }
+.fl-outline a.on { border-left-color: var(--fl-guide); color: var(--fl-guide); font-weight: 600; }
+@media (min-width: 1380px) {
+  .fl-outline { display: block; }
+  /* make room for the outline: the chapter moves left instead of sitting under it */
+  body.fl-outlined .content main { margin-inline-start: auto; margin-inline-end: 250px; }
+}
+@media print { .fl-outline { display: none !important; } }

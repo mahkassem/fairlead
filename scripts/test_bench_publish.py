@@ -71,6 +71,17 @@ class BenchPublishTest(unittest.TestCase):
         self.assertIn("(adjusted) | 66.7% (n=3) |", page)
         self.assertIn("`test/a.test.ts` in jobs `^win$`: active, 3 failures absorbed (0 would-be hits, 3 would-be misses)", page)
 
+    def test_the_headline_numbers_are_written_for_the_site(self):
+        (self.art / "report.json").write_text(json.dumps(report()))
+        self.run_publish()
+        summary = json.loads((self.root / "docs" / "src" / "benchmarks.json").read_text())
+        self.assertEqual(summary["fairlead"], "9.9.9")
+        self.assertEqual(summary["commit"], "abcdef123456")
+        [repo] = summary["repos"]
+        self.assertEqual((repo["repo"], repo["judged"], repo["raw_judged"]), ("o/r", 3, 6))
+        self.assertAlmostEqual(repo["recall"], 2 / 3)
+        self.assertFalse(repo["gate_met"])
+
     def test_a_dataset_that_drops_rows_is_refused(self):
         data = self.root / "bench" / "data" / "o_r.jsonl"
         self.write_rows(data, [row(1), row(2)])

@@ -6,4 +6,8 @@ src = "src"
 
 [output.html]
 additional-css = ["theme/brand.css"]
+additional-js = ["theme/brand.js"]
+site-url = "/fairlead/docs/"
+no-section-label = true
+sidebar-header-nav = false
 git-repository-url = "https://github.com/mahkassem/fairlead"
