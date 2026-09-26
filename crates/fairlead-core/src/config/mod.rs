@@ -8,7 +8,7 @@ pub use load::{
     find_config, load, load_file, ConfigError, LoadOptions, Loaded, ENV_NAME, LOCAL_NAMES,
     PROJECT_NAMES,
 };
-pub use validate::{validate, Problem};
+pub use validate::{validate, Problem, GUARD_RULES};
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -418,9 +418,15 @@ pub struct Guard {
     pub on_finding: OnFinding,
     /// Where hook and commit decisions are recorded.
     pub events: Events,
-    /// File length, a ratcheted rule unless `ratchet = false`. Off until set.
+    /// A note appended to each finding of a rule, by rule id, such as the
+    /// section of a style guide it enforces.
+    pub cite: std::collections::BTreeMap<String, String>,
+    /// File and function length, ratcheted unless `ratchet = false`. Off until set.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub size: Option<SizeRules>,
+    /// Comment rules, zero-tolerance unless `ratchet = true`. Off until set.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub comments: Option<CommentRules>,
 }
 
 impl Default for Guard {
@@ -431,7 +437,9 @@ impl Default for Guard {
             findings: Findings::default(),
             on_finding: OnFinding::default(),
             events: Events::default(),
+            cite: Default::default(),
             size: None,
+            comments: None,
         }
     }
 }
@@ -474,6 +482,12 @@ pub struct SizeRules {
     /// A file over this many lines is a finding.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub file_lines: Option<u32>,
+    /// A function over this many of its own lines, not counting the
+    /// functions nested in it, is a finding. JavaScript and TypeScript only.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub function_lines: Option<u32>,
+    /// Calls whose callback isn't measured itself, only what it nests.
+    pub test_hooks: List<String>,
     /// Counted against the baseline rather than failing on any finding.
     pub ratchet: bool,
 }
@@ -484,7 +498,97 @@ impl Default for SizeRules {
             files: List::default(),
             exclude: List::default(),
             file_lines: None,
+            function_lines: None,
+            test_hooks: strings(&[
+                "describe",
+                "test",
+                "it",
+                "beforeAll",
+                "afterAll",
+                "beforeEach",
+                "afterEach",
+            ]),
             ratchet: true,
         }
     }
+}
+
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields, default)]
+pub struct CommentRules {
+    /// The files these rules read. The comment syntax comes from the
+    /// extension: `//` and `/* */` for JavaScript and TypeScript, `--` for
+    /// SQL, `#` for YAML, TOML and shell.
+    pub files: List<String>,
+    pub exclude: List<String>,
+    /// Test files, which take the `test` limits.
+    pub tests: List<String>,
+    /// Migrations, which take the `migration` block limit and no density limit.
+    pub migrations: List<String>,
+    /// The longest comment block, in lines, by where it sits.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub block_length: Option<BlockLength>,
+    /// The largest share of comment lines among comment and code lines.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub density: Option<Density>,
+    /// History a comment shouldn't carry.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub history: Option<History>,
+    /// Ticket or item references a comment shouldn't carry.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub item_codes: Option<ItemCodes>,
+    /// Regexes for a comment that addresses its next editor.
+    pub agent_phrases: List<String>,
+    /// Each continuation line of a multi-line `/* */` starts with `*`.
+    pub block_marker: bool,
+    pub ratchet: bool,
+}
+
+/// A block's context is the first that applies: migration, inline (indented
+/// after a code line), file header (starting on line 1), test, source. A
+/// context without a limit falls through to the next.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct BlockLength {
+    pub source: u32,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub test: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub header: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub inline: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub migration: Option<u32>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct Density {
+    pub source: f64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub test: Option<f64>,
+}
+
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields, default)]
+pub struct History {
+    /// A date from 2000 to 2099 written `YYYY-MM-DD`.
+    pub dates: bool,
+    /// Names, matched as whole words and case.
+    pub names: Vec<String>,
+    /// Phrases, matched as whole words in any case.
+    pub phrases: Vec<String>,
+    /// A number with `px`, `ms`, `s`, `KB` or `MB` in a comment that says "measured".
+    pub measured: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct ItemCodes {
+    /// A regex for one reference.
+    pub pattern: String,
+    /// Allow references as a pointer: `(CODE)` or `(CODE, CODE)` followed by
+    /// a full stop or the end of the comment.
+    #[serde(default)]
+    pub pointer: bool,
 }

@@ -2,8 +2,8 @@
 
 The guard checks your project's own rules with one engine at every stage a
 change passes through. This release has the engine, the check and commit
-stages, and the first rule; the write stage (a Claude Code hook that stops a
-write before it happens) and more presets follow.
+stages, and the size and comment presets; the write stage (a Claude Code hook
+that stops a write before it happens) and more presets follow.
 
 | Stage | Command | Reads | Fails on |
 | --- | --- | --- | --- |
@@ -26,14 +26,75 @@ events = "local"                      # the default; "off" records nothing
 files = ["src/**/*.{ts,tsx}"]
 exclude = ["src/generated/**"]
 file_lines = 1000                     # a file over this many lines is a finding
+function_lines = 120                  # a function over this many of its own lines
 ratchet = true                        # the default; false fails on any finding
+
+[guard.cite]
+file-length = "style guide, section 6"   # appended to that rule's messages
 ```
 
-A finding prints as `file:line rule: message`.
+A finding prints as `file:line rule: message`, with the rule's `cite` after it
+when there is one.
 
 | Rule | Preset | Finds |
 | --- | --- | --- |
 | `file-length` | `guard.size` | A file over `file_lines` lines. A trailing newline doesn't start a line. |
+| `function-length` | `guard.size` | A function over `function_lines` of its own lines. |
+| `block-length` | `guard.comments` | A comment block longer than its context allows. |
+| `density` | `guard.comments` | Comment lines over a share of comment and code lines. |
+| `history` | `guard.comments` | A date, a name, a narrative phrase, or a measurement beside "measured". |
+| `item-code` | `guard.comments` | A ticket or item reference outside the pointer form. |
+| `agent-instruction` | `guard.comments` | A comment that addresses its next editor. |
+| `block-marker` | `guard.comments` | A continuation line of a multi-line `/* */` that doesn't start with `*`. |
+
+## Function length
+
+A function's own lines run from its first line to its last, minus the lines of
+the functions directly nested in it, so a long callback is charged to itself
+and not to every function around it. Declarations, expressions, arrows,
+methods, constructors, getters, setters and generators all count, and a
+function starts at an `export` or decorator in front of it. A callback passed
+straight to a test hook isn't measured itself, only what it nests; the hooks
+are `test_hooks`, by default `describe`, `test`, `it` and the `before` and
+`after` hooks, found through chains such as `it.each([...])(...)` and
+`test.only(...)`. JavaScript and TypeScript only, from a syntax tree.
+
+## Comments
+
+```toml
+[guard.comments]
+files = ["**/*.{ts,tsx,sql,yml}"]
+tests = ["**/*.test.ts"]                  # take the test limits
+migrations = ["db/migrations/*.sql"]      # one-line header, no density limit
+block_length = { source = 8, test = 10, header = 12, inline = 2, migration = 1 }
+density = { source = 0.25, test = 0.20 }
+history = { dates = true, names = ["Ada"], phrases = ["used to", "no longer"], measured = true }
+item_codes = { pattern = '(?-u:\b)[A-Z]+-[0-9]+(?-u:\b)', pointer = true }
+agent_phrases = ['(?i)(?-u:\b)you must(?-u:\b)']
+block_marker = true
+ratchet = false                           # the default: any finding fails
+```
+
+The comment syntax comes from the extension: `//` and `/* */` for JavaScript
+and TypeScript, `--` for SQL, `#` for YAML, TOML and shell.
+
+- **Blocks.** A block is a run of lines that are comments once trimmed, block
+  comments included. Its context is the first that has a limit: `migration`,
+  `inline` (its first line is indented and the nearest non-blank line above is
+  code), `header` (it starts on line 1), `test`, then `source`.
+- **What a comment says** is read from its flattened text: each line's marker
+  stripped and whitespace collapsed, so a phrase split across a wrap still
+  matches. Names and phrases match as whole words; phrases in any case. A
+  date is one from 2000 to 2099 written `YYYY-MM-DD`.
+- **Comments after code**, such as `x() // why`, are found from the syntax tree,
+  so `//` in a string, a template or JSX text is never taken for one. They're
+  checked for what they say, and don't count as blocks or towards density.
+- **The pointer form**: with `pointer = true`, references are allowed as
+  `(ABC-1)` or `(ABC-1, ABC-2)` followed by a full stop or the end of the
+  comment. Each other reference is a finding, once per comment.
+- **Patterns** are Rust regular expressions, where `\b` and `\d` are Unicode
+  aware. Write `(?-u:\b)` and `[0-9]` for the ASCII behaviour most other
+  linters have, and `(?i)` for any case.
 
 ## The ratchet
 

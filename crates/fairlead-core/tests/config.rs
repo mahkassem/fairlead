@@ -515,3 +515,40 @@ fn an_environment_with_no_file_a_bad_name_or_two_files_is_an_error() {
         err("twice")
     );
 }
+
+#[test]
+fn comment_rules_need_files_a_rule_valid_patterns_and_sane_limits() {
+    let problems = |text: &str| -> Vec<String> {
+        let config: Config = toml::from_str(text).unwrap();
+        validate(&config).into_iter().map(|p| p.key).collect()
+    };
+    let ok = "[guard.comments]\nfiles = [\"src/**\"]\nblock_marker = true\n";
+    assert!(problems(ok).is_empty(), "{:?}", problems(ok));
+    assert_eq!(
+        problems("[guard.comments]\n"),
+        ["guard.comments.files", "guard.comments"]
+    );
+    assert_eq!(
+        problems(concat!(
+            "[guard.comments]\nfiles = [\"src/**\"]\n",
+            "block_length = { source = 0 }\ndensity = { source = 1.5 }\n",
+            "item_codes = { pattern = \"(\" }\nagent_phrases = [\"a*\"]\n",
+        )),
+        [
+            "guard.comments.block_length",
+            "guard.comments.density",
+            "guard.comments.item_codes.pattern[0]",
+            "guard.comments.agent_phrases[0]"
+        ]
+    );
+}
+
+#[test]
+fn size_can_limit_functions_alone_and_cite_names_only_known_rules() {
+    let config: Config = toml::from_str(
+        "[guard.size]\nfiles = [\"src/**\"]\nfunction_lines = 120\n[guard.cite]\nfile-length = \"ok\"\nfile-lenght = \"typo\"\n",
+    )
+    .unwrap();
+    let keys: Vec<String> = validate(&config).into_iter().map(|p| p.key).collect();
+    assert_eq!(keys, ["guard.cite.file-lenght"]);
+}

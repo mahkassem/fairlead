@@ -4,11 +4,13 @@
 
 pub mod added;
 pub mod baseline;
+mod comments;
 pub mod events;
 mod finding;
+mod functions;
 pub mod git;
 mod rules;
 mod size;
 
 pub use finding::{sort, Finding, Measure};
-pub use rules::{Guard, Rule, Source};
+pub use rules::{Guard, Preset, Source};

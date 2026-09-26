@@ -11,6 +11,7 @@ use fairlead_core::config::{self, LoadOptions};
 use fairlead_guard::baseline::{self, Counts};
 use fairlead_guard::events::{Event, EventLog};
 use fairlead_guard::{added, git, Finding, Guard, Source};
+use rayon::prelude::*;
 
 #[derive(Subcommand)]
 pub enum GuardAction {
@@ -80,14 +81,19 @@ fn check_tree(
         Ok(files) => files,
         Err(e) => return fail(e),
     };
-    let mut findings = Vec::new();
-    for path in files.iter().filter(|p| guard.reads(p)) {
-        // Deleted but not yet staged, or not text: nothing to read.
-        let Ok(text) = std::fs::read_to_string(root.join(path)) else {
-            continue;
-        };
-        findings.extend(guard.lint(Source { path, text: &text }));
-    }
+    // In parallel, and still in path order, since collect keeps it.
+    let findings: Vec<Finding> = files
+        .par_iter()
+        .filter(|p| guard.reads(p))
+        .map(|path| match std::fs::read_to_string(root.join(path)) {
+            Ok(text) => guard.lint(&Source::new(path, &text)),
+            // Deleted but not yet staged, or not text: nothing to read.
+            Err(_) => Vec::new(),
+        })
+        .collect::<Vec<_>>()
+        .into_iter()
+        .flatten()
+        .collect();
     if list {
         for f in &findings {
             println!("{f}");
@@ -196,12 +202,7 @@ fn check_staged(root: &Path, guard: &Guard, settings: &config::Guard, list: bool
         };
         read += 1;
         // Both sides are linted under the new path, so a rename compares like an edit.
-        let lint = |text: &str| {
-            guard.lint(Source {
-                path: &file.path,
-                text,
-            })
-        };
+        let lint = |text: &str| guard.lint(&Source::new(&file.path, text));
         let now = lint(&after);
         if settings.findings == config::Findings::All {
             new.extend(now);
