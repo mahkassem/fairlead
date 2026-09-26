@@ -327,3 +327,36 @@ until = "next year"
         ]
     );
 }
+
+#[test]
+fn an_edge_rule_reads_each_placeholder_from_a_whole_segment_and_names_the_same_ones() {
+    let config: Config = toml::from_str(
+        r#"
+[[graph.edges]]
+from = "test/api/{area}{,-*}.test.ts"
+to = ["src/{area}/**"]
+
+[[graph.edges]]
+from = "test/api/{area}*.test.ts"
+to = ["src/{area}-x/**"]
+
+[[graph.edges]]
+from = "test/{area}/**"
+to = ["src/{area}/{typo}/**"]
+
+[[graph.edges]]
+from = "test/e2e/**"
+to = []
+"#,
+    )
+    .unwrap();
+    let keys: Vec<String> = validate(&config).into_iter().map(|p| p.key).collect();
+    assert_eq!(
+        keys,
+        [
+            "graph.edges[1]",
+            "graph.edges[2].to[0]",
+            "graph.edges[3].to"
+        ]
+    );
+}

@@ -33,6 +33,17 @@ impl Pattern {
         self.regex.is_match(path)
     }
 
+    /// The names this pattern captures, or none when it captures nothing.
+    pub fn captures_names(&self) -> Option<std::collections::BTreeSet<String>> {
+        let names: std::collections::BTreeSet<String> = self
+            .regex
+            .capture_names()
+            .flatten()
+            .map(String::from)
+            .collect();
+        (!names.is_empty()).then_some(names)
+    }
+
     /// The captured segments when `path` matches.
     pub fn captures(&self, path: &str) -> Option<Captures> {
         let found = self.regex.captures(path)?;

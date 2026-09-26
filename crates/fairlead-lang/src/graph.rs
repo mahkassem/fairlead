@@ -17,6 +17,9 @@ pub enum EdgeKind {
     PathLiteral,
     /// `__snapshots__/<test>.snap` to its test.
     Snapshot,
+    /// A `[[graph.edges]]` rule. Last, so an import between the same two
+    /// files names itself first.
+    Rule,
 }
 
 impl From<SpecKind> for EdgeKind {
@@ -57,6 +60,8 @@ pub struct Graph {
     pub unknown: Vec<u32>,
     /// Files whose tsconfig couldn't be applied.
     pub tsconfig_fallbacks: Vec<u32>,
+    /// Files the walk reaches but doesn't go past (`graph.barrier`).
+    pub barrier: std::collections::HashSet<u32>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -134,6 +139,17 @@ impl Graph {
             self.deps[from as usize].push((to, kind));
             self.rdeps[to as usize].push((from, kind));
         }
+    }
+
+    /// `add_edge` without the duplicate check, for callers that dedupe a
+    /// batch themselves: rule edges run to thousands per file.
+    pub fn add_edge_unchecked(&mut self, from: u32, to: u32, kind: EdgeKind) {
+        self.deps[from as usize].push((to, kind));
+        self.rdeps[to as usize].push((from, kind));
+    }
+
+    pub fn is_barrier(&self, id: u32) -> bool {
+        self.barrier.contains(&id)
     }
 
     pub fn add_package_edge(&mut self, from: u32, package: &str) {

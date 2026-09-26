@@ -6,7 +6,7 @@ use std::fmt::Write as _;
 use std::fs;
 use std::time::Instant;
 
-use fairlead_core::config::Config;
+use fairlead_core::config::{Config, EdgeRule};
 use fairlead_lang::build;
 
 const PACKAGES: usize = 40;
@@ -14,6 +14,7 @@ const FILES_PER_PACKAGE: usize = 50;
 const BUDGET_SECONDS: f64 = 1.5;
 const WARM_BUDGET_SECONDS: f64 = 0.5;
 const FILLER_FUNCTIONS: usize = 12;
+const RULES_BUDGET_SECONDS: f64 = 0.5;
 
 #[test]
 #[ignore]
@@ -76,5 +77,24 @@ fn a_two_thousand_file_workspace_builds_within_the_budget() {
     assert!(
         warm_seconds <= WARM_BUDGET_SECONDS,
         "rebuilt in {warm_seconds:.2} s, over the {WARM_BUDGET_SECONDS} s budget"
+    );
+
+    // One rule per package, each linking its entry to every file beside it.
+    let mut rules = Config::default();
+    rules.graph.barrier = vec!["packages/p0/**".to_string()].into();
+    rules.graph.edges = vec![EdgeRule {
+        from: "packages/{p}/src/f0.ts".into(),
+        to: vec!["packages/{p}/src/**".into()],
+    }]
+    .into();
+    let started = Instant::now();
+    let ruled = build(&dir, &rules).unwrap();
+    let ruled_seconds = started.elapsed().as_secs_f64();
+    println!("rebuilt with rules in {ruled_seconds:.2} s");
+    assert_eq!(ruled.rules.edges, PACKAGES * (FILES_PER_PACKAGE - 1));
+    assert_eq!(ruled.graph.barrier.len(), FILES_PER_PACKAGE + 1);
+    assert!(
+        ruled_seconds <= RULES_BUDGET_SECONDS,
+        "rebuilt with rules in {ruled_seconds:.2} s, over the {RULES_BUDGET_SECONDS} s budget"
     );
 }

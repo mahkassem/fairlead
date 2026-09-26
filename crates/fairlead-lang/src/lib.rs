@@ -7,6 +7,7 @@ pub mod extract;
 pub mod fs;
 pub mod graph;
 pub mod resolve;
+pub mod rules;
 pub mod scan;
 pub mod tree;
 pub mod workspace;

@@ -3,7 +3,8 @@
 //! edges come on top: a file with a non-literal dynamic import, a local
 //! specifier that didn't resolve, or a tsconfig that couldn't be applied
 //! depends on every file in its module, since no edge says which one it
-//! needs. At the root, outside any module, that means every file.
+//! needs. At the root, outside any module, that means every file. A
+//! `graph.barrier` file is reached but never expanded, changed or not.
 
 use std::collections::{HashMap, HashSet, VecDeque};
 
@@ -111,6 +112,11 @@ pub fn walk_until(
     let mut widened: HashSet<Option<usize>> = HashSet::new();
     let mut root_widened = false;
     while let Some(file) = queue.pop_front() {
+        // Reached, but not gone past: a barrier's importers depend on it for
+        // plumbing, not for what a change to the file under it does.
+        if graph.is_barrier(file) {
+            continue;
+        }
         let mut next: Vec<u32> = graph.importers(file).into_iter().map(|(f, _)| f).collect();
         let module = modules.of(&graph.files[file as usize]);
         if widened.insert(module) {
