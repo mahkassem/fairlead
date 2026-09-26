@@ -144,6 +144,7 @@ job = "^test$"
 
 [replay]
 ignore = ["^all-green$"]
+ignore_steps = ["^Install$"]
 "#;
 
 #[test]
@@ -199,6 +200,10 @@ fn a_synthetic_history_replays_to_the_expected_outcomes() {
                 job("test", "failure", &[fail_b]),
                 job("docs", "failure", &[]),
                 job("all-green", "failure", &[]),
+                Job {
+                    failed_steps: vec!["Install".into()],
+                    ..job("test-windows", "failure", &[])
+                },
             ],
         ),
         row(
@@ -290,7 +295,10 @@ fn a_synthetic_history_replays_to_the_expected_outcomes() {
         "no rule names the docs job"
     );
     assert_eq!(r.unwatched.len(), 2, "{:?}", r.unwatched);
-    assert_eq!(r.ignored, 1, "replay.ignore names all-green");
+    assert_eq!(
+        r.ignored, 2,
+        "all-green by name, the install failure by step"
+    );
     let pr = &r.by_event["pull_request"];
     assert_eq!((pr.hits, pr.misses, pr.unconfirmed), (1, 1, 1));
     assert!(r.first_plan_seconds.is_some() && r.p90_plan_seconds.is_some());

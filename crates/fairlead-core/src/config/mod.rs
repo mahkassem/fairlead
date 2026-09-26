@@ -300,6 +300,9 @@ pub struct Replay {
     pub checks: List<CheckStep>,
     /// CI job names (regexes) whose failures replay leaves out on purpose.
     pub ignore: List<String>,
+    /// Step names (regexes): a job that failed only in such steps, such as
+    /// an install, failed before any test and is left out.
+    pub ignore_steps: List<String>,
 }
 
 impl Default for Replay {
@@ -311,6 +314,7 @@ impl Default for Replay {
             failures: List::default(),
             checks: List::default(),
             ignore: List::default(),
+            ignore_steps: List::default(),
         }
     }
 }

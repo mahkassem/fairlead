@@ -264,13 +264,18 @@ fn a_fork_pull_request_is_found_by_its_head_branch() {
     http.responses.insert(
         "/repos/o/r/pulls".into(),
         json!([
-            { "number": 8, "base": { "ref": "main" }, "head": { "sha": "older" } },
-            { "number": 9, "base": { "ref": "release" }, "head": { "sha": "fff" } }
+            { "number": 10, "base": { "ref": "main" }, "head": { "sha": "fff" }, "created_at": "2026-09-21T00:00:00Z" },
+            { "number": 8, "base": { "ref": "main" }, "head": { "sha": "older" }, "created_at": "2026-09-01T00:00:00Z" },
+            { "number": 9, "base": { "ref": "release" }, "head": { "sha": "fff" }, "created_at": "2026-09-19T00:00:00Z" }
         ]),
     );
     let (rows, stop) = fetch(&http, &opts(None), &BTreeSet::new());
     assert_eq!(stop, Stop::Complete);
-    assert_eq!(rows.iter().find(|r| r.run_id == 41).unwrap().pr, Some(9));
+    assert_eq!(
+        rows.iter().find(|r| r.run_id == 41).unwrap().pr,
+        Some(9),
+        "not #10, opened after the run on a reused branch name"
+    );
     let asked = http.asked.lock().unwrap();
     assert!(asked
         .iter()

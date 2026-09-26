@@ -52,6 +52,8 @@ window_days = 90
 min_failures = 30
 # The changed-files probe, the browser image build and the report merge, not tests.
 ignore = ["^Diff: ", "^Image: ", "^Merge Reports$"]
+# A job that failed only while installing never ran a test.
+ignore_steps = ["^Install$"]
 
 [[replay.failures]]
 runner = "vitest"

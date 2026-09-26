@@ -134,7 +134,16 @@ fn pull_for(http: &dyn Http, repo: &str, run: &Value) -> Result<Option<(u64, Str
         http,
         &format!("/repos/{repo}/pulls?head={owner}:{branch}&state=all&per_page=10"),
     )?;
-    let candidates = by_head.as_array().cloned().unwrap_or_default();
+    // A fork's branch name can be reused; a pull request opened after the run
+    // can't be the one it ran for.
+    let started = str_of(run, "created_at");
+    let candidates: Vec<Value> = by_head
+        .as_array()
+        .cloned()
+        .unwrap_or_default()
+        .into_iter()
+        .filter(|p| started.is_empty() || str_of(p, "created_at") <= started)
+        .collect();
     let exact = candidates
         .iter()
         .find(|p| p.get("head").map_or("", |h| str_of(h, "sha")) == sha);

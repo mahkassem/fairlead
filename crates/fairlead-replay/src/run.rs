@@ -92,6 +92,7 @@ pub struct Sources {
     failures: Vec<(Regex, Extractor)>,
     checks: Vec<(Regex, Regex, String)>,
     ignore: Vec<Regex>,
+    ignore_steps: Vec<Regex>,
 }
 
 impl Sources {
@@ -133,15 +134,29 @@ impl Sources {
             .iter()
             .map(|p| Regex::new(p).map_err(|e| e.to_string()))
             .collect::<Result<_, String>>()?;
+        let ignore_steps = config
+            .replay
+            .ignore_steps
+            .items()
+            .iter()
+            .map(|p| Regex::new(p).map_err(|e| e.to_string()))
+            .collect::<Result<_, String>>()?;
         Ok(Sources {
             failures,
             checks,
             ignore,
+            ignore_steps,
         })
     }
 
     fn ignores(&self, job: &Job) -> bool {
-        self.ignore.iter().any(|re| re.is_match(&job.name))
+        let before_tests = !job.failed_steps.is_empty()
+            && !self.ignore_steps.is_empty()
+            && job
+                .failed_steps
+                .iter()
+                .all(|s| self.ignore_steps.iter().any(|re| re.is_match(s)));
+        before_tests || self.ignore.iter().any(|re| re.is_match(&job.name))
     }
 
     fn watches(&self, job: &Job) -> bool {

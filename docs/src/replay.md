@@ -34,7 +34,7 @@ With `--fetch-missing`, the recorded heads and bases the clone lacks are fetched
 | unavailable | the head commit, or the history to its merge base, isn't in the clone |
 | error | the planner refused the commit, such as a test file no runner matches |
 | unwatched | no `[[replay.failures]]` or `[[replay.checks]]` entry names the job; listed by job name so a gap in the config can't raise recall |
-| ignored | `replay.ignore` names the job, such as one that only aggregates others |
+| ignored | `replay.ignore` names the job, such as one that only aggregates others, or it failed only in steps `replay.ignore_steps` names, such as an install |
 
 Recall is hits over hits and misses. Strict recall also counts unconfirmed failures as misses.
 
