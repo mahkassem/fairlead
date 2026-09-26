@@ -88,8 +88,8 @@ of trying things like a stranger.
   Actions, and a JSON plan with a published schema for any other CI.
 - **Proven on real projects.** Recall is replayed from the CI history of Effect,
   pnpm and vitest every week, and published.
-- **Private by default.** The CLI sends nothing anywhere. Metrics are counts
-  only, and it never phones home.
+- **Private by default.** The CLI sends nothing you didn't ask for: no
+  telemetry, and it never phones home.
 - **One binary, everywhere.** Linux, macOS and Windows, installed with a shell
   script, PowerShell or npm.
 

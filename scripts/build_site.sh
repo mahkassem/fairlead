@@ -13,7 +13,7 @@ rm -f _site/brand/README.md
 cp _site/docs/404.html _site/404.html
 for page in _site/docs/*.html; do
   name=$(basename "$page")
-  case "$name" in index.html|404.html|print.html|toc.html) continue ;; esac
+  case "$name" in index.html|404.html|toc.html) continue ;; esac
   [ -e "_site/$name" ] && continue
   printf '<!doctype html><meta charset="utf-8"><title>Moved</title><link rel="canonical" href="docs/%s"><meta http-equiv="refresh" content="0; url=docs/%s"><p><a href="docs/%s">This page moved to docs/%s</a>.</p>\n' \
     "$name" "$name" "$name" "$name" > "_site/$name"

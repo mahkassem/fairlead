@@ -74,7 +74,7 @@ blockquote { border: 1px solid var(--fl-line); border-left: 3px solid var(--fl-g
 .fl-outline a.on { border-left-color: var(--fl-guide); color: var(--fl-guide); font-weight: 600; }
 @media (min-width: 1380px) {
   .fl-outline { display: block; }
-  /* make room for the outline: the chapter moves left instead of sitting under it */
+  /* keep the chapter clear of the outline instead of centered under it */
   body.fl-outlined .content main { margin-inline-start: auto; margin-inline-end: 250px; }
 }
 @media print { .fl-outline { display: none !important; } }

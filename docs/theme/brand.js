@@ -3,9 +3,14 @@
 (function () {
   var title = document.querySelector(".menu-title");
   if (title) {
+    var home = function () { window.location.href = "../"; };
     title.setAttribute("role", "link");
+    title.setAttribute("tabindex", "0");
     title.setAttribute("title", "Fairlead home");
-    title.addEventListener("click", function () { window.location.href = "../"; });
+    title.addEventListener("click", home);
+    title.addEventListener("keydown", function (e) {
+      if (e.key === "Enter" || e.key === " ") { e.preventDefault(); home(); }
+    });
   }
 
   var content = document.querySelector("main");
