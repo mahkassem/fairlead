@@ -1,0 +1,155 @@
+//! `fairlead replay run`: re-plan recorded CI failures from a benchmark
+//! dataset and report recall. `replay fetch`, which records them, needs the
+//! GitHub API and runs in CI.
+
+use std::path::{Path, PathBuf};
+use std::process::ExitCode;
+
+use clap::Subcommand;
+use fairlead_core::config;
+use fairlead_replay::dataset;
+use fairlead_replay::git::Worktree;
+use fairlead_replay::report::{report, text};
+use fairlead_replay::run::{replay, Replayer, Sources};
+use fairlead_replay::window::Window;
+
+#[derive(Subcommand)]
+pub enum ReplayAction {
+    /// Record a repository's completed pull request and merge queue runs.
+    /// Needs GITHUB_TOKEN (or GH_TOKEN) and curl.
+    Fetch {
+        /// The repository, as owner/name.
+        #[arg(long)]
+        repo: String,
+        /// The dataset to append to.
+        #[arg(long, value_name = "PATH")]
+        data: PathBuf,
+        /// The first day to list, YYYY-MM-DD.
+        #[arg(long, value_name = "YYYY-MM-DD")]
+        since: String,
+        /// A clone to fetch each head into and read base commits from.
+        #[arg(long, value_name = "DIR")]
+        clone: Option<PathBuf>,
+        /// Stop after this many run attempts.
+        #[arg(long)]
+        limit: Option<usize>,
+    },
+    /// Re-plan every recorded failure in the window and report recall.
+    Run {
+        /// The dataset, one JSON row per run attempt.
+        #[arg(long, value_name = "PATH")]
+        data: PathBuf,
+        /// A clone of the repository the dataset describes.
+        #[arg(long, value_name = "DIR")]
+        clone: PathBuf,
+        /// The config to plan with, kept outside the clone.
+        #[arg(long, value_name = "PATH")]
+        config: PathBuf,
+        /// The last day of the window; defaults to the newest recorded run.
+        #[arg(long, value_name = "YYYY-MM-DD")]
+        until: Option<String>,
+        /// Print the report as JSON.
+        #[arg(long)]
+        json: bool,
+    },
+}
+
+pub fn run(action: ReplayAction) -> ExitCode {
+    let result = match action {
+        ReplayAction::Run {
+            data,
+            clone,
+            config,
+            until,
+            json,
+        } => run_replay(&data, &clone, &config, until.as_deref(), json),
+        ReplayAction::Fetch {
+            repo,
+            data,
+            since,
+            clone,
+            limit,
+        } => run_fetch(&repo, &data, &since, clone.as_deref(), limit),
+    };
+    match result {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(e) => {
+            eprintln!("{e}");
+            ExitCode::from(2)
+        }
+    }
+}
+
+fn run_fetch(
+    repo: &str,
+    data: &Path,
+    since: &str,
+    clone: Option<&Path>,
+    limit: Option<usize>,
+) -> Result<(), String> {
+    let seen = dataset::read(data)?
+        .iter()
+        .map(|r| (r.run_id, r.attempt))
+        .collect();
+    let http = fairlead_replay::github::Curl::from_env();
+    let opts = fairlead_replay::fetch::Options {
+        repo,
+        since,
+        clone,
+        limit,
+    };
+    let (rows, error) = fairlead_replay::fetch::fetch(&http, &opts, &seen);
+    let added = dataset::append(data, &rows)?;
+    println!("{added} new rows in {}", data.display());
+    error.map_or(Ok(()), Err)
+}
+
+fn run_replay(
+    data: &Path,
+    clone: &Path,
+    config_path: &Path,
+    until: Option<&str>,
+    json: bool,
+) -> Result<(), String> {
+    let loaded = config::load_file(config_path, &[]).map_err(|e| e.to_string())?;
+    let rows = dataset::read(data)?;
+    let newest = rows
+        .iter()
+        .map(|r| r.created_at.clone())
+        .max()
+        .ok_or("the dataset has no rows")?;
+    let until = until.map(str::to_string).unwrap_or(newest);
+    let window = Window::ending(&until, loaded.config.replay.window_days)
+        .ok_or_else(|| format!("`{until}` isn't a date"))?;
+    let repo = rows[0].repo.clone();
+    let clone = std::fs::canonicalize(clone).map_err(|e| format!("{}: {e}", clone.display()))?;
+    let wt_path = clone.with_file_name(format!(
+        "{}-fairlead-replay",
+        clone
+            .file_name()
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_default()
+    ));
+    let start = rows
+        .iter()
+        .find(|r| fairlead_replay::git::has_commit(&clone, &r.head_sha))
+        .map(|r| r.head_sha.clone())
+        .unwrap_or_else(|| "HEAD".into());
+    let replayer = Replayer {
+        clone: &clone,
+        worktree: Worktree::open(&clone, &wt_path, &start)?,
+        config: &loaded.config,
+        sources: Sources::new(&loaded.config)?,
+    };
+    let replayed = replay(&replayer, &rows, &window);
+    let result = report(&repo, &window, loaded.config.replay.min_failures, &replayed);
+    if json {
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&result).expect("report prints")
+        );
+    } else {
+        print!("{}", text(&result));
+    }
+    Ok(())
+}

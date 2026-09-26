@@ -1,0 +1,7 @@
+ FAIL   main  test/mocking.test.ts:186 > importOriginal for virtual modules (playwright)
+AssertionError: expected '\n⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯\n\n FAIL  |chromium| basic.test.js > importOriginal returns original virtual module exports\n'
+
+- Expected
++  FAIL  |chromium| basic.test.js > importOriginal returns original virtual module exports
++ AssertionError: expected 'original' to be 'original-modified' // Object.is equality
+ FAIL  specs/bail-out.test.ts > exits gracefully when the browser connection is closed while cancelling

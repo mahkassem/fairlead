@@ -2,7 +2,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use fairlead_core::config::{
-    load, validate, Config, Invoke, List, LoadOptions, TestClass, Unreached,
+    load, load_file, validate, Config, Invoke, List, LoadOptions, TestClass, Unreached,
 };
 
 const FIXTURES: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures");
@@ -139,6 +139,22 @@ fn the_local_file_is_ignored_in_ci() {
         },
     );
     assert_eq!(config.tests.unreached, Unreached::Warn);
+}
+
+#[test]
+fn a_named_file_loads_alone_with_sets_on_top() {
+    let dir = repo_with(
+        "named",
+        &[
+            ("bench.toml", "[tests]\nunreached = \"warn\"\n"),
+            ("fairlead.local.toml", "[tests]\nunreached = \"all\"\n"),
+        ],
+    );
+    let loaded = load_file(&dir.join("bench.toml"), &[]).unwrap();
+    assert_eq!(loaded.config.tests.unreached, Unreached::Warn);
+    assert_eq!(loaded.files, vec![dir.join("bench.toml")]);
+    let set = load_file(&dir.join("bench.toml"), &["tests.unreached=module".into()]).unwrap();
+    assert_eq!(set.config.tests.unreached, Unreached::Module);
 }
 
 #[test]

@@ -4,7 +4,9 @@
 mod load;
 mod validate;
 
-pub use load::{find_config, load, ConfigError, LoadOptions, Loaded, LOCAL_NAMES, PROJECT_NAMES};
+pub use load::{
+    find_config, load, load_file, ConfigError, LoadOptions, Loaded, LOCAL_NAMES, PROJECT_NAMES,
+};
 pub use validate::{validate, Problem};
 
 use schemars::JsonSchema;

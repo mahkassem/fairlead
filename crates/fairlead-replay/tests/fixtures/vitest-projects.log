@@ -1,0 +1,5 @@
+2026-09-20T10:01:02.1234567Z  FAIL   @effect/api-diff  test/Snapshot.test.ts > canonical snapshot > extracts declarations, overloads, namespaces, re-exports, and canonical types deterministically
+2026-09-20T10:01:02.1234568Z Error: Test timed out in 5000ms.
+2026-09-20T10:01:02.1234569Z  FAIL   @effect/api-diff  test/Snapshot.test.ts > canonical snapshot > normalizes union order in structural fingerprints
+2026-09-20T10:01:02.1234570Z Error: Test timed out in 5000ms.
+2026-09-20T10:01:03.0000000Z  FAIL   effect  test/Pool.test.ts > Pool > finalizer is called for failed allocations

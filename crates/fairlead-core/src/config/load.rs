@@ -126,6 +126,27 @@ pub fn load(start: &Path, opts: &LoadOptions) -> Result<Loaded, ConfigError> {
         .and_then(Path::parent)
         .map(Path::to_path_buf)
         .unwrap_or_else(|| start.to_path_buf());
+    load_from(project, root, opts)
+}
+
+/// One named config file over the defaults, with `sets` over it and no
+/// local file or environment layer: a config kept outside the repository
+/// it describes, such as a benchmark's.
+pub fn load_file(path: &Path, sets: &[String]) -> Result<Loaded, ConfigError> {
+    let root = path.parent().map(Path::to_path_buf).unwrap_or_default();
+    let opts = LoadOptions {
+        sets: sets.to_vec(),
+        env: Vec::new(),
+        ci: true,
+    };
+    load_from(Some(path.to_path_buf()), root, &opts)
+}
+
+fn load_from(
+    project: Option<PathBuf>,
+    root: PathBuf,
+    opts: &LoadOptions,
+) -> Result<Loaded, ConfigError> {
     let mut layers: Vec<(String, Value)> = Vec::new();
     let mut files = Vec::new();
     if let Some(path) = &project {

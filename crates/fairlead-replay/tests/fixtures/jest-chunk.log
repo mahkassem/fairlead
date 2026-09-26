@@ -1,0 +1,6 @@
+. ci:test-chunk: FAIL test/index.ts (5.464 s)
+. ci:test-chunk:   ● exit with error on INT signal from child
+. ci:test-chunk: 
+. ci:test-chunk: FAIL test/install/modulesDir.ts
+. ci:test-chunk:   ● installing to a custom modules directory › uses the directory
+. ci:rust-test:         FAIL [   0.142s] ( 6017/11866) pnpm-deps-restorer hoist::symlinks::stale::tests::concurrent_hoists_replace_the_same_stale_dependency_link

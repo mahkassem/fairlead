@@ -344,6 +344,7 @@ dependencies = [
  "clap",
  "fairlead-core",
  "fairlead-lang",
+ "fairlead-replay",
  "fairlead-tests",
  "serde_json",
  "toml",
@@ -377,6 +378,19 @@ dependencies = [
  "tree-sitter",
  "tree-sitter-javascript",
  "tree-sitter-typescript",
+]
+
+[[package]]
+name = "fairlead-replay"
+version = "0.1.1"
+dependencies = [
+ "fairlead-core",
+ "fairlead-lang",
+ "fairlead-tests",
+ "regex",
+ "serde",
+ "serde_json",
+ "toml",
 ]
 
 [[package]]
