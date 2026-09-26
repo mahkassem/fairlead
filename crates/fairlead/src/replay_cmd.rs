@@ -153,6 +153,17 @@ fn run_replay(
     output: Output,
 ) -> Result<(), String> {
     let loaded = config::load_file(config_path, &[]).map_err(|e| e.to_string())?;
+    if !loaded.problems.is_empty() {
+        let lines: Vec<String> = loaded
+            .problems
+            .iter()
+            .map(|p| format!("  {}: {}", p.key, p.message))
+            .collect();
+        return Err(format!(
+            "the config has problems (see `fairlead config check`):\n{}",
+            lines.join("\n")
+        ));
+    }
     let rows = dataset::read(data)?;
     let newest = rows
         .iter()

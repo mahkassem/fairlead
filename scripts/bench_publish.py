@@ -73,6 +73,13 @@ def repo_section(slug, report, rows, fetch_line):
         f"| Runs replayed | {report['runs']} |",
         f"| Attributed failures (gate {report['min_failures']}) | {judged} ({'met' if gate else 'not met'}) |",
         f"| Recall | {pct(report['recall'])} |",
+    ]
+    if report.get("quarantine"):
+        lines += [
+            f"| Recall with quarantined tests counted (raw) | {pct(report['raw_recall'])} (n={report['raw_judged']}) |",
+            f"| Recall with them left out (adjusted) | {pct(report['recall'])} (n={report['judged']}) |",
+        ]
+    lines += [
         f"| Strict recall (unconfirmed as misses) | {pct(report['strict_recall'])} |",
         f"| Hits: selected, run everything, checks | {report['hits_selected']}, {report['hits_run_all']}, {report['hits_check']} |",
         f"| Misses | {len(report['misses'])} |",
@@ -87,6 +94,16 @@ def repo_section(slug, report, rows, fetch_line):
         lines.append(
             f"| Recall on `{plain(event)}` runs (strict) | {pct(e['recall'])} ({pct(e['strict_recall'])}) |"
         )
+    if report.get("quarantine"):
+        lines += ["", "Quarantined tests (declared in the bench config, applied only while the data bears them out):", ""]
+        for q in report["quarantine"]:
+            lines.append(
+                f"- `{plain(q['path'])}` in jobs `{plain(q['job'])}`: {plain(q['status'])}, "
+                f"{q['absorbed']} failures absorbed ({q['would_hit']} would-be hits, {q['would_miss']} would-be misses), "
+                f"{q['pulls']} pull requests, until {plain(q['until'])}. {plain(q['reason'], 300)}"
+            )
+            if q.get("other_jobs"):
+                lines.append(f"  - Also failed in: {', '.join(f'`{plain(j)}`' for j in q['other_jobs'])}")
     if report.get("widened_by"):
         lines += ["", "Plans that selected everything, by cause:", ""]
         for why, n in sorted(report["widened_by"].items(), key=lambda kv: (-kv[1], kv[0]))[:10]:

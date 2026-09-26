@@ -59,6 +59,12 @@ ignore = ["^Diff: ", "^Image: ", "^Merge Reports$"]
 # A job that failed only while installing never ran a test.
 ignore_steps = ["^Install$"]
 
+[[replay.quarantine]]
+path = "test/typescript/test/typechecker.test.ts"
+job = "^Test: unit, node-24, windows-latest$"
+reason = "Fails only on the Windows unit job (its out-of-memory crash and missing-command cases): 60 failures across 36 pull requests from June to August 2026, while the same job passed 356 times and no other job ever failed it."
+until = "2026-12-31"
+
 [[replay.failures]]
 runner = "vitest"
 extractor = "vitest"

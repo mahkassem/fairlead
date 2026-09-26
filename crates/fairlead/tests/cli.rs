@@ -140,3 +140,32 @@ fn graph_why_prints_the_chain_and_importers_lists_the_edge() {
     let off = fairlead_in(&dir, &["graph", "stats", "--set", "graph.cache=false"]);
     assert!(String::from_utf8_lossy(&off.stdout).contains("parse cache: off"));
 }
+
+#[test]
+fn replay_run_refuses_a_config_with_problems() {
+    let dir = scratch("replay-bad");
+    let config = dir.join("bench.toml");
+    std::fs::write(
+        &config,
+        "[[replay.quarantine]]\npath = \"a.test.ts\"\njob = \"^win$\"\nreason = \"flaky\"\nuntil = \"2026/12/31\"\n",
+    )
+    .unwrap();
+    let data = dir.join("data.jsonl");
+    std::fs::write(&data, "").unwrap();
+    let out = fairlead_in(
+        &dir,
+        &[
+            "replay",
+            "run",
+            "--data",
+            data.to_str().unwrap(),
+            "--clone",
+            dir.to_str().unwrap(),
+            "--config",
+            config.to_str().unwrap(),
+        ],
+    );
+    assert!(!out.status.success());
+    let err = String::from_utf8_lossy(&out.stderr);
+    assert!(err.contains("replay.quarantine"), "{err}");
+}

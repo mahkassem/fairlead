@@ -35,6 +35,7 @@ With `--fetch-missing`, the recorded heads and bases the clone lacks are fetched
 | unavailable | the head commit, or the history to its merge base, isn't in the clone |
 | error | the planner refused the commit, such as a test file no runner matches |
 | unwatched | no `[[replay.failures]]` or `[[replay.checks]]` entry names the job; listed by job name so a gap in the config can't raise recall |
+| quarantined | a `[[replay.quarantine]]` entry declares the test flaky in this job (below) |
 | ignored | `replay.ignore` names the job, such as one that only aggregates others, or it failed only in steps `replay.ignore_steps` names, such as an install |
 
 Recall is hits over hits and misses. Strict recall also counts unconfirmed failures as misses.
@@ -59,6 +60,20 @@ job = "^lint$"
 step = "^Typecheck$"
 check = "typecheck"
 ```
+
+## Quarantine
+
+A test that fails in one CI job whatever changes, such as a platform-specific flake, measures that job rather than the planner. A `[[replay.quarantine]]` entry declares it:
+
+```toml
+[[replay.quarantine]]
+path = "test/typecheck.test.ts"     # one test file
+job = "^unit, windows$"             # the jobs it fails in, as a regex
+reason = "Fails only on Windows: 60 failures across 36 pull requests; the job passed 356 times."
+until = "2026-12-31"                # it stops applying after this day
+```
+
+Every failure is still planned and judged. While an entry applies, its matching hits, misses and unconfirmed failures become `quarantined`, and the report says what each would have been. It applies only while the dataset bears it out: the test failed in at least three distinct pull requests in the window, and never in a job the entry doesn't name. Otherwise it's reported `unverified`, with the other jobs named. After `until` it's `expired`, and when the test didn't fail in the window, or only flakily, it's `stale`, a sign the entry can go. `until` is compared with the end of the window, the dataset's newest run unless `--until` says otherwise, not with today, so a replay gives the same answer whenever it runs. The report names the jobs each entry absorbed failures in, which shows a regex that reaches further than meant. The report gives recall both ways, with the number of failures each is measured on: raw (quarantined failures counted as what they would have been) and adjusted (left out). Quarantined failures don't count toward `replay.min_failures`.
 
 ## The report
 
