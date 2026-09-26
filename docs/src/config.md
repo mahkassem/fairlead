@@ -34,7 +34,7 @@ fairlead.local.toml           you, every environment
 fairlead.staging.local.toml   you, in staging
 ```
 
-An environment name is lowercase letters, digits and dashes, and can't be `local`. Naming an environment with no file for it is an error, so a typo can't fall back to the defaults silently. In CI only the shared file counts, so an environment CI uses needs one.
+Environment files sit beside the project file, wherever you run from. An environment name is lowercase letters, digits and dashes, and can't be `local`. Naming an environment with no file for it is an error, so a typo can't fall back to the defaults silently. In CI only the shared file counts, so an environment CI uses needs one. `replay run --config` reads exactly the file it names, with no environment or local layers.
 
 ## Lists
 
@@ -80,11 +80,17 @@ fairlead.toml: tests.unreachd: unknown field `unreachd`, expected one of ...
 | `replay.provider` | `"github"` | Where CI history comes from |
 | `replay.window_days` | `90` | How far back replay looks |
 | `replay.min_failures` | `30` | Failures needed before a replay result counts |
-| `replay.failures` | `[]` | `runner`, `extractor` (`vitest`, `jest`, `regex`), `job`, `pattern` |
+| `replay.failures` | `[]` | `runner`, `extractor` (`vitest`, `jest`, `bun`, `regex`), `job`, `pattern` |
 | `replay.checks` | `[]` | Map a CI `job` and `step` to a `check` |
 | `replay.ignore` | `[]` | CI job names (regexes) whose failures replay leaves out on purpose, such as a job that only aggregates others |
 | `replay.quarantine` | `[]` | Tests declared flaky in named jobs: `path`, `job`, `reason`, `until` ([Replay](replay.md#quarantine)) |
 | `replay.ignore_steps` | `[]` | CI step names (regexes): a job that failed only in such steps, such as an install, is left out |
+| `guard.baseline` | `"fairlead-baseline.json"` | Ratcheted counts by file and rule, relative to the project root |
+| `guard.exclude` | `[]` | Tracked files no guard rule reads |
+| `guard.findings` | `"added"` | Which findings count at a commit: `added`, only those the change adds; `all`, every finding in a file it touches |
+| `guard.on_finding` | `"deny"` | `deny` stops the commit on those findings; `warn` shows them and lets it through |
+| `guard.events` | `"local"` | `local` records decisions in `.git/fairlead/events.jsonl`; `off` records nothing |
+| `guard.size` | off | `files`, `exclude`, `file_lines`, and `ratchet` (default `true`). See [Guard rules](guard.md) |
 
 Commands are always argv arrays, never shell strings, and `{files}` expands to one argument per file. In `tests.runners.cwd`, `{module}` is the module's root path and `{module.id}` its id.
 

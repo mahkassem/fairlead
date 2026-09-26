@@ -12,8 +12,13 @@ fn hex(bytes: &[u8]) -> String {
     bytes.iter().map(|b| format!("{b:02x}")).collect()
 }
 
+/// The guard's rules don't change a plan, so they don't change its digest.
 pub fn config_digest(config: &Config) -> String {
-    let json = serde_json::to_vec(config).expect("config serializes");
+    let planned = Config {
+        guard: Default::default(),
+        ..config.clone()
+    };
+    let json = serde_json::to_vec(&planned).expect("config serializes");
     format!("sha256:{}", hex(&Sha256::digest(json)))
 }
 
@@ -45,4 +50,19 @@ pub fn plan_id(
     }
     hasher.update(serde_json::to_vec(changes).expect("changes serialize"));
     format!("pl_{}", &hex(&hasher.finalize())[..16])
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn guard_rules_leave_the_config_digest_alone() {
+        let mut config = Config::default();
+        let before = config_digest(&config);
+        config.guard.baseline = "other.json".into();
+        assert_eq!(config_digest(&config), before);
+        config.tests.unreached = fairlead_core::config::Unreached::All;
+        assert_ne!(config_digest(&config), before);
+    }
 }

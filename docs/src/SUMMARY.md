@@ -12,6 +12,7 @@
 - [Import graph](graph.md)
 - [Test plan](plan.md)
 - [Plans in CI](ci.md)
+- [Guard rules](guard.md)
 
 # Measuring
 

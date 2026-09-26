@@ -75,7 +75,36 @@ pub fn validate(config: &Config) -> Vec<Problem> {
     checks(config, &mut problems);
     replay(config, &mut problems);
     graph_edges(config, &mut problems);
+    guard(config, &mut problems);
     problems
+}
+
+fn globs(key: &str, globs: &[String], problems: &mut Vec<Problem>) {
+    for (i, glob) in globs.iter().enumerate() {
+        if let Err(e) = crate::pattern::Pattern::new(glob) {
+            problems.push(problem(format!("{key}[{i}]"), e));
+        }
+    }
+}
+
+fn guard(config: &Config, problems: &mut Vec<Problem>) {
+    let guard = &config.guard;
+    if guard.baseline.trim().is_empty() {
+        problems.push(problem("guard.baseline", "must name a file"));
+    }
+    globs("guard.exclude", guard.exclude.items(), problems);
+    if let Some(size) = &guard.size {
+        if size.files.items().is_empty() {
+            problems.push(problem("guard.size.files", "needs at least one glob"));
+        }
+        globs("guard.size.files", size.files.items(), problems);
+        globs("guard.size.exclude", size.exclude.items(), problems);
+        match size.file_lines {
+            None => problems.push(problem("guard.size", "sets no limit, such as `file_lines`")),
+            Some(0) => problems.push(problem("guard.size.file_lines", "must be at least 1")),
+            Some(_) => {}
+        }
+    }
 }
 
 /// A placeholder is read from a side where it is a whole path segment, since

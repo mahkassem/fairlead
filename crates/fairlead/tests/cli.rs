@@ -238,4 +238,7 @@ fn env_flag_layers_that_environments_file_as_fairlead_env_does() {
     let out = fairlead_in(&dir, &["--env", "prod", "config", "check"]);
     assert!(!out.status.success());
     assert!(String::from_utf8_lossy(&out.stderr).contains("no fairlead.prod.toml"));
+    assert!(!fairlead_in(&dir, &["--env", "", "config", "check"])
+        .status
+        .success());
 }

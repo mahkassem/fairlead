@@ -1,8 +1,10 @@
 //! The `fairlead` command. Each command arrives with its milestone; K1.1
-//! adds `config`, K1.2 `graph`, K1.3 `plan`, `test --explain` and `ci`.
+//! adds `config`, K1.2 `graph`, K1.3 `plan`, `test --explain` and `ci`,
+//! K2.1 `guard`.
 
 mod ci_cmd;
 mod graph_cmd;
+mod guard_cmd;
 mod plan_cmd;
 mod replay_cmd;
 
@@ -20,7 +22,12 @@ struct Cli {
     command: Option<Command>,
     /// Layer `fairlead.<NAME>.toml` and `fairlead.<NAME>.local.toml` over
     /// the project's config, as `FAIRLEAD_ENV` does.
-    #[arg(long = "env", value_name = "NAME", global = true)]
+    #[arg(
+        long = "env",
+        value_name = "NAME",
+        global = true,
+        value_parser = clap::builder::NonEmptyStringValueParser::new()
+    )]
     environment: Option<String>,
 }
 
@@ -67,6 +74,14 @@ enum Command {
     Ci {
         #[command(subcommand)]
         action: ci_cmd::CiAction,
+    },
+    /// Check the project's rules.
+    Guard {
+        #[command(subcommand)]
+        action: guard_cmd::GuardAction,
+        /// Override a config value for this run.
+        #[arg(long = "set", value_name = "KEY=VALUE", global = true)]
+        sets: Vec<String>,
     },
     /// Inspect the import graph.
     Graph {
@@ -248,6 +263,7 @@ fn main() -> ExitCode {
         }
         Some(Command::Config { action, sets }) => run_config(action, sets),
         Some(Command::Graph { action, sets }) => graph_cmd::run(action, sets, &cwd()),
+        Some(Command::Guard { action, sets }) => guard_cmd::run(action, sets, &cwd()),
         Some(Command::Plan {
             changes,
             json,

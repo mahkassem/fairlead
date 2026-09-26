@@ -72,6 +72,7 @@ pub struct Config {
     pub checks: List<Check>,
     pub plan: Plan,
     pub replay: Replay,
+    pub guard: Guard,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
@@ -401,4 +402,89 @@ pub struct CheckStep {
     /// The CI step name, as a regex.
     pub step: String,
     pub check: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields, default)]
+pub struct Guard {
+    /// Ratcheted counts per file and rule, relative to the project root.
+    pub baseline: String,
+    /// Tracked files no rule reads.
+    pub exclude: List<String>,
+    /// Which findings count at a write or a commit: only those the change
+    /// adds, or every finding in a file it touches.
+    pub findings: Findings,
+    /// Whether those findings stop the write or commit, or are only shown.
+    pub on_finding: OnFinding,
+    /// Where hook and commit decisions are recorded.
+    pub events: Events,
+    /// File length, a ratcheted rule unless `ratchet = false`. Off until set.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub size: Option<SizeRules>,
+}
+
+impl Default for Guard {
+    fn default() -> Self {
+        Guard {
+            baseline: "fairlead-baseline.json".into(),
+            exclude: List::default(),
+            findings: Findings::default(),
+            on_finding: OnFinding::default(),
+            events: Events::default(),
+            size: None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "kebab-case")]
+pub enum Findings {
+    /// Only findings the change adds, so old debt doesn't block a fix.
+    #[default]
+    Added,
+    /// Every finding in a file the change touches.
+    All,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "kebab-case")]
+pub enum OnFinding {
+    /// Stop it, with the findings as the reason.
+    #[default]
+    Deny,
+    /// Let it through and show the findings; the check stage still fails.
+    Warn,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "kebab-case")]
+pub enum Events {
+    /// `.git/fairlead/events.jsonl`, never committed.
+    #[default]
+    Local,
+    Off,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields, default)]
+pub struct SizeRules {
+    /// The files these rules read.
+    pub files: List<String>,
+    pub exclude: List<String>,
+    /// A file over this many lines is a finding.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub file_lines: Option<u32>,
+    /// Counted against the baseline rather than failing on any finding.
+    pub ratchet: bool,
+}
+
+impl Default for SizeRules {
+    fn default() -> Self {
+        SizeRules {
+            files: List::default(),
+            exclude: List::default(),
+            file_lines: None,
+            ratchet: true,
+        }
+    }
 }
