@@ -20,6 +20,15 @@ use serde_json::Value;
 struct Cli {
     #[command(subcommand)]
     command: Option<Command>,
+    /// Layer `fairlead.<NAME>.toml` and `fairlead.<NAME>.local.toml` over
+    /// the project's config, as `FAIRLEAD_ENV` does.
+    #[arg(
+        long = "env",
+        value_name = "NAME",
+        global = true,
+        value_parser = clap::builder::NonEmptyStringValueParser::new()
+    )]
+    environment: Option<String>,
 }
 
 #[derive(Subcommand)]
@@ -239,7 +248,12 @@ fn fail(e: &ConfigError) -> ExitCode {
 }
 
 fn main() -> ExitCode {
-    match Cli::parse().command {
+    let cli = Cli::parse();
+    if let Some(name) = &cli.environment {
+        // Set before any thread starts, so every config load sees it.
+        std::env::set_var(config::ENV_NAME, name);
+    }
+    match cli.command {
         Some(Command::Doctor) => {
             print!(
                 "{}",

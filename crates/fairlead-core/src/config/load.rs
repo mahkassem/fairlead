@@ -1,7 +1,8 @@
 //! Finding, reading and merging the config layers. Layers merge as plain
 //! values: maps merge by key, lists append unless written as
 //! `{ replace = [...] }`, and anything else is overridden. Each layer is also
-//! checked on its own, so an error names the file it came from.
+//! checked on its own, so an error names the file it came from. An
+//! environment named by `FAIRLEAD_ENV` adds its own shared and local files.
 
 use std::collections::BTreeMap;
 use std::fmt;
@@ -19,6 +20,9 @@ pub const LOCAL_NAMES: [&str; 3] = [
 ];
 const ENV_PREFIX: &str = "FAIRLEAD_";
 const ENV_SEPARATOR: &str = "__";
+/// Names the environment whose files layer over the project's.
+pub const ENV_NAME: &str = "FAIRLEAD_ENV";
+const EXTENSIONS: [&str; 3] = ["toml", "yaml", "yml"];
 
 #[derive(Debug, Clone, Default)]
 pub struct LoadOptions {
@@ -149,15 +153,45 @@ fn load_from(
 ) -> Result<Loaded, ConfigError> {
     let mut layers: Vec<(String, Value)> = Vec::new();
     let mut files = Vec::new();
-    if let Some(path) = &project {
-        layers.push((file_name(path), read_file(path)?));
-        files.push(path.clone());
+    let environment = environment(opts)?;
+    let mut read = |path: PathBuf| -> Result<(), ConfigError> {
+        layers.push((file_name(&path), read_file(&path)?));
+        files.push(path);
+        Ok(())
+    };
+    if let Some(path) = project {
+        read(path)?;
+    }
+    let shared = match &environment {
+        Some(name) => one_of(&root, &format!("fairlead.{name}"), "environment")?,
+        None => None,
+    };
+    let local = match (&environment, opts.ci) {
+        (Some(name), false) => one_of(&root, &format!("fairlead.{name}.local"), "environment")?,
+        _ => None,
+    };
+    if let (Some(name), None, None) = (&environment, &shared, &local) {
+        let personal = if opts.ci {
+            String::new()
+        } else {
+            format!(" or fairlead.{name}.local.toml")
+        };
+        return Err(error(
+            ENV_NAME,
+            None,
+            format!("no fairlead.{name}.toml{personal} next to the project file"),
+        ));
+    }
+    if let Some(path) = shared {
+        read(path)?;
     }
     if !opts.ci {
         if let Some(path) = local_file(&root)? {
-            layers.push((file_name(&path), read_file(&path)?));
-            files.push(path);
+            read(path)?;
         }
+    }
+    if let Some(path) = local {
+        read(path)?;
     }
     let mut env: Vec<&(String, String)> = opts.env.iter().collect();
     env.sort();
@@ -196,10 +230,36 @@ fn load_from(
     })
 }
 
-fn local_file(root: &Path) -> Result<Option<PathBuf>, ConfigError> {
-    let found: Vec<PathBuf> = LOCAL_NAMES
+/// The environment `FAIRLEAD_ENV` names, if any: lowercase letters, digits
+/// and dashes, so it can only name a file beside the project file.
+fn environment(opts: &LoadOptions) -> Result<Option<String>, ConfigError> {
+    let Some((_, name)) = opts
+        .env
         .iter()
-        .map(|n| root.join(n))
+        .find(|(k, v)| k == ENV_NAME && !v.is_empty())
+    else {
+        return Ok(None);
+    };
+    let valid = name
+        .bytes()
+        .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-')
+        && !name.starts_with('-')
+        && name != "local";
+    if !valid {
+        return Err(error(
+            ENV_NAME,
+            None,
+            format!("`{name}` isn't an environment name: lowercase letters, digits and dashes, and not `local`"),
+        ));
+    }
+    Ok(Some(name.clone()))
+}
+
+/// `<stem>.toml`, `.yaml` or `.yml` in `root`; two of them is an error.
+fn one_of(root: &Path, stem: &str, what: &str) -> Result<Option<PathBuf>, ConfigError> {
+    let found: Vec<PathBuf> = EXTENSIONS
+        .iter()
+        .map(|ext| root.join(format!("{stem}.{ext}")))
         .filter(|p| p.is_file())
         .collect();
     if found.len() > 1 {
@@ -207,10 +267,14 @@ fn local_file(root: &Path) -> Result<Option<PathBuf>, ConfigError> {
         return Err(error(
             &root.display().to_string(),
             None,
-            format!("more than one local config file: {}", names.join(", ")),
+            format!("more than one {what} config file: {}", names.join(", ")),
         ));
     }
     Ok(found.into_iter().next())
+}
+
+fn local_file(root: &Path) -> Result<Option<PathBuf>, ConfigError> {
+    one_of(root, "fairlead.local", "local")
 }
 
 fn read_file(path: &Path) -> Result<Value, ConfigError> {
