@@ -141,7 +141,22 @@ pub struct Warning {
     pub message: String,
 }
 
-/// The JSON Schema for plan version 1.
+/// The JSON Schema for plan version 1, keys sorted so it prints the same
+/// whichever `serde_json` features the build unified.
 pub fn json_schema() -> serde_json::Value {
-    serde_json::to_value(schemars::schema_for!(Plan)).expect("schema serializes")
+    sorted(serde_json::to_value(schemars::schema_for!(Plan)).expect("schema serializes"))
+}
+
+fn sorted(value: serde_json::Value) -> serde_json::Value {
+    match value {
+        serde_json::Value::Object(map) => {
+            let ordered: std::collections::BTreeMap<String, serde_json::Value> =
+                map.into_iter().map(|(k, v)| (k, sorted(v))).collect();
+            serde_json::Value::Object(ordered.into_iter().collect())
+        }
+        serde_json::Value::Array(items) => {
+            serde_json::Value::Array(items.into_iter().map(sorted).collect())
+        }
+        other => other,
+    }
 }
