@@ -170,14 +170,19 @@ impl FileSystem for WorkspaceFs {
             return Ok(FileMetadata::new(false, true, false));
         }
         let real = self.real(path);
-        match FileSystemOs::metadata(&real) {
-            Err(e) if e.kind() == io::ErrorKind::NotFound => self.phantom(&real).ok_or(e),
-            other => other,
+        // Phantoms first: a deleted path has nothing on disk to find, and how
+        // the OS reports a missing file differs by platform.
+        if let Some(meta) = self.phantom(&real) {
+            return Ok(meta);
         }
+        FileSystemOs::metadata(&real)
     }
 
     fn symlink_metadata(&self, path: &Path) -> io::Result<FileMetadata> {
-        if self.is_virtual_dir(path) || self.unvirtual(path).is_some() {
+        if self.is_virtual_dir(path)
+            || self.unvirtual(path).is_some()
+            || self.phantom(path).is_some()
+        {
             return self.metadata(path);
         }
         match FileSystemOs::symlink_metadata(path) {

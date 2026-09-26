@@ -160,6 +160,15 @@ impl Resolver {
         tree.rel(&self.fs.real(resolution.path()))
     }
 
+    /// Why `spec` in `file` doesn't resolve, as the resolver says it, with
+    /// the tsconfig and without; `None` when it does.
+    pub fn why_not(&self, tree: &Tree, file: &str, spec: &str) -> Option<String> {
+        let abs = tree.abs(file);
+        let first = self.with_tsconfig.resolve_file(&abs, spec).err()?;
+        let second = self.plain.resolve_file(&abs, spec).err()?;
+        Some(format!("{first}; without tsconfig: {second}"))
+    }
+
     fn unresolved(&self, spec: &str) -> Target {
         if spec.starts_with('.') || spec.starts_with('/') || spec.starts_with('#') {
             return Target::Unresolved;
