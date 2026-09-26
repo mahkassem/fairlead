@@ -173,3 +173,135 @@ fn explicit_files_resolve_dot_dot_and_expand_directories() {
     let plan: serde_json::Value = serde_json::from_slice(&everything.stdout).unwrap();
     assert!(plan["changed"].as_array().unwrap().len() >= 5);
 }
+
+fn fairlead_with(dir: &Path, args: &[&str], env: &[(&str, &Path)]) -> Output {
+    let mut cmd = Command::new(env!("CARGO_BIN_EXE_fairlead"));
+    cmd.args(args).current_dir(dir).env_clear();
+    for keep in ["PATH", "SYSTEMROOT", "HOME", "USERPROFILE"] {
+        if let Some(value) = std::env::var_os(keep) {
+            cmd.env(keep, value);
+        }
+    }
+    for (key, value) in env {
+        cmd.env(key, value);
+    }
+    cmd.output().unwrap()
+}
+
+#[test]
+fn ci_plan_writes_the_plan_file_and_github_outputs() {
+    let dir = project("ci-plan");
+    write(&dir, "src/b.ts", "export const b = 2;\n");
+    let outputs = dir.join("github-output.txt");
+    let temp = dir.join("runner-temp");
+    std::fs::create_dir_all(&temp).unwrap();
+    let out = fairlead_with(
+        &dir,
+        &["ci", "plan", "--base", "main", "--format", "github"],
+        &[("GITHUB_OUTPUT", &outputs), ("RUNNER_TEMP", &temp)],
+    );
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let plan_file = temp.join("fairlead-plan.json");
+    let plan: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(&plan_file).unwrap()).unwrap();
+    assert_eq!(plan["tests"][0]["path"], "test/b.test.ts");
+    let written = std::fs::read_to_string(&outputs).unwrap();
+    assert!(
+        written.contains("all<<FAIRLEAD_EOF_0\nfalse\n"),
+        "{written}"
+    );
+    assert!(
+        written.contains("checks<<FAIRLEAD_EOF_0\ntypecheck\n"),
+        "{written}"
+    );
+    assert!(
+        written.contains("\"argv\":[\"vitest\",\"run\",\"test/b.test.ts\"]"),
+        "{written}"
+    );
+}
+
+#[test]
+fn ci_plan_refuses_a_head_that_isnt_checked_out() {
+    let dir = project("ci-head");
+    let sha = |dir: &Path| {
+        let out = Command::new("git")
+            .args(["rev-parse", "HEAD"])
+            .current_dir(dir)
+            .output()
+            .unwrap();
+        String::from_utf8(out.stdout).unwrap().trim().to_string()
+    };
+    let first = sha(&dir);
+    std::fs::write(dir.join("later.txt"), "later\n").unwrap();
+    git(&dir, &["add", "-A"]);
+    git(&dir, &["commit", "-q", "-m", "later"]);
+    let head = sha(&dir);
+    let plan = |rev: &str| fairlead_in(&dir, &["ci", "plan", "--base", "main", "--head", rev]);
+    assert_eq!(plan(&head[..7]).status.code(), Some(0));
+    for rev in [first.as_str(), &head[..1], "0123456789abcdef"] {
+        assert_eq!(plan(rev).status.code(), Some(2), "--head {rev}");
+    }
+    let out = plan(&first);
+    assert!(String::from_utf8_lossy(&out.stderr).contains("check out the head commit"));
+}
+
+fn plan_with(dir: &Path, argvs: &[&[&str]]) -> PathBuf {
+    let invocations: Vec<serde_json::Value> = argvs
+        .iter()
+        .enumerate()
+        .map(|(i, argv)| serde_json::json!({ "id": format!("step{i}"), "kind": "check", "cwd": ".", "argv": argv }))
+        .collect();
+    let plan = serde_json::json!({
+        "version": 1, "plan_id": "pl_x", "fairlead_version": "0", "config_digest": "sha256:x",
+        "tree_hash": "x", "base": null, "head": "worktree", "all": false, "changed": [], "ignored": [],
+        "tests": [], "checks": [], "invocations": invocations, "unreached": [], "warnings": []
+    });
+    let path = dir.join("plan.json");
+    std::fs::write(&path, plan.to_string()).unwrap();
+    path
+}
+
+#[test]
+fn ci_run_runs_every_invocation_and_fails_if_any_did() {
+    let dir = project("ci-run");
+    plan_with(
+        &dir,
+        &[
+            &["git", "--version"],
+            &["git", "not-a-git-command"],
+            &["git", "--version"],
+        ],
+    );
+    let out = fairlead_in(&dir, &["ci", "run", "--plan", "plan.json"]);
+    assert_eq!(out.status.code(), Some(1));
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert_eq!(stdout.matches("fairlead: (.) git").count(), 3, "{stdout}");
+    assert!(String::from_utf8_lossy(&out.stderr).contains("failed: step1"));
+    let fast = fairlead_in(&dir, &["ci", "run", "--plan", "plan.json", "--fail-fast"]);
+    assert_eq!(
+        String::from_utf8_lossy(&fast.stdout)
+            .matches("fairlead: (.) git")
+            .count(),
+        2
+    );
+    plan_with(&dir, &[&["git", "--version"]]);
+    let ok = fairlead_in(&dir, &["ci", "run", "--plan", "plan.json"]);
+    assert!(ok.status.success());
+    plan_with(&dir, &[&[], &["fairlead-no-such-program"]]);
+    let bad = fairlead_in(&dir, &["ci", "run", "--plan", "plan.json"]);
+    assert_eq!(bad.status.code(), Some(1));
+    assert!(String::from_utf8_lossy(&bad.stderr).contains("failed: step0, step1"));
+}
+
+#[test]
+fn ci_run_refuses_a_plan_of_another_version() {
+    let dir = project("ci-version");
+    std::fs::write(dir.join("plan.json"), r#"{ "version": 2 }"#).unwrap();
+    let out = fairlead_in(&dir, &["ci", "run", "--plan", "plan.json"]);
+    assert_eq!(out.status.code(), Some(2));
+    assert!(String::from_utf8_lossy(&out.stderr).contains("plan version"));
+}

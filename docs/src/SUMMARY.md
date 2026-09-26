@@ -6,4 +6,5 @@
 - [Configuration](config.md)
 - [Import graph](graph.md)
 - [Test plan](plan.md)
+- [Plans in CI](ci.md)
 - [Roadmap](roadmap.md)
