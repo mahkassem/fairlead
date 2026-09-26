@@ -5,7 +5,8 @@ mod load;
 mod validate;
 
 pub use load::{
-    find_config, load, load_file, ConfigError, LoadOptions, Loaded, LOCAL_NAMES, PROJECT_NAMES,
+    find_config, load, load_file, ConfigError, LoadOptions, Loaded, ENV_NAME, LOCAL_NAMES,
+    PROJECT_NAMES,
 };
 pub use validate::{validate, Problem};
 

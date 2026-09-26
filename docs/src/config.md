@@ -15,11 +15,26 @@ Later layers override earlier ones:
 
 1. Built-in defaults.
 2. The project file: `fairlead.toml` or `fairlead.yaml`, found by walking up from the current directory, never past the repository root (the first directory holding `.git`). Two in the same directory is an error.
-3. The local file, `fairlead.local.toml` (or `.yaml`), next to the project file. Keep it out of git. It's ignored when the `CI` environment variable is set.
-4. Environment variables: `FAIRLEAD_` followed by the key path, with sections separated by a double underscore. So `FAIRLEAD_TESTS__UNREACHED=all` sets `tests.unreached`.
-5. `--set key=value`, for one run: `fairlead config show --set tests.unreached=all`.
+3. The environment's shared file, `fairlead.<name>.toml` (or `.yaml`), when an environment is named. See [Environments](#environments).
+4. The local file, `fairlead.local.toml` (or `.yaml`), next to the project file. Keep it out of git. It's ignored when the `CI` environment variable is set.
+5. The environment's local file, `fairlead.<name>.local.toml`, also out of git and ignored in CI.
+6. Environment variables: `FAIRLEAD_` followed by the key path, with sections separated by a double underscore. So `FAIRLEAD_TESTS__UNREACHED=all` sets `tests.unreached`.
+7. `--set key=value`, for one run: `fairlead config show --set tests.unreached=all`.
 
 For environment variables and `--set`, a value that parses as a TOML boolean, number or array (`true`, `30`, `["a", "b"]`) is used as that type; anything else, dates included, is a string. Environment variables apply in name order.
+
+## Environments
+
+Name an environment with `FAIRLEAD_ENV=staging`, or `--env staging` on any command, and Fairlead layers `fairlead.staging.toml` over the project file and `fairlead.staging.local.toml` over the local one. A file with no `.local` is shared and belongs in git; one with `.local` is yours and stays out of it, like `fairlead.local.toml`.
+
+```text
+fairlead.toml                 every environment
+fairlead.staging.toml         staging, shared
+fairlead.local.toml           you, every environment
+fairlead.staging.local.toml   you, in staging
+```
+
+An environment name is lowercase letters, digits and dashes, and can't be `local`. Naming an environment with no file for it is an error, so a typo can't fall back to the defaults silently. In CI only the shared file counts, so an environment CI uses needs one.
 
 ## Lists
 

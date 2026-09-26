@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### New
+
+- Environments: `FAIRLEAD_ENV=staging` or `--env staging` layers `fairlead.staging.toml` (shared) over the project file and `fairlead.staging.local.toml` (personal, ignored in CI) over the local one. Naming an environment with no file for it is an error. See [Configuration](https://mahkassem.github.io/fairlead/docs/config.html#environments).
+
 ## 0.3.0 (2026-09-26)
 
 ### New

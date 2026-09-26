@@ -214,3 +214,28 @@ fn graph_why_names_the_barrier_nearest_the_change_when_a_chain_crosses_two() {
     let text = String::from_utf8_lossy(&why.stdout);
     assert!(text.contains("its walk stops at src/db/pool.ts"), "{text}");
 }
+
+#[test]
+fn env_flag_layers_that_environments_file_as_fairlead_env_does() {
+    let dir = scratch("env-flag");
+    std::fs::write(dir.join("fairlead.toml"), "").unwrap();
+    std::fs::write(
+        dir.join("fairlead.staging.toml"),
+        "[tests]\nunreached = \"all\"\n",
+    )
+    .unwrap();
+    let out = fairlead_in(&dir, &["config", "show", "--origin", "--env", "staging"]);
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let text = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        text.contains("tests.unreached = \"all\"  # fairlead.staging.toml"),
+        "{text}"
+    );
+    let out = fairlead_in(&dir, &["--env", "prod", "config", "check"]);
+    assert!(!out.status.success());
+    assert!(String::from_utf8_lossy(&out.stderr).contains("no fairlead.prod.toml"));
+}

@@ -360,3 +360,134 @@ to = []
         ]
     );
 }
+
+fn with_env(name: &str, ci: bool) -> LoadOptions {
+    LoadOptions {
+        env: vec![("FAIRLEAD_ENV".into(), name.into())],
+        sets: Vec::new(),
+        ci,
+    }
+}
+
+#[test]
+fn an_environment_layers_its_shared_file_then_the_local_files_over_the_project() {
+    let dir = repo_with(
+        "env-order",
+        &[
+            (
+                "fairlead.toml",
+                "[replay]\nwindow_days = 10\nmin_failures = 1\n[tests]\nunreached = \"warn\"\n",
+            ),
+            (
+                "fairlead.staging.toml",
+                "[replay]\nwindow_days = 20\nmin_failures = 2\n",
+            ),
+            ("fairlead.local.toml", "[replay]\nmin_failures = 3\n"),
+            (
+                "fairlead.staging.local.toml",
+                "[tests]\nunreached = \"all\"\n",
+            ),
+            ("fairlead.production.toml", "[replay]\nwindow_days = 99\n"),
+        ],
+    );
+    let loaded = load(&dir, &with_env("staging", false)).unwrap();
+    assert_eq!(loaded.config.replay.window_days, 20);
+    assert_eq!(loaded.config.replay.min_failures, 3);
+    assert_eq!(loaded.config.tests.unreached, Unreached::All);
+    assert_eq!(
+        loaded.origins["replay.window_days"],
+        "fairlead.staging.toml"
+    );
+    assert_eq!(
+        loaded.origins["tests.unreached"],
+        "fairlead.staging.local.toml"
+    );
+    let names: Vec<String> = loaded
+        .files
+        .iter()
+        .map(|p| p.file_name().unwrap().to_string_lossy().into_owned())
+        .collect();
+    assert_eq!(
+        names,
+        [
+            "fairlead.toml",
+            "fairlead.staging.toml",
+            "fairlead.local.toml",
+            "fairlead.staging.local.toml"
+        ]
+    );
+}
+
+#[test]
+fn without_an_environment_its_files_are_not_read() {
+    let dir = repo_with(
+        "env-none",
+        &[
+            ("fairlead.toml", ""),
+            ("fairlead.staging.toml", "[replay]\nwindow_days = 20\n"),
+        ],
+    );
+    assert_eq!(
+        load_at(&dir, &LoadOptions::default()).replay.window_days,
+        90
+    );
+    assert_eq!(load_at(&dir, &with_env("", false)).replay.window_days, 90);
+}
+
+#[test]
+fn in_ci_an_environment_reads_only_its_shared_file() {
+    let dir = repo_with(
+        "env-ci",
+        &[
+            ("fairlead.toml", ""),
+            ("fairlead.staging.yaml", "replay:\n  window_days: 20\n"),
+            (
+                "fairlead.staging.local.toml",
+                "[replay]\nwindow_days = 30\n",
+            ),
+            ("fairlead.dev.local.toml", "[replay]\nwindow_days = 40\n"),
+        ],
+    );
+    assert_eq!(
+        load_at(&dir, &with_env("staging", true)).replay.window_days,
+        20
+    );
+    assert_eq!(
+        load_at(&dir, &with_env("dev", false)).replay.window_days,
+        40
+    );
+    let err = load(&dir, &with_env("dev", true)).unwrap_err().to_string();
+    assert_eq!(
+        err,
+        "FAIRLEAD_ENV: no fairlead.dev.toml next to the project file"
+    );
+}
+
+#[test]
+fn an_environment_with_no_file_a_bad_name_or_two_files_is_an_error() {
+    let dir = repo_with(
+        "env-errors",
+        &[
+            ("fairlead.toml", ""),
+            ("fairlead.twice.toml", ""),
+            ("fairlead.twice.yaml", ""),
+        ],
+    );
+    let err = |name: &str| load(&dir, &with_env(name, false)).unwrap_err().to_string();
+    assert_eq!(
+        err("missing"),
+        "FAIRLEAD_ENV: no fairlead.missing.toml or fairlead.missing.local.toml next to the project file"
+    );
+    assert!(
+        err("../x").contains("isn't an environment name"),
+        "{}",
+        err("../x")
+    );
+    assert!(err("Staging").contains("isn't an environment name"));
+    assert!(err("local").contains("isn't an environment name"));
+    assert!(
+        err("twice").contains("more than one environment config file"),
+        "{}",
+        err("twice")
+    );
+}
