@@ -92,6 +92,11 @@ fairlead.toml: tests.unreachd: unknown field `unreachd`, expected one of ...
 | `guard.events` | `"local"` | `local` records decisions in `.git/fairlead/events.jsonl`; `off` records nothing |
 | `guard.cite` | `{}` | A note appended to a rule's messages, by rule id |
 | `guard.size` | off | `files`, `exclude`, `file_lines`, `function_lines`, `test_hooks`, and `ratchet` (default `true`). See [Guard rules](guard.md) |
+| `guard.test_names` | off | `files`, `exclude`, `file`, `titles_without`, `title_calls`. See [Guard rules](guard.md#test-names) |
+| `guard.citations` | off | `files`, `exclude`, `pattern` (with a `code` group), `headings_in`. See [Guard rules](guard.md#citations) |
+| `guard.migrations` | off | `files`, `immutable` (default `true`), `base`, `unique_prefix`. See [Guard rules](guard.md#migrations) |
+| `guard.commands` | `[]` | `match`, `reason`: commands an agent may not run. See [Guard rules](guard.md#commands) |
+| `guard.external` | `[]` | `id`, `command`, `stages` (default `["check"]`), `ratchet`. See [Guard rules](guard.md#external-rules) |
 | `guard.comments` | off | `files`, `exclude`, `tests`, `migrations`, `block_length`, `density`, `history`, `item_codes`, `agent_phrases`, `block_marker`, and `ratchet` (default `false`). See [Guard rules](guard.md#comments) |
 
 Commands are always argv arrays, never shell strings, and `{files}` expands to one argument per file. In `tests.runners.cwd`, `{module}` is the module's root path and `{module.id}` its id.

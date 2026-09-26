@@ -553,3 +553,51 @@ fn size_can_limit_functions_alone_and_cite_names_only_known_rules() {
     let keys: Vec<String> = validate(&config).into_iter().map(|p| p.key).collect();
     assert_eq!(keys, ["guard.cite.file-lenght"]);
 }
+
+#[test]
+fn test_names_citations_migrations_commands_and_external_rules_are_validated() {
+    let keys = |text: &str| -> Vec<String> {
+        let config: Config = toml::from_str(text).unwrap();
+        validate(&config).into_iter().map(|p| p.key).collect()
+    };
+    assert_eq!(
+        keys("[guard.test_names]\nfiles = [\"t/**\"]\n"),
+        ["guard.test_names"]
+    );
+    assert_eq!(
+        keys("[guard.citations]\nfiles = [\"s/**\"]\npattern = '\\(T[0-9]+\\)'\nheadings_in = \"L.md\"\n"),
+        ["guard.citations.pattern"]
+    );
+    assert_eq!(
+        keys("[guard.migrations]\nfiles = [\"db/*.sql\"]\nunique_prefix = { allow = [[\"1.sql\"]] }\n"),
+        ["guard.migrations.unique_prefix.allow"]
+    );
+    assert_eq!(
+        keys("[[guard.commands]]\nmatch = \"git stash\"\nreason = \" \"\n"),
+        ["guard.commands[0].reason"]
+    );
+    assert_eq!(
+        keys(concat!(
+            "[[guard.external]]\nid = \"design\"\ncommand = [\"x\"]\n",
+            "[[guard.external]]\nid = \"design\"\ncommand = []\nstages = []\n",
+            "[[guard.external]]\nid = \"history\"\ncommand = [\"y\"]\n",
+            "[guard.cite]\ndesign = \"ok\"\n",
+        )),
+        [
+            "guard.external",
+            "guard.external[1].command",
+            "guard.external[1].stages",
+            "guard.external[2].id"
+        ]
+    );
+}
+
+#[test]
+fn an_external_rule_runs_at_the_check_stage_unless_told_otherwise() {
+    let config: Config =
+        toml::from_str("[[guard.external]]\nid = \"x\"\ncommand = [\"x\"]\n").unwrap();
+    assert_eq!(
+        config.guard.external.items()[0].stages,
+        [fairlead_core::config::Stage::Check]
+    );
+}

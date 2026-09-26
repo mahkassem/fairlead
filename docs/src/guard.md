@@ -2,13 +2,15 @@
 
 The guard checks your project's own rules with one engine at every stage a
 change passes through. This release has the engine, the check and commit
-stages, and the size and comment presets; the write stage (a Claude Code hook
-that stops a write before it happens) and more presets follow.
+stages, and every preset; the write stage (a Claude Code hook that stops a
+write before it happens) follows.
 
 | Stage | Command | Reads | Fails on |
 | --- | --- | --- | --- |
 | check | `fairlead guard check` | every tracked file, as it is on disk | any zero-tolerance finding, or a ratcheted count above the baseline |
 | commit | `fairlead guard check --staged` | each staged file, at HEAD and in the index | a finding the staged change adds |
+
+Both stages also run the migration rules and the external rules configured for them.
 
 ## Rules
 
@@ -46,6 +48,12 @@ when there is one.
 | `item-code` | `guard.comments` | A ticket or item reference outside the pointer form. |
 | `agent-instruction` | `guard.comments` | A comment that addresses its next editor. |
 | `block-marker` | `guard.comments` | A continuation line of a multi-line `/* */` that doesn't start with `*`. |
+| `test-file-name` | `guard.test_names` | A test file whose name doesn't match `file`. |
+| `test-title` | `guard.test_names` | A test title that matches `titles_without`. |
+| `citation` | `guard.citations` | A pointer in a comment that names no heading in `headings_in`. |
+| `migration-edit` | `guard.migrations` | A change, move or deletion of a migration that exists at the base. |
+| `migration-prefix` | `guard.migrations` | Two migrations with the same leading number. |
+| your `id` | `guard.external` | Whatever the command reports. |
 
 ## Function length
 
@@ -95,6 +103,79 @@ and TypeScript, `--` for SQL, `#` for YAML, TOML and shell.
 - **Patterns** are Rust regular expressions, where `\b` and `\d` are Unicode
   aware. Write `(?-u:\b)` and `[0-9]` for the ASCII behaviour most other
   linters have, and `(?i)` for any case.
+
+## Test names
+
+```toml
+[guard.test_names]
+files = ["test/**/*.test.ts"]
+file = '^[a-z0-9]+(-[a-z0-9]+)*\.test\.ts$'   # the file's name must match
+titles_without = '(?-u:\b)[A-Z]+-[0-9]+(?-u:\b)'  # no title may match
+title_calls = ["describe", "test", "it"]        # the default
+```
+
+A title is the first argument of a title call, found through chains such as
+`it.only(...)`, when it's a string or a template with no `${...}`.
+
+## Citations
+
+```toml
+[guard.citations]
+files = ["src/**"]
+pattern = '\((?P<code>[A-Z]+-[0-9]+)\)'   # a pointer; the name is the `code` group
+headings_in = "docs/decisions.md"
+```
+
+Each pointer in a comment, a block or after code, has to name a heading in the
+Markdown file: a heading names the first word of its text, so `## ABC-12: why`
+names `ABC-12`. The file is read once per run, from the working tree.
+
+## Migrations
+
+```toml
+[guard.migrations]
+files = ["db/migrations/*.sql"]
+immutable = true                         # the default
+base = "origin/main"                     # optional
+unique_prefix = { allow = [["089_a.sql", "089_b.sql"]] }
+```
+
+A database that ran a migration won't run it again, so once a migration exists
+it may not change, move or go. "Exists" means present at the base: the merge
+base with `base` when it's set. Without it, the commit stage compares with HEAD
+and the check stage needs `--base REV`, and says so. At the commit stage a base
+that can't be found, before the first commit or with the ref not fetched,
+falls back to HEAD. `unique_prefix` makes each
+file's leading number unique, apart from the listed groups; the commit stage
+fails only on a number the commit newly shares.
+
+## Commands
+
+```toml
+[[guard.commands]]
+match = '(^|\s)git stash(\s|$)'
+reason = "Commit instead; a stash in a worktree is easy to lose."
+```
+
+A shell command an agent may not run, with the reason it's told. The write
+stage's hook reads these; the check and commit stages don't run commands.
+
+## External rules
+
+```toml
+[[guard.external]]
+id = "design-lint"
+command = ["npm", "run", "lint:design"]
+stages = ["check"]                        # the default; also "commit"
+ratchet = false                           # the default
+```
+
+Any tool that prints findings as `file:line message` or `file:line:column
+message`, one per line, becomes a rule with your `id`; other lines are ignored.
+A tool that exits non-zero and prints no findings fails the check, since it
+couldn't run. At the check stage the command runs as written. At the commit
+stage `{files}` expands to the staged files and every finding in them counts,
+since there's no before side to compare with.
 
 ## The ratchet
 

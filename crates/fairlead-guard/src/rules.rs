@@ -1,12 +1,18 @@
 use std::cell::OnceCell;
 use std::collections::BTreeSet;
+use std::path::Path;
 
 use fairlead_core::config;
 use fairlead_core::pattern::Pattern;
 use fairlead_lang::tree_sitter::Tree;
 
+use crate::citations::Citations;
+use crate::commands::Commands;
 use crate::comments::Comments;
+use crate::external::External;
 use crate::finding::{self, Finding};
+use crate::migrations::Migrations;
+use crate::names::Names;
 use crate::size::Size;
 
 /// A file as the presets read it: its path from the project root, its text,
@@ -68,15 +74,21 @@ impl Scope {
     }
 }
 
-/// Every configured preset. One that isn't configured adds nothing.
+/// Every configured rule. A preset that isn't configured adds nothing.
+/// Per-file presets run through `lint`; the rules that read the whole tree
+/// or its history, and the external commands, are run by each stage.
 pub struct Guard {
     presets: Vec<Box<dyn Preset>>,
     exclude: Vec<Pattern>,
     cite: std::collections::BTreeMap<String, String>,
+    pub migrations: Option<Migrations>,
+    pub commands: Commands,
+    pub external: Vec<External>,
 }
 
 impl Guard {
-    pub fn new(config: &config::Guard) -> Result<Guard, String> {
+    /// `root` is the project root, which `citations.headings_in` is read from.
+    pub fn new(config: &config::Guard, root: &Path) -> Result<Guard, String> {
         let mut presets: Vec<Box<dyn Preset>> = Vec::new();
         if let Some(size) = &config.size {
             presets.push(Box::new(Size::new(size)?));
@@ -84,15 +96,40 @@ impl Guard {
         if let Some(comments) = &config.comments {
             presets.push(Box::new(Comments::new(comments)?));
         }
+        if let Some(names) = &config.test_names {
+            presets.push(Box::new(Names::new(names)?));
+        }
+        if let Some(citations) = &config.citations {
+            presets.push(Box::new(Citations::new(citations, root)?));
+        }
         Ok(Guard {
             presets,
             exclude: compile(config.exclude.items())?,
             cite: config.cite.clone(),
+            migrations: config
+                .migrations
+                .as_ref()
+                .map(Migrations::new)
+                .transpose()?,
+            commands: Commands::new(config.commands.items())?,
+            external: config.external.items().iter().map(External::new).collect(),
         })
     }
 
     pub fn is_empty(&self) -> bool {
         self.presets.is_empty()
+            && self.migrations.is_none()
+            && self.commands.is_empty()
+            && self.external.is_empty()
+    }
+
+    /// Appends each rule's `cite` note to its findings' messages.
+    pub fn cite(&self, found: &mut [Finding]) {
+        for f in found {
+            if let Some(note) = self.cite.get(f.rule) {
+                f.message = format!("{} ({note})", f.message);
+            }
+        }
     }
 
     /// Whether any preset reads this path.
@@ -102,7 +139,12 @@ impl Guard {
     }
 
     pub fn ratcheted(&self) -> BTreeSet<&'static str> {
-        self.presets.iter().flat_map(|p| p.ratcheted()).collect()
+        let external = self.external.iter().filter(|e| e.ratchet).map(|e| e.id);
+        self.presets
+            .iter()
+            .flat_map(|p| p.ratcheted())
+            .chain(external)
+            .collect()
     }
 
     /// Every finding in one file, in reading order.
@@ -116,11 +158,7 @@ impl Guard {
             .filter(|p| p.applies(source.path))
             .flat_map(|p| p.check(source))
             .collect();
-        for f in &mut found {
-            if let Some(note) = self.cite.get(f.rule) {
-                f.message = format!("{} ({note})", f.message);
-            }
-        }
+        self.cite(&mut found);
         finding::sort(&mut found);
         found
     }
@@ -145,14 +183,16 @@ mod tests {
 
     #[test]
     fn a_preset_that_is_not_configured_adds_nothing() {
-        assert!(Guard::new(&config::Guard::default()).unwrap().is_empty());
+        assert!(Guard::new(&config::Guard::default(), Path::new("."))
+            .unwrap()
+            .is_empty());
     }
 
     #[test]
     fn a_preset_reads_only_its_files_and_never_an_excluded_one() {
         let mut config = size(Some(1), true);
         config.exclude = vec!["src/vendor/**".to_string()].into();
-        let guard = Guard::new(&config).unwrap();
+        let guard = Guard::new(&config, Path::new(".")).unwrap();
         assert!(guard.reads("src/a.ts"));
         assert!(!guard.reads("lib/a.ts"));
         assert!(!guard.reads("src/gen/a.ts"));
@@ -164,9 +204,11 @@ mod tests {
 
     #[test]
     fn ratchet_is_the_presets_choice() {
-        let ratcheted = Guard::new(&size(Some(1), true)).unwrap().ratcheted();
+        let ratcheted = Guard::new(&size(Some(1), true), Path::new("."))
+            .unwrap()
+            .ratcheted();
         assert!(ratcheted.contains("file-length") && ratcheted.contains("function-length"));
-        assert!(Guard::new(&size(Some(1), false))
+        assert!(Guard::new(&size(Some(1), false), Path::new("."))
             .unwrap()
             .ratcheted()
             .is_empty());
@@ -178,7 +220,7 @@ mod tests {
         config
             .cite
             .insert("file-length".into(), "guide, section 6".into());
-        let found = Guard::new(&config)
+        let found = Guard::new(&config, Path::new("."))
             .unwrap()
             .lint(&Source::new("src/a.ts", "a\nb\n"));
         assert_eq!(
