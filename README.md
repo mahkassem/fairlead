@@ -23,20 +23,21 @@ logic: everything about your repository lives in your own `fairlead.toml`.
 Join a good team and you don't start from zero. Someone tells you which module
 never to touch without running the migration check first, which test lies on
 Windows, and which "quick fix" broke production last spring. That knowledge is
-why a new teammate is useful in week two instead of month six.
+why a new engineer is useful in week two instead of month six.
 
 A coding agent gets none of it. It opens your repository cold every time,
 reads the same code again, makes the mistake your team already paid for, and
-finds out in CI that it was an old lesson nobody told it. Fairlead exists so an
-agent works like a member of the team, not a stranger trying things.
+finds out in CI that it was an old lesson nobody told it. Fairlead gives every
+repository its own memory, so your agent starts where your team left off instead
+of trying things like a stranger.
 
-- **Every repository has a memory.** The hard lessons from past work live with
+- **A memory for every repository.** The hard lessons from past work live with
   the code, per module, where the agent meets them before it acts. A lesson is
   kept short, reviewed on a date, and turned into a check when it can be, so
   the memory stays true instead of growing into noise.
   *Today:* owner rules record which tests guard which code, and a quarantined
   test applies only while the evidence holds and until its date.
-- **Set up once, then work like a teammate.** The agent's first job is to learn
+- **Set up once, never start cold.** The agent's first job is to learn
   the repository: its modules, test runners, rules, and the commands that prove
   a change is right. That goes into one checked config, so every session starts
   where the last one left off.
@@ -47,6 +48,11 @@ agent works like a member of the team, not a stranger trying things.
   exactly those files.
   *Today:* `fairlead plan` names the tests and checks a change can reach, and
   `test --explain` says why each one is in or out.
+- **Plans the change, not just the tests.** Before an edit, the agent sees
+  what it's about to touch, everything that depends on it, the rules and
+  lessons recorded there, and what has to pass before it's done. Afterwards,
+  what actually changed is checked against that brief.
+  *Coming in K3* ([#45](https://github.com/mahkassem/fairlead/issues/45)).
 - **The right skills for the code in front of it.** A frontend change
   shouldn't come with database advice. Fairlead picks the skills that apply to
   what a change reaches, just as it picks tests, and checks the agent used them.
