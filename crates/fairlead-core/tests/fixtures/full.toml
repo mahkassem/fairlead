@@ -1,0 +1,64 @@
+fairlead = "0.1"
+
+[modules]
+discover = ["workspaces"]
+[[modules.define]]
+pattern = "services/{name}/src"
+
+[graph]
+tsconfig = "auto"
+type_imports = false
+unresolved = "fail"
+conditions = { replace = ["source", "import", "default"] }
+
+[tests]
+exclude = ["**/fixtures/**"]
+unreached = "all"
+
+[[tests.runners]]
+id = "unit"
+match = ["packages/**", "services/**"]
+command = ["pnpm", "vitest", "run", "{files}"]
+
+[[tests.runners]]
+id = "tools"
+match = ["tools/**"]
+invoke = "per-module"
+cwd = "{module}"
+command = ["pnpm", "jest", "{files}"]
+
+[[tests.owners]]
+match = "services/{name}/test/integration/**"
+covers = ["services/{name}/src/**"]
+
+[[tests.classes]]
+class = "demand"
+match = ["e2e/visual/**"]
+
+[[checks]]
+id = "typecheck"
+command = ["pnpm", "tsc", "-b"]
+paths = ["**/*.ts"]
+
+[[checks]]
+id = "lint"
+command = ["pnpm", "eslint", "{files}"]
+paths = ["**/*.ts", "**/*.js"]
+files = "changed"
+
+[plan]
+run_all = ["ci/**"]
+
+[replay]
+window_days = 60
+min_failures = 40
+
+[[replay.failures]]
+runner = "unit"
+extractor = "vitest"
+job = "^test"
+
+[[replay.checks]]
+job = "^lint$"
+step = "^Typecheck$"
+check = "typecheck"
