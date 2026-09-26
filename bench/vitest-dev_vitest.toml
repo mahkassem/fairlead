@@ -48,13 +48,14 @@ paths = ["packages/**", "scripts/**", "*.{ts,mjs,json}"]
 [replay]
 window_days = 90
 min_failures = 30
-# The changed-files probe and the browser image build, not tests.
-ignore = ["^Diff: ", "^Image: "]
+# The changed-files probe, the browser image build and the report merge, not tests.
+ignore = ["^Diff: ", "^Image: ", "^Merge Reports$"]
 
 [[replay.failures]]
 runner = "vitest"
 extractor = "vitest"
-job = "^(Test|Browsers): "
+# Older runs named the test jobs "Build&Test:", "Cache&Test:" and so on.
+job = "^(Test|Browsers|[A-Za-z]+&Test): "
 
 [[replay.checks]]
 job = "^Lint: "

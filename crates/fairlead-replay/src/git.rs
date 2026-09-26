@@ -86,6 +86,23 @@ pub fn fetch_missing(clone: &Path, shas: &[String]) -> usize {
     missing.iter().filter(|sha| !has_commit(clone, sha)).count()
 }
 
+/// The first-parent commit of `rev` made before `before` (an ISO time).
+pub fn first_parent_before(clone: &Path, rev: &str, before: &str) -> Option<String> {
+    git(
+        clone,
+        &[
+            "rev-list",
+            "-1",
+            "--first-parent",
+            &format!("--before={before}"),
+            "--end-of-options",
+            rev,
+        ],
+    )
+    .ok()
+    .filter(|s| !s.is_empty())
+}
+
 pub fn tree_of(clone: &Path, sha: &str) -> Option<String> {
     git(clone, &["rev-parse", &format!("{sha}^{{tree}}")]).ok()
 }

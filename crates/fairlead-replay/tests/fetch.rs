@@ -245,3 +245,34 @@ fn only_named_workflows_and_runs_that_ran_are_recorded() {
         Stop::Error(_)
     ));
 }
+
+#[test]
+fn a_fork_pull_request_is_found_by_its_head_branch() {
+    let mut http = api();
+    http.responses.insert(
+        "/repos/o/r/actions/runs".into(),
+        json!({ "total_count": 1, "workflow_runs": [
+            { "id": 41, "name": "ci", "head_sha": "fff", "head_branch": "fix-thing", "run_attempt": 1,
+              "created_at": "2026-09-20T10:00:00Z", "conclusion": "success", "pull_requests": [],
+              "head_repository": { "owner": { "login": "someone" } } }
+        ]}),
+    );
+    http.responses.insert(
+        "/repos/o/r/actions/runs/41/attempts/1/jobs".into(),
+        json!({ "jobs": [{ "id": 401, "name": "test", "conclusion": "success", "steps": [] }] }),
+    );
+    http.responses.insert(
+        "/repos/o/r/pulls".into(),
+        json!([
+            { "number": 8, "base": { "ref": "main" }, "head": { "sha": "older" } },
+            { "number": 9, "base": { "ref": "release" }, "head": { "sha": "fff" } }
+        ]),
+    );
+    let (rows, stop) = fetch(&http, &opts(None), &BTreeSet::new());
+    assert_eq!(stop, Stop::Complete);
+    assert_eq!(rows.iter().find(|r| r.run_id == 41).unwrap().pr, Some(9));
+    let asked = http.asked.lock().unwrap();
+    assert!(asked
+        .iter()
+        .any(|p| p.contains("/pulls?head=someone:fix-thing")));
+}

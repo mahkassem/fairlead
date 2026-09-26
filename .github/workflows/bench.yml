@@ -10,7 +10,7 @@ on:
   workflow_dispatch:
     inputs:
       since:
-        description: First day to list, YYYY-MM-DD (default 97 days ago)
+        description: First day to list, YYYY-MM-DD (default 85 days ago, inside GitHub's 90-day log retention)
         required: false
         default: ""
       limit:
@@ -87,7 +87,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.BENCH_READ_TOKEN || github.token }}
         run: |
-          since="${SINCE:-$(date -u -d '97 days ago' +%F)}"
+          since="${SINCE:-$(date -u -d '85 days ago' +%F)}"
           ./target/release/fairlead replay fetch --repo "$REPO" --workflow "$WORKFLOW" \
             --since "$since" --limit "$LIMIT" --data out/data.jsonl --clone clone | tee out/fetch.txt
       - name: API budget left

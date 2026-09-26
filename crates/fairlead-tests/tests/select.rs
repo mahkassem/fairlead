@@ -251,6 +251,23 @@ fn an_ignored_path_selects_nothing_unless_something_references_it() {
 }
 
 #[test]
+fn a_changeset_note_selects_nothing() {
+    let mut files = WORKSPACE.to_vec();
+    files.push((".changeset/quick-fox.md", "---\n'core': patch\n---\nFix.\n"));
+    let dir = repo("changeset", &files);
+    let plan = run(
+        &dir,
+        &config(VITEST),
+        vec![modified(".changeset/quick-fox.md")],
+    );
+    assert!(
+        plan.tests.is_empty() && !plan.all,
+        "a release note isn't read by tests"
+    );
+    assert_eq!(plan.ignored, [".changeset/quick-fox.md"]);
+}
+
+#[test]
 fn a_non_literal_dynamic_import_at_the_root_depends_on_every_file() {
     let mut files = WORKSPACE.to_vec();
     files.push(("tests/plugins.test.ts", "const m = await import(name);\n"));

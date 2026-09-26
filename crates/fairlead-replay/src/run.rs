@@ -15,7 +15,7 @@ use regex::Regex;
 use crate::attribute::{attribute, Attribution, Repo};
 use crate::dataset::{Job, Row};
 use crate::extract::{extract, Extractor};
-use crate::git::{has_commit, merge_base, patch_id, tree_of, Worktree};
+use crate::git::{first_parent_before, has_commit, merge_base, patch_id, tree_of, Worktree};
 use crate::window::Window;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -351,11 +351,7 @@ fn replay_row(r: &Replayer, row: &Row, all: &[&Row], out: &mut Replayed) {
     if !has_commit(r.clone, &row.head_sha) {
         return unavailable(out, "head commit not in the clone");
     }
-    let Some(base) = row
-        .base_sha
-        .as_deref()
-        .and_then(|b| merge_base(r.clone, b, &row.head_sha))
-    else {
+    let Some(base) = base_of(r, row).and_then(|b| merge_base(r.clone, &b, &row.head_sha)) else {
         return unavailable(out, "no merge base with the recorded base");
     };
     let PlanAt {
@@ -426,6 +422,14 @@ fn replay_row(r: &Replayer, row: &Row, all: &[&Row], out: &mut Replayed) {
     }
 }
 
+/// The recorded base, or for a row without one (its pull request wasn't
+/// found), the default branch as it stood when the run started.
+fn base_of(r: &Replayer, row: &Row) -> Option<String> {
+    row.base_sha
+        .clone()
+        .or_else(|| first_parent_before(r.clone, "refs/remotes/origin/HEAD", &row.created_at))
+}
+
 fn passed_on_another_attempt(row: &Row, job: &Job, all: &[&Row]) -> bool {
     all.iter().any(|other| {
         other.run_id == row.run_id
@@ -458,10 +462,8 @@ fn passed_with_same_change(r: &Replayer, row: &Row, base: &str, job: &Job, all: 
         if other.head_sha == row.head_sha {
             return true;
         }
-        let theirs = other
-            .base_sha
-            .as_deref()
-            .and_then(|b| merge_base(r.clone, b, &other.head_sha))
+        let theirs = base_of(r, other)
+            .and_then(|b| merge_base(r.clone, &b, &other.head_sha))
             .and_then(|mb| patch_id(r.clone, &mb, &other.head_sha));
         let ours = ours.get_or_insert_with(|| patch_id(r.clone, base, &row.head_sha));
         theirs.is_some() && &theirs == ours

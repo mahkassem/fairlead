@@ -277,6 +277,7 @@ impl Default for Plan {
             ]),
             ignore: strings(&[
                 "*.md",
+                ".changeset/*.md",
                 "docs/**",
                 "**/README.md",
                 "**/CHANGELOG.md",
