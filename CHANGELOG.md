@@ -4,6 +4,13 @@
 
 ### New
 
+- The write stage: `fairlead hooks install` adds a Claude Code hook that runs `fairlead guard hook` before every edit, and denies one that adds a finding, with the findings as the reason the agent reads (or, with `guard.on_finding = "warn"`, lets it through with them as a note). It never answers "allow", lets a call through whenever it can't decide, and keeps to `guard.budget_ms` (40 by default). `[[guard.commands]]` deny shell commands. `hooks.claude` chooses `.claude/settings.json` (shared, the default) or `.claude/settings.local.json`; `fairlead hooks uninstall` restores the file byte for byte when nobody changed it since. See [The write hook](https://mahkassem.github.io/fairlead/docs/guard.html#the-write-hook).
+
+### Changed
+
+- A plan's config digest leaves out `guard` and `hooks`, which never change a plan, so digests are the same as 0.3.0's for the same config.
+- `[[guard.external]]` refuses `stages = ["write"]`: when the write hook runs, the file isn't written yet.
+
 - More guard rules: `[guard.test_names]` (file names and test titles), `[guard.citations]` (a pointer in a comment must name a heading in a Markdown file), `[guard.migrations]` (a migration that exists at the base may not change, move or go, and numbers are unique), `[[guard.commands]]` (commands an agent may not run, for the write stage), and `[[guard.external]]` (any tool that prints `file:line message` becomes a rule, at the check stage by default or at commit). `guard check --base REV` checks migrations against a base. See [Guard rules](https://mahkassem.github.io/fairlead/docs/guard.html#test-names).
 - Guard presets: `[guard.comments]` checks comment block length by context, comment density, history (dates, names, phrases, measurements), item references outside a pointer form, comments that address the next editor, and block markers, reading comments after code from the syntax tree. `[guard.size]` adds `function_lines`, counting a function's own lines without the functions nested in it. `[guard.cite]` appends a note to a rule's messages. On a private reference repository's history, both presets report exactly the findings of the linter they replace. See [Guard rules](https://mahkassem.github.io/fairlead/docs/guard.html#comments).
 - Environments: `FAIRLEAD_ENV=staging` or `--env staging` layers `fairlead.staging.toml` (shared) over the project file and `fairlead.staging.local.toml` (personal, ignored in CI) over the local one. Naming an environment with no file for it is an error. See [Configuration](https://mahkassem.github.io/fairlead/docs/config.html#environments).

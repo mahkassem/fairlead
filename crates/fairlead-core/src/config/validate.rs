@@ -117,6 +117,17 @@ fn guard(config: &Config, problems: &mut Vec<Problem>) {
     if let Some(comments) = &guard.comments {
         comment_rules(comments, problems);
     }
+    if guard.budget_ms == 0 {
+        problems.push(problem("guard.budget_ms", "must be at least 1"));
+    }
+    for (i, e) in guard.external.items().iter().enumerate() {
+        if e.stages.contains(&super::Stage::Write) {
+            problems.push(problem(
+                format!("guard.external[{i}].stages"),
+                "`write` isn't a stage an external rule can run at: the file isn't written yet",
+            ));
+        }
+    }
     if let Some(t) = &guard.test_names {
         test_names(t, problems);
     }

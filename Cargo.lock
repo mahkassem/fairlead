@@ -348,6 +348,7 @@ dependencies = [
  "fairlead-replay",
  "fairlead-tests",
  "rayon",
+ "serde",
  "serde_json",
  "toml",
 ]

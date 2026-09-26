@@ -31,6 +31,9 @@ pub enum GuardAction {
         #[arg(long, value_name = "REV", conflicts_with = "staged")]
         base: Option<String>,
     },
+    /// The write stage: read a Claude Code PreToolUse call on stdin and deny
+    /// it, or add a note, when it breaks a rule. `fairlead hooks install` runs it.
+    Hook,
 }
 
 fn fail(message: impl std::fmt::Display) -> ExitCode {
@@ -39,6 +42,9 @@ fn fail(message: impl std::fmt::Display) -> ExitCode {
 }
 
 pub fn run(action: GuardAction, sets: Vec<String>, cwd: &Path) -> ExitCode {
+    if matches!(action, GuardAction::Hook) {
+        return crate::hook_cmd::run();
+    }
     let loaded = match config::load(cwd, &LoadOptions::from_process(sets)) {
         Ok(loaded) => loaded,
         Err(e) => return fail(e),
@@ -67,7 +73,10 @@ pub fn run(action: GuardAction, sets: Vec<String>, cwd: &Path) -> ExitCode {
         list,
         write_baseline,
         base,
-    } = action;
+    } = action
+    else {
+        unreachable!("the hook returned above");
+    };
     if staged {
         return check_staged(&root, &guard, &loaded.config.guard, list);
     }

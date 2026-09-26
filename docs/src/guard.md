@@ -1,16 +1,15 @@
 # Guard rules
 
 The guard checks your project's own rules with one engine at every stage a
-change passes through. This release has the engine, the check and commit
-stages, and every preset; the write stage (a Claude Code hook that stops a
-write before it happens) follows.
+change passes through: as an agent writes a file, at commit, and in CI.
 
 | Stage | Command | Reads | Fails on |
 | --- | --- | --- | --- |
+| write | `fairlead guard hook`, run by Claude Code | the file an edit would leave, before it's written | a finding the edit adds; see [The write hook](#the-write-hook) |
 | check | `fairlead guard check` | every tracked file, as it is on disk | any zero-tolerance finding, or a ratcheted count above the baseline |
 | commit | `fairlead guard check --staged` | each staged file, at HEAD and in the index | a finding the staged change adds |
 
-Both stages also run the migration rules and the external rules configured for them.
+The check and commit stages also run the migration rules and the external rules configured for them.
 
 ## Rules
 
@@ -175,7 +174,46 @@ message`, one per line, becomes a rule with your `id`; other lines are ignored.
 A tool that exits non-zero and prints no findings fails the check, since it
 couldn't run. At the check stage the command runs as written. At the commit
 stage `{files}` expands to the staged files and every finding in them counts,
-since there's no before side to compare with.
+since there's no before side to compare with. `write` isn't a stage an
+external rule can run at: when the hook runs, the file isn't written yet.
+
+## The write hook
+
+```bash
+fairlead hooks install      # add the hook to .claude/settings.json
+fairlead hooks status       # where it is, and whether uninstall can restore the file exactly
+fairlead hooks uninstall    # take it out again
+```
+
+The hook goes where `hooks.claude` says: `"shared"` (the default) is the
+committed `.claude/settings.json`, so everyone who clones the repository and
+every agent session is guarded; `"local"` is `.claude/settings.local.json`,
+for you alone. `--shared` and `--local` choose for one run. It runs on
+`Edit`, `Write` and `MultiEdit`, and on `Bash` too when there are
+`[[guard.commands]]`. Where `fairlead` isn't installed the hook does nothing,
+so a teammate without it can still work.
+
+Before an edit, the hook works out what the file would hold and lints it
+with the same presets as the other stages. When the edit adds a finding it
+denies the edit, and the agent reads the findings as the reason, fixes them
+and writes again. With `on_finding = "warn"` it lets the edit through and
+passes the findings to the agent as a note instead. It never answers
+"allow", which would also skip your own permission prompt. An edit to a
+migration that already exists is denied outright.
+
+The hook lets a call go ahead, and says so in the event log, when it can't
+decide: the edit's old text isn't in the file or occurs more than once, the
+tool input has a shape it doesn't know, the file is outside the project, not
+UTF-8 or over 256 KB, the config has a problem, or it runs out of its own
+time, `guard.budget_ms` (40 by default). The check and commit stages still
+catch whatever it lets through.
+
+Install keeps a manifest in `.git/fairlead/backups/` with the settings file's
+original bytes and the bytes it wrote. Installing twice changes nothing.
+Uninstall puts the original back byte for byte when nobody changed the file
+since; otherwise it removes only Fairlead's entries, keeps everything else,
+and says the formatting may differ. On a fresh clone, where there's no
+manifest, it removes the entries by their command.
 
 ## The ratchet
 
@@ -219,8 +257,9 @@ stopping it. The check stage still fails on them in CI.
 
 ## Event log
 
-Each commit-stage run appends one line to `.git/fairlead/events.jsonl`, inside
-the git directory so it's never committed:
+Each write-stage and commit-stage run appends one line to
+`.git/fairlead/events.jsonl`, inside the git directory so it's never
+committed:
 
 ```json
 {"at":"2026-09-26T19:04:11.221Z","stage":"commit","files":3,"decision":"deny","rules":["file-length"],"added":1,"ms":7.4,"fairlead":"0.4.0"}

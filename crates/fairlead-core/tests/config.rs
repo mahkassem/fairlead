@@ -601,3 +601,23 @@ fn an_external_rule_runs_at_the_check_stage_unless_told_otherwise() {
         [fairlead_core::config::Stage::Check]
     );
 }
+
+#[test]
+fn the_write_hook_needs_a_budget_and_runs_no_external_rules() {
+    let keys = |text: &str| -> Vec<String> {
+        let config: Config = toml::from_str(text).unwrap();
+        validate(&config).into_iter().map(|p| p.key).collect()
+    };
+    assert_eq!(keys("[guard]\nbudget_ms = 0\n"), ["guard.budget_ms"]);
+    assert_eq!(
+        keys(
+            "[[guard.external]]\nid = \"x\"\ncommand = [\"x\"]\nstages = [\"check\", \"write\"]\n"
+        ),
+        ["guard.external[0].stages"]
+    );
+    let config: Config = toml::from_str("[hooks]\nclaude = \"local\"\n").unwrap();
+    assert_eq!(
+        config.hooks.claude,
+        fairlead_core::config::HooksTarget::Local
+    );
+}

@@ -106,6 +106,30 @@ pub fn staged(root: &Path) -> Result<Vec<Staged>, String> {
         .collect())
 }
 
+/// The repository's git directory, a worktree's included: the nearest
+/// `.git` directory above `root`, or where a `.git` file's `gitdir:` line
+/// points. Read from the filesystem, since the write hook can't spare a
+/// `git` process.
+pub fn git_dir(root: &Path) -> Option<std::path::PathBuf> {
+    let root = std::fs::canonicalize(root).ok()?;
+    for dir in root.ancestors() {
+        let dot = dir.join(".git");
+        if dot.is_dir() {
+            return Some(dot);
+        }
+        if let Ok(text) = std::fs::read_to_string(&dot) {
+            let target = text.lines().find_map(|l| l.strip_prefix("gitdir:"))?.trim();
+            return std::fs::canonicalize(dir.join(target)).ok();
+        }
+    }
+    None
+}
+
+/// Whether `path`, relative to `root`, is in `rev`'s tree.
+pub fn exists_at(root: &Path, rev: &str, path: &str) -> bool {
+    git(root, &["cat-file", "-e", &format!("{rev}:./{path}")]).is_ok()
+}
+
 /// The commit HEAD and `rev` share.
 pub fn merge_base(root: &Path, rev: &str) -> Result<String, String> {
     let out = git(root, &["merge-base", "HEAD", rev])?;
@@ -132,4 +156,29 @@ pub fn in_index(root: &Path, path: &str) -> Option<String> {
 /// A blob's text, or none when it's missing or isn't UTF-8.
 fn blob(root: &Path, spec: &str) -> Option<String> {
     String::from_utf8(git(root, &["cat-file", "blob", spec]).ok()?).ok()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_git_dir_is_found_from_a_subdirectory_and_through_a_gitdir_file() {
+        let base = std::env::temp_dir().join(format!("fairlead-gitdir-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&base);
+        std::fs::create_dir_all(base.join("repo/.git/worktrees/w")).unwrap();
+        std::fs::create_dir_all(base.join("repo/src/deep")).unwrap();
+        std::fs::create_dir_all(base.join("wt/src")).unwrap();
+        std::fs::write(base.join("wt/.git"), "gitdir: ../repo/.git/worktrees/w\n").unwrap();
+        let real = |p: &str| std::fs::canonicalize(base.join(p)).unwrap();
+        assert_eq!(
+            git_dir(&base.join("repo/src/deep")),
+            Some(real("repo/.git"))
+        );
+        assert_eq!(
+            git_dir(&base.join("wt/src")),
+            Some(real("repo/.git/worktrees/w"))
+        );
+        let _ = std::fs::remove_dir_all(&base);
+    }
 }

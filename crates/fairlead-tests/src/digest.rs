@@ -12,13 +12,18 @@ fn hex(bytes: &[u8]) -> String {
     bytes.iter().map(|b| format!("{b:02x}")).collect()
 }
 
-/// The guard's rules don't change a plan, so they don't change its digest.
+/// Sections that never change a plan, left out of its digest altogether, so
+/// adding one doesn't change the digest of every plan made before it.
+const NOT_PLANNED: [&str; 2] = ["guard", "hooks"];
+
 pub fn config_digest(config: &Config) -> String {
-    let planned = Config {
-        guard: Default::default(),
-        ..config.clone()
-    };
-    let json = serde_json::to_vec(&planned).expect("config serializes");
+    let mut value = serde_json::to_value(config).expect("config serializes");
+    if let Some(map) = value.as_object_mut() {
+        for key in NOT_PLANNED {
+            map.remove(key);
+        }
+    }
+    let json = serde_json::to_vec(&value).expect("config serializes");
     format!("sha256:{}", hex(&Sha256::digest(json)))
 }
 
@@ -61,6 +66,7 @@ mod tests {
         let mut config = Config::default();
         let before = config_digest(&config);
         config.guard.baseline = "other.json".into();
+        config.hooks.claude = fairlead_core::config::HooksTarget::Local;
         assert_eq!(config_digest(&config), before);
         config.tests.unreached = fairlead_core::config::Unreached::All;
         assert_ne!(config_digest(&config), before);
