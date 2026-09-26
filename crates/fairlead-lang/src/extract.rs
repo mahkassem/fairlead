@@ -111,6 +111,73 @@ pub fn fingerprint() -> String {
     hasher.digest().to_string()
 }
 
+/// A syntax tree for a JavaScript or TypeScript file, chosen by extension,
+/// or none for any other file or one tree-sitter can't take. Byte offsets
+/// and lines are the source's, whatever `unwrap_tag_types` blanked.
+pub fn parse(rel: &str, source: &[u8]) -> Option<tree_sitter::Tree> {
+    let g = grammar(rel)?;
+    let mut parser = Parser::new();
+    parser.set_language(&language(g)).ok()?;
+    match g {
+        Grammar::JavaScript => parser.parse(source, None),
+        Grammar::TypeScript | Grammar::Tsx => parser.parse(unwrap_tag_types(source), None),
+    }
+}
+
+/// `sql<Row>` before a template, with the `<Row>` blanked to spaces: the
+/// TypeScript grammar can't parse type arguments on a template tag, and
+/// recovers by cutting the enclosing function short. Newlines stay, so
+/// every position is where it was.
+/// Type arguments longer than this aren't looked for.
+const TAG_TYPES_MAX_BYTES: usize = 2000;
+
+fn unwrap_tag_types(source: &[u8]) -> std::borrow::Cow<'_, [u8]> {
+    let mut out: Option<Vec<u8>> = None;
+    for (tick, _) in source.iter().enumerate().filter(|(_, &b)| b == b'`') {
+        let Some(close) = source[..tick]
+            .iter()
+            .rposition(|b| !b.is_ascii_whitespace())
+        else {
+            continue;
+        };
+        if source[close] != b'>' || close == 0 || source[close - 1] == b'=' {
+            continue;
+        }
+        let mut depth = 0usize;
+        let mut open = None;
+        for i in (close.saturating_sub(TAG_TYPES_MAX_BYTES)..=close).rev() {
+            match source[i] {
+                // `=>` in a function type isn't a closing bracket.
+                b'>' if i == 0 || source[i - 1] != b'=' => depth += 1,
+                b'<' => {
+                    depth -= 1;
+                    if depth == 0 {
+                        open = Some(i);
+                        break;
+                    }
+                }
+                b'`' => break,
+                _ => {}
+            }
+        }
+        let Some(open) = open else { continue };
+        let tag_char = |b: u8| b.is_ascii_alphanumeric() || b == b'_' || b == b'$';
+        if open == 0 || !tag_char(source[open - 1]) {
+            continue;
+        }
+        let buf = out.get_or_insert_with(|| source.to_vec());
+        for b in &mut buf[open..=close] {
+            if *b != b'\n' {
+                *b = b' ';
+            }
+        }
+    }
+    match out {
+        Some(buf) => std::borrow::Cow::Owned(buf),
+        None => std::borrow::Cow::Borrowed(source),
+    }
+}
+
 pub fn extract(rel: &str, source: &[u8]) -> Extracted {
     let Some(g) = grammar(rel) else {
         return Extracted::default();
@@ -293,6 +360,30 @@ import j = require("./j");
         let src = r#"import a from "./a.json"; const bin = "../../cli/bin/run.mjs"; const s = "hello world"; const u = "https://x.io/a.js";"#;
         let got = extract("t/x.test.ts", src.as_bytes());
         assert_eq!(got.literals, vec!["../../cli/bin/run.mjs".to_string()]);
+    }
+
+    #[test]
+    fn a_template_tag_with_type_arguments_parses_as_a_tagged_template() {
+        let src = "const f = (a: string) =>\n  sql<{ n: Array<number>; f: (a: string) => void }>`\n    select ${a}\n  `\nconst g = (x: number) => x > 1 ? `a` : `b`\n";
+        let tree = parse("a.ts", src.as_bytes()).unwrap();
+        assert!(
+            !tree.root_node().has_error(),
+            "{}",
+            tree.root_node().to_sexp()
+        );
+        let arrow = tree
+            .root_node()
+            .child(0)
+            .unwrap()
+            .named_child(0)
+            .unwrap()
+            .child_by_field_name("value")
+            .unwrap();
+        assert_eq!(
+            (arrow.kind(), arrow.end_position().row),
+            ("arrow_function", 3)
+        );
+        assert_eq!(&src[arrow.start_byte()..arrow.start_byte() + 3], "(a:");
     }
 
     #[test]

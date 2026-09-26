@@ -99,12 +99,125 @@ fn guard(config: &Config, problems: &mut Vec<Problem>) {
         }
         globs("guard.size.files", size.files.items(), problems);
         globs("guard.size.exclude", size.exclude.items(), problems);
-        match size.file_lines {
-            None => problems.push(problem("guard.size", "sets no limit, such as `file_lines`")),
-            Some(0) => problems.push(problem("guard.size.file_lines", "must be at least 1")),
-            Some(_) => {}
+        if size.file_lines.is_none() && size.function_lines.is_none() {
+            problems.push(problem(
+                "guard.size",
+                "sets no limit, such as `file_lines` or `function_lines`",
+            ));
+        }
+        for (key, limit) in [
+            ("file_lines", size.file_lines),
+            ("function_lines", size.function_lines),
+        ] {
+            if limit == Some(0) {
+                problems.push(problem(format!("guard.size.{key}"), "must be at least 1"));
+            }
         }
     }
+    if let Some(comments) = &guard.comments {
+        comment_rules(comments, problems);
+    }
+    for rule in guard.cite.keys() {
+        if !GUARD_RULES.contains(&rule.as_str()) {
+            problems.push(problem(
+                format!("guard.cite.{rule}"),
+                format!("isn't a rule; the rules are {}", GUARD_RULES.join(", ")),
+            ));
+        }
+    }
+}
+
+/// Every rule id a guard preset can report.
+pub const GUARD_RULES: [&str; 8] = [
+    "file-length",
+    "function-length",
+    "block-length",
+    "density",
+    "history",
+    "item-code",
+    "agent-instruction",
+    "block-marker",
+];
+
+fn regexes(key: &str, patterns: &[String], problems: &mut Vec<Problem>) {
+    for (i, pattern) in patterns.iter().enumerate() {
+        match regex::Regex::new(pattern) {
+            Err(e) => problems.push(problem(format!("{key}[{i}]"), e.to_string())),
+            Ok(re) if re.is_match("") => {
+                problems.push(problem(format!("{key}[{i}]"), "matches an empty string"))
+            }
+            Ok(_) => {}
+        }
+    }
+}
+
+fn comment_rules(c: &super::CommentRules, problems: &mut Vec<Problem>) {
+    const KEY: &str = "guard.comments";
+    if c.files.items().is_empty() {
+        problems.push(problem(format!("{KEY}.files"), "needs at least one glob"));
+    }
+    for (name, list) in [
+        ("files", &c.files),
+        ("exclude", &c.exclude),
+        ("tests", &c.tests),
+        ("migrations", &c.migrations),
+    ] {
+        globs(&format!("{KEY}.{name}"), list.items(), problems);
+    }
+    let any = c.block_length.is_some()
+        || c.density.is_some()
+        || c.history.is_some()
+        || c.item_codes.is_some()
+        || !c.agent_phrases.items().is_empty()
+        || c.block_marker;
+    if !any {
+        problems.push(problem(KEY, "turns on no rule"));
+    }
+    if let Some(b) = &c.block_length {
+        let limits = [Some(b.source), b.test, b.header, b.inline, b.migration];
+        if limits.contains(&Some(0)) {
+            problems.push(problem(
+                format!("{KEY}.block_length"),
+                "every limit must be at least 1",
+            ));
+        }
+    }
+    if let Some(d) = &c.density {
+        let share = |v: f64| v > 0.0 && v <= 1.0;
+        if !share(d.source) || d.test.is_some_and(|t| !share(t)) {
+            problems.push(problem(
+                format!("{KEY}.density"),
+                "a share is above 0 and at most 1",
+            ));
+        }
+    }
+    if let Some(h) = &c.history {
+        if !h.dates && !h.measured && h.names.is_empty() && h.phrases.is_empty() {
+            problems.push(problem(format!("{KEY}.history"), "checks nothing"));
+        }
+        if h.names
+            .iter()
+            .chain(&h.phrases)
+            .any(|w| w.trim().is_empty())
+        {
+            problems.push(problem(
+                format!("{KEY}.history"),
+                "a name or phrase is empty",
+            ));
+        }
+    }
+    if let Some(codes) = &c.item_codes {
+        regexes(
+            &format!("{KEY}.item_codes.pattern"),
+            std::slice::from_ref(&codes.pattern),
+            problems,
+        );
+    }
+    regexes(
+        &format!("{KEY}.agent_phrases"),
+        c.agent_phrases.items(),
+        problems,
+    );
 }
 
 /// A placeholder is read from a side where it is a whole path segment, since

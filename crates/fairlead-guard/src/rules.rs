@@ -1,38 +1,61 @@
+use std::cell::OnceCell;
 use std::collections::BTreeSet;
 
 use fairlead_core::config;
 use fairlead_core::pattern::Pattern;
+use fairlead_lang::tree_sitter::Tree;
 
+use crate::comments::Comments;
 use crate::finding::{self, Finding};
-use crate::size::FileLength;
+use crate::size::Size;
 
-/// A file as a rule reads it: its path from the project root, and its text.
-#[derive(Debug, Clone, Copy)]
+/// A file as the presets read it: its path from the project root, its text,
+/// and its syntax tree, parsed at most once however many presets ask.
 pub struct Source<'a> {
     pub path: &'a str,
     pub text: &'a str,
+    tree: OnceCell<Option<Tree>>,
 }
 
-pub trait Rule: Send + Sync {
-    fn id(&self) -> &'static str;
-    /// Counted against the baseline rather than failing on any finding.
-    fn ratcheted(&self) -> bool;
+impl<'a> Source<'a> {
+    /// A leading byte-order mark is dropped, so line 1 reads as it looks.
+    pub fn new(path: &'a str, text: &'a str) -> Source<'a> {
+        Source {
+            path,
+            text: text.strip_prefix('\u{feff}').unwrap_or(text),
+            tree: OnceCell::new(),
+        }
+    }
+
+    /// None for a file that isn't JavaScript or TypeScript.
+    pub fn tree(&self) -> Option<&Tree> {
+        self.tree
+            .get_or_init(|| fairlead_lang::extract::parse(self.path, self.text.as_bytes()))
+            .as_ref()
+    }
+}
+
+/// A family of rules configured together, such as `[guard.comments]`.
+pub trait Preset: Send + Sync {
+    /// The rule ids it reports that count against the baseline.
+    fn ratcheted(&self) -> Vec<&'static str>;
     fn applies(&self, path: &str) -> bool;
-    fn check(&self, source: Source<'_>) -> Vec<Finding>;
+    fn check(&self, source: &Source<'_>) -> Vec<Finding>;
 }
 
-/// Files a rule reads: any of `files`, none of `exclude`.
+/// Files a preset reads: any of `files`, none of `exclude`.
 #[derive(Debug)]
 pub(crate) struct Scope {
     files: Vec<Pattern>,
     exclude: Vec<Pattern>,
 }
 
+pub(crate) fn compile(globs: &[String]) -> Result<Vec<Pattern>, String> {
+    globs.iter().map(|g| Pattern::new(g)).collect()
+}
+
 impl Scope {
     pub(crate) fn new(files: &[String], exclude: &[String]) -> Result<Scope, String> {
-        let compile = |globs: &[String]| -> Result<Vec<Pattern>, String> {
-            globs.iter().map(|g| Pattern::new(g)).collect()
-        };
         Ok(Scope {
             files: compile(files)?,
             exclude: compile(exclude)?,
@@ -45,58 +68,59 @@ impl Scope {
     }
 }
 
-/// Every configured rule. A preset that isn't configured adds none.
+/// Every configured preset. One that isn't configured adds nothing.
 pub struct Guard {
-    rules: Vec<Box<dyn Rule>>,
+    presets: Vec<Box<dyn Preset>>,
     exclude: Vec<Pattern>,
+    cite: std::collections::BTreeMap<String, String>,
 }
 
 impl Guard {
     pub fn new(config: &config::Guard) -> Result<Guard, String> {
-        let mut rules: Vec<Box<dyn Rule>> = Vec::new();
+        let mut presets: Vec<Box<dyn Preset>> = Vec::new();
         if let Some(size) = &config.size {
-            let scope = Scope::new(size.files.items(), size.exclude.items())?;
-            if let Some(limit) = size.file_lines {
-                rules.push(Box::new(FileLength::new(scope, limit, size.ratchet)));
-            }
+            presets.push(Box::new(Size::new(size)?));
         }
-        let exclude = config
-            .exclude
-            .items()
-            .iter()
-            .map(|g| Pattern::new(g))
-            .collect::<Result<_, _>>()?;
-        Ok(Guard { rules, exclude })
+        if let Some(comments) = &config.comments {
+            presets.push(Box::new(Comments::new(comments)?));
+        }
+        Ok(Guard {
+            presets,
+            exclude: compile(config.exclude.items())?,
+            cite: config.cite.clone(),
+        })
     }
 
     pub fn is_empty(&self) -> bool {
-        self.rules.is_empty()
+        self.presets.is_empty()
     }
 
-    /// Whether any rule reads this path.
+    /// Whether any preset reads this path.
     pub fn reads(&self, path: &str) -> bool {
-        !self.exclude.iter().any(|p| p.is_match(path)) && self.rules.iter().any(|r| r.applies(path))
+        !self.exclude.iter().any(|p| p.is_match(path))
+            && self.presets.iter().any(|r| r.applies(path))
     }
 
     pub fn ratcheted(&self) -> BTreeSet<&'static str> {
-        self.rules
-            .iter()
-            .filter(|r| r.ratcheted())
-            .map(|r| r.id())
-            .collect()
+        self.presets.iter().flat_map(|p| p.ratcheted()).collect()
     }
 
     /// Every finding in one file, in reading order.
-    pub fn lint(&self, source: Source<'_>) -> Vec<Finding> {
+    pub fn lint(&self, source: &Source<'_>) -> Vec<Finding> {
         if !self.reads(source.path) {
             return Vec::new();
         }
         let mut found: Vec<Finding> = self
-            .rules
+            .presets
             .iter()
-            .filter(|r| r.applies(source.path))
-            .flat_map(|r| r.check(source))
+            .filter(|p| p.applies(source.path))
+            .flat_map(|p| p.check(source))
             .collect();
+        for f in &mut found {
+            if let Some(note) = self.cite.get(f.rule) {
+                f.message = format!("{} ({note})", f.message);
+            }
+        }
         finding::sort(&mut found);
         found
     }
@@ -113,19 +137,19 @@ mod tests {
                 exclude: vec!["src/gen/**".to_string()].into(),
                 file_lines,
                 ratchet,
+                ..config::SizeRules::default()
             }),
             ..config::Guard::default()
         }
     }
 
     #[test]
-    fn a_preset_that_is_not_configured_adds_no_rule() {
+    fn a_preset_that_is_not_configured_adds_nothing() {
         assert!(Guard::new(&config::Guard::default()).unwrap().is_empty());
-        assert!(Guard::new(&size(None, true)).unwrap().is_empty());
     }
 
     #[test]
-    fn a_rule_reads_only_its_files_and_never_an_excluded_one() {
+    fn a_preset_reads_only_its_files_and_never_an_excluded_one() {
         let mut config = size(Some(1), true);
         config.exclude = vec!["src/vendor/**".to_string()].into();
         let guard = Guard::new(&config).unwrap();
@@ -133,20 +157,44 @@ mod tests {
         assert!(!guard.reads("lib/a.ts"));
         assert!(!guard.reads("src/gen/a.ts"));
         assert!(!guard.reads("src/vendor/a.ts"));
-        let two_lines = Source {
-            path: "src/vendor/a.ts",
-            text: "a\nb\n",
-        };
-        assert!(guard.lint(two_lines).is_empty());
+        assert!(guard
+            .lint(&Source::new("src/vendor/a.ts", "a\nb\n"))
+            .is_empty());
     }
 
     #[test]
     fn ratchet_is_the_presets_choice() {
         let ratcheted = Guard::new(&size(Some(1), true)).unwrap().ratcheted();
-        assert!(ratcheted.contains("file-length"));
+        assert!(ratcheted.contains("file-length") && ratcheted.contains("function-length"));
         assert!(Guard::new(&size(Some(1), false))
             .unwrap()
             .ratcheted()
             .is_empty());
+    }
+
+    #[test]
+    fn a_cite_is_appended_to_its_rules_messages() {
+        let mut config = size(Some(1), true);
+        config
+            .cite
+            .insert("file-length".into(), "guide, section 6".into());
+        let found = Guard::new(&config)
+            .unwrap()
+            .lint(&Source::new("src/a.ts", "a\nb\n"));
+        assert_eq!(
+            found[0].message,
+            "file is 2 lines, over 1 (guide, section 6)"
+        );
+    }
+
+    #[test]
+    fn a_byte_order_mark_does_not_hide_a_header_comment() {
+        assert_eq!(Source::new("a.ts", "\u{feff}// a\n").text, "// a\n");
+    }
+
+    #[test]
+    fn the_tree_is_parsed_only_for_javascript_and_typescript() {
+        assert!(Source::new("a.ts", "const a = 1\n").tree().is_some());
+        assert!(Source::new("a.sql", "select 1;\n").tree().is_none());
     }
 }

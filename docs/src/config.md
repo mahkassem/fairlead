@@ -90,7 +90,9 @@ fairlead.toml: tests.unreachd: unknown field `unreachd`, expected one of ...
 | `guard.findings` | `"added"` | Which findings count at a commit: `added`, only those the change adds; `all`, every finding in a file it touches |
 | `guard.on_finding` | `"deny"` | `deny` stops the commit on those findings; `warn` shows them and lets it through |
 | `guard.events` | `"local"` | `local` records decisions in `.git/fairlead/events.jsonl`; `off` records nothing |
-| `guard.size` | off | `files`, `exclude`, `file_lines`, and `ratchet` (default `true`). See [Guard rules](guard.md) |
+| `guard.cite` | `{}` | A note appended to a rule's messages, by rule id |
+| `guard.size` | off | `files`, `exclude`, `file_lines`, `function_lines`, `test_hooks`, and `ratchet` (default `true`). See [Guard rules](guard.md) |
+| `guard.comments` | off | `files`, `exclude`, `tests`, `migrations`, `block_length`, `density`, `history`, `item_codes`, `agent_phrases`, `block_marker`, and `ratchet` (default `false`). See [Guard rules](guard.md#comments) |
 
 Commands are always argv arrays, never shell strings, and `{files}` expands to one argument per file. In `tests.runners.cwd`, `{module}` is the module's root path and `{module.id}` its id.
 

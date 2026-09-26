@@ -1,0 +1,25 @@
+# The config the fixture corpus in comments/ is checked with; the findings
+# it should give are in comments.expected, as file:line rule.
+[guard.size]
+files = ["**/*.{ts,tsx,sql,yml}"]
+file_lines = 25
+function_lines = 5
+
+[guard.comments]
+files = ["**/*.{ts,tsx,sql,yml}"]
+tests = ["**/*.test.ts", "test/**"]
+migrations = ["db/migrations/**/*.sql"]
+block_length = { source = 8, test = 10, header = 12, inline = 2, migration = 1 }
+density = { source = 0.25, test = 0.20 }
+history = { dates = true, names = ["Ada"], phrases = ["used to", "no longer", "until now"], measured = true }
+item_codes = { pattern = '(?-u:\b)T[0-9]{4}(?-u:\b)', pointer = true }
+agent_phrases = [
+  '(?i)(?-u:\b)you must(?-u:\b)',
+  '(?i)(?-u:\b)never (?:do|write|add|put)(?-u:\b)',
+  '(?i)(?-u:\b)do not (?:touch|edit|change|use)(?-u:\b)',
+  '(?i)(?-u:\b)an agent(?-u:\b)',
+  '(?i)(?-u:\b)a sub-agent(?-u:\b)',
+  '(?-u:\b)Claude(?-u:\b)',
+  '(?i)(?-u:\b)the orchestrator(?-u:\b)',
+]
+block_marker = true

@@ -1,0 +1,3 @@
+# The cache no longer needs a warm-up step.
+steps:
+  - run: make

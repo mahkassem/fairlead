@@ -347,6 +347,7 @@ dependencies = [
  "fairlead-lang",
  "fairlead-replay",
  "fairlead-tests",
+ "rayon",
  "serde_json",
  "toml",
 ]
@@ -370,6 +371,7 @@ version = "0.3.0"
 dependencies = [
  "fairlead-core",
  "fairlead-lang",
+ "regex",
  "serde",
  "serde_json",
 ]
