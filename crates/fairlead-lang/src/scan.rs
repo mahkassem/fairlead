@@ -27,8 +27,8 @@ pub struct Scan {
 }
 
 pub fn build(root: &Path, config: &Config) -> std::io::Result<Scan> {
-    // Canonical, so resolved paths (which the resolver canonicalizes) share its prefix.
-    let root = std::fs::canonicalize(root)?;
+    // Canonical and plain, so resolved paths (which the resolver canonicalizes) share its prefix.
+    let root = crate::tree::plain(&std::fs::canonicalize(root)?);
     let tree = Tree::scan(&root);
     let packages = workspace::discover(&tree);
     let resolver = Resolver::new(&root, &packages, &config.graph);

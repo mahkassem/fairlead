@@ -63,12 +63,34 @@ impl Tree {
 }
 
 pub fn relative(root: &Path, abs: &Path) -> Option<String> {
-    let rel = abs.strip_prefix(root).ok()?;
+    let (root, abs) = (plain(root), plain(abs));
+    let rel = abs.strip_prefix(&root).ok()?;
     let parts: Vec<String> = rel
         .components()
         .map(|c| c.as_os_str().to_string_lossy().into_owned())
         .collect();
     (!parts.is_empty()).then(|| parts.join("/"))
+}
+
+/// `path` without Windows' `\\?\` prefix, which `std::fs::canonicalize`
+/// adds and the resolver strips, so the two compare equal.
+pub fn plain(path: &Path) -> PathBuf {
+    if cfg!(windows) {
+        if let Some(s) = path.to_str().and_then(strip_verbatim) {
+            return PathBuf::from(s);
+        }
+    }
+    path.to_path_buf()
+}
+
+fn strip_verbatim(path: &str) -> Option<String> {
+    if let Some(rest) = path.strip_prefix(r"\\?\UNC\") {
+        return Some(format!(r"\\{rest}"));
+    }
+    let rest = path.strip_prefix(r"\\?\")?;
+    let drive = rest.as_bytes();
+    (drive.len() >= 2 && drive[0].is_ascii_alphabetic() && drive[1] == b':')
+        .then(|| rest.to_string())
 }
 
 /// Joins a `/`-separated path onto a directory and resolves `.` and `..`,
@@ -105,6 +127,17 @@ mod tests {
         assert_eq!(normalize("a", "./x.json").as_deref(), Some("a/x.json"));
         assert_eq!(normalize("a", "../../x"), None);
         assert_eq!(normalize("a/b", "/top.ts").as_deref(), Some("top.ts"));
+    }
+
+    #[test]
+    fn verbatim_prefixes_drop_only_for_disks_and_shares() {
+        assert_eq!(strip_verbatim(r"\\?\D:\a\b").as_deref(), Some(r"D:\a\b"));
+        assert_eq!(
+            strip_verbatim(r"\\?\UNC\srv\share\x").as_deref(),
+            Some(r"\\srv\share\x")
+        );
+        assert_eq!(strip_verbatim(r"\\?\Volume{1}\x"), None);
+        assert_eq!(strip_verbatim(r"D:\a"), None);
     }
 
     #[test]
