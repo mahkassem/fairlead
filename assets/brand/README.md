@@ -19,7 +19,7 @@ or stretch them. The wordmark is outlined, so no font is needed.
 | `fairlead-app-icon-square.svg` | App icon, dark rounded square | <img src="previews/fairlead-app-icon-square.png" width="150" alt=""> |
 | `fairlead-app-icon-square-dark.svg` | App icon, dark square, square corners | <img src="previews/fairlead-app-icon-square-dark.png" width="150" alt=""> |
 | `fairlead-app-icon-square-light.svg` | App icon, white square, square corners | <img src="previews/fairlead-app-icon-square-light.png" width="150" alt=""> |
-| `png/fairlead-app-icon-*-1024.png` | The app icons at 1024 px, for places that take only PNG | <img src="png/fairlead-app-icon-rounded-1024.png" width="75" alt=""> |
+| `png/fairlead-app-icon-*-1024.png` | The app icons at 1024 px, for places that take only PNG | <img src="previews/png-app-icons.png" width="150" alt=""> |
 | `png/fairlead-social-preview-1280x640.png` | The repository's social preview image | <img src="png/fairlead-social-preview-1280x640.png" width="150" alt=""> |
 
 The SVGs are the source; the PNGs are rendered from them. Each preview shows its file on the background it is meant for.
