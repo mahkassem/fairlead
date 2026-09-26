@@ -21,7 +21,9 @@ command = ["node", "--test", "{files}"]
 
 [[tests.runners]]
 id = "vitest"
-match = ["test/{unit,e2e,coverage-test,browser,workspaces,workspaces-browser,typescript,test-utils}/**", "examples/**", "packages/**"]
+# Every suite under test/ but two, since suites come and go over a quarter.
+match = ["test/**", "examples/**", "packages/**"]
+exclude = ["test/ui/**", "test/node-runner/**"]
 invoke = "per-module"
 cwd = "{module}"
 command = ["pnpm", "vitest", "run", "{files}"]

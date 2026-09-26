@@ -53,7 +53,7 @@ fairlead.toml: tests.unreachd: unknown field `unreachd`, expected one of ...
 | `tests.match` | `**/*.{test,spec}.{ts,tsx,js,jsx,mjs,cjs,mts,cts}` | Test files |
 | `tests.exclude` | `**/node_modules/**` | Paths that are never test files |
 | `tests.unreached` | `"module"` | What a changed file nothing reaches selects: `module`, `all` or `warn` |
-| `tests.runners` | `[]` | `id`, `match`, `invoke` (`once` or `per-module`), `cwd`, `command` |
+| `tests.runners` | `[]` | `id`, `match`, `exclude` (files under `match` left to another runner), `invoke` (`once` or `per-module`), `cwd`, `command` |
 | `tests.owners` | `[]` | Tests that don't import what they test: `match`, `covers` |
 | `tests.classes` | `[]` | `class` (`unit`, `own`, `demand`, `canary`) for a `match` |
 | `checks` | `[]` | Steps that aren't tests: `id`, `command`, `paths`, `modules`, `files` |

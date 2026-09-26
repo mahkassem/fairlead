@@ -179,6 +179,9 @@ pub struct Runner {
     pub id: String,
     #[serde(rename = "match")]
     pub matches: Vec<String>,
+    /// Test files under `match` that this runner leaves to another.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub exclude: Vec<String>,
     #[serde(default)]
     pub invoke: Invoke,
     /// Working directory; `{module}` is the module's root path.

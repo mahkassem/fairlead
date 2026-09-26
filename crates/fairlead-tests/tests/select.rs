@@ -344,6 +344,35 @@ fn a_test_no_runner_matches_fails_the_plan_naming_it() {
 }
 
 #[test]
+fn a_runner_leaves_its_excluded_files_to_another() {
+    let dir = repo("runner-exclude", WORKSPACE);
+    let cfg = config(
+        r#"
+[[tests.runners]]
+id = "vitest"
+match = ["packages/**"]
+exclude = ["packages/billing/**"]
+command = ["vitest", "run", "{files}"]
+
+[[tests.runners]]
+id = "jest"
+match = ["packages/billing/**"]
+command = ["jest", "{files}"]
+"#,
+    );
+    let plan = run(&dir, &cfg, vec![modified("packages/core/src/money.ts")]);
+    let jest = plan.invocations.iter().find(|i| i.id == "jest").unwrap();
+    assert!(jest
+        .argv
+        .contains(&"packages/billing/test/invoice.test.ts".to_string()));
+    let vitest = plan.invocations.iter().find(|i| i.id == "vitest").unwrap();
+    assert!(vitest
+        .argv
+        .iter()
+        .all(|a| !a.starts_with("packages/billing/")));
+}
+
+#[test]
 fn an_ignored_location_never_swallows_a_source_file() {
     let mut files = WORKSPACE.to_vec();
     files.push(("docs/site.config.ts", "export default {};\n"));
