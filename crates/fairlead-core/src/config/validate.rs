@@ -192,6 +192,9 @@ fn comment_rules(c: &super::CommentRules, problems: &mut Vec<Problem>) {
         }
     }
     if let Some(h) = &c.history {
+        if !h.dates && !h.measured && h.names.is_empty() && h.phrases.is_empty() {
+            problems.push(problem(format!("{KEY}.history"), "checks nothing"));
+        }
         if h.names
             .iter()
             .chain(&h.phrases)

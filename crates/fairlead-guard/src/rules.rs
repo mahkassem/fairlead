@@ -18,10 +18,11 @@ pub struct Source<'a> {
 }
 
 impl<'a> Source<'a> {
+    /// A leading byte-order mark is dropped, so line 1 reads as it looks.
     pub fn new(path: &'a str, text: &'a str) -> Source<'a> {
         Source {
             path,
-            text,
+            text: text.strip_prefix('\u{feff}').unwrap_or(text),
             tree: OnceCell::new(),
         }
     }
@@ -184,6 +185,11 @@ mod tests {
             found[0].message,
             "file is 2 lines, over 1 (guide, section 6)"
         );
+    }
+
+    #[test]
+    fn a_byte_order_mark_does_not_hide_a_header_comment() {
+        assert_eq!(Source::new("a.ts", "\u{feff}// a\n").text, "// a\n");
     }
 
     #[test]

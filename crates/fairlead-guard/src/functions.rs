@@ -38,8 +38,13 @@ fn first_row(node: Node<'_>) -> usize {
     }
     let mut row = node.start_position().row;
     let mut prev = node.prev_named_sibling();
-    while let Some(p) = prev.filter(|p| p.kind() == "decorator") {
-        row = p.start_position().row;
+    while let Some(p) = prev {
+        match p.kind() {
+            "decorator" => row = p.start_position().row,
+            // A comment between a decorator and its method doesn't part them.
+            "comment" => {}
+            _ => break,
+        }
         prev = p.prev_named_sibling();
     }
     row
@@ -153,10 +158,10 @@ mod tests {
 
     #[test]
     fn export_and_decorators_start_the_function() {
-        let text = "export function f() {\n}\nclass C {\n  @dec()\n  m() {\n  }\n}\n";
+        let text = "export function f() {\n}\nclass C {\n  @dec()\n  // why\n  m() {\n  }\n}\n";
         let found = lengths_of("a.ts", text);
         assert_eq!(found[0], (1, 2, 2, "f".into()));
-        assert_eq!(found[1], (4, 3, 3, "m".into()));
+        assert_eq!(found[1], (4, 4, 4, "m".into()));
     }
 
     #[test]

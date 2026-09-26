@@ -531,12 +531,13 @@ fn comment_rules_need_files_a_rule_valid_patterns_and_sane_limits() {
     assert_eq!(
         problems(concat!(
             "[guard.comments]\nfiles = [\"src/**\"]\n",
-            "block_length = { source = 0 }\ndensity = { source = 1.5 }\n",
+            "block_length = { source = 0 }\ndensity = { source = 1.5 }\nhistory = {}\n",
             "item_codes = { pattern = \"(\" }\nagent_phrases = [\"a*\"]\n",
         )),
         [
             "guard.comments.block_length",
             "guard.comments.density",
+            "guard.comments.history",
             "guard.comments.item_codes.pattern[0]",
             "guard.comments.agent_phrases[0]"
         ]
