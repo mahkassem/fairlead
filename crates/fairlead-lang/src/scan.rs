@@ -9,6 +9,7 @@ use rayon::prelude::*;
 
 use crate::cache::{self, CacheStats, ParseCache};
 use crate::extract::{extract, Extracted, SpecKind};
+use crate::golang;
 use crate::graph::{EdgeKind, Graph};
 use crate::php;
 use crate::provider;
@@ -29,9 +30,9 @@ struct FileResult {
     unknown: bool,
     fell_back: bool,
     parsed: Option<Parsed>,
-    /// A PHP file's fully qualified references, resolved once every file
-    /// is read, and the names it declares.
-    names: Vec<String>,
+    /// A PHP or Go file's references by name, resolved once every file is
+    /// read, and the names it declares.
+    names: Vec<(String, SpecKind)>,
     declares: Vec<String>,
 }
 
@@ -79,7 +80,6 @@ pub fn build(root: &Path, config: &Config) -> std::io::Result<Scan> {
         provider::claims(&tree.files, externals).map_err(std::io::Error::other)?
     };
     let sources: Vec<&String> = tree.sources().filter(|f| !owner.contains_key(*f)).collect();
-    let scanned = sources.len();
     let mut results: Vec<(String, FileResult)> = sources
         .par_iter()
         .map(|file| {
@@ -114,29 +114,28 @@ pub fn build(root: &Path, config: &Config) -> std::io::Result<Scan> {
         }
     }
     parse_cache.save(used);
-    let autoload = php::Autoload::new(
-        &tree,
-        results
-            .iter()
-            .map(|(f, r)| (f.as_str(), r.declares.as_slice())),
-    );
-    let (builtin_edges, php_edges) = add_results(&tree, &autoload, &mut graph, results);
-    let php_files = sources.iter().filter(|f| is_php(f)).count();
-    let mut providers = vec![provider::Report {
-        id: provider::BUILTIN.into(),
-        files: scanned - php_files,
-        edges: builtin_edges,
-        ignored: 0,
-        failed: None,
-    }];
-    if php_files > 0 {
-        providers.push(provider::Report {
-            id: php::ID.into(),
-            files: php_files,
-            edges: php_edges,
-            ignored: 0,
-            failed: None,
-        });
+    let named = Named {
+        autoload: php::Autoload::new(
+            &tree,
+            results
+                .iter()
+                .map(|(f, r)| (f.as_str(), r.declares.as_slice())),
+        ),
+        modules: golang::Modules::new(&tree),
+    };
+    let edges = add_results(&tree, &named, &mut graph, results);
+    let mut providers = Vec::new();
+    for id in [provider::BUILTIN, php::ID, golang::ID] {
+        let files = sources.iter().filter(|f| language(f) == id).count();
+        if files > 0 || id == provider::BUILTIN {
+            providers.push(provider::Report {
+                id: id.into(),
+                files,
+                edges: edges.get(id).copied().unwrap_or(0),
+                ignored: 0,
+                failed: None,
+            });
+        }
     }
     let uncertain = run_externals(&root, externals, &owner, &mut graph, &mut providers);
     add_snapshot_edges(&tree, &mut graph);
@@ -156,19 +155,58 @@ pub fn build(root: &Path, config: &Config) -> std::io::Result<Scan> {
     })
 }
 
-fn is_php(file: &str) -> bool {
-    file.ends_with(".php")
+/// Which built-in scanner reads a file, by its id in reports.
+fn language(file: &str) -> &'static str {
+    if file.ends_with(".php") {
+        php::ID
+    } else if file.ends_with(".go") {
+        golang::ID
+    } else {
+        provider::BUILTIN
+    }
 }
 
-/// Adds each file's edges, resolving PHP names now that every declaration
-/// is known; returns the edges added for the built-in scanner and for PHP.
+/// What turns a name into files, for languages that refer by name: known
+/// only once every file is read.
+struct Named {
+    autoload: php::Autoload,
+    modules: golang::Modules,
+}
+
+impl Named {
+    /// The files a reference reaches, and the paths it would need that
+    /// aren't there.
+    fn resolve(
+        &self,
+        tree: &Tree,
+        file: &str,
+        name: &str,
+        kind: SpecKind,
+    ) -> (Vec<String>, Vec<String>) {
+        match language(file) {
+            php::ID => match self.autoload.resolve(tree, name) {
+                php::Resolved::Files(files) => (files, Vec::new()),
+                php::Resolved::Missing(paths) => (Vec::new(), paths),
+                php::Resolved::External => Default::default(),
+            },
+            golang::ID if kind == SpecKind::Require => {
+                (self.modules.embedded(tree, file, name), Vec::new())
+            }
+            golang::ID => (self.modules.package(file, name), Vec::new()),
+            _ => Default::default(),
+        }
+    }
+}
+
+/// Adds each file's edges, resolving names now that every file is read;
+/// returns the edges added by each built-in scanner.
 fn add_results(
     tree: &Tree,
-    autoload: &php::Autoload,
+    named: &Named,
     graph: &mut Graph,
     results: Vec<(String, FileResult)>,
-) -> (usize, usize) {
-    let (mut builtin, mut php_edges) = (0, 0);
+) -> HashMap<&'static str, usize> {
+    let mut counts: HashMap<&'static str, usize> = HashMap::new();
     for (file, result) in results {
         let from = graph.id(&file).expect("every source is in the tree");
         let before = graph.dependencies(from).len();
@@ -177,20 +215,31 @@ fn add_results(
                 graph.add_edge(from, to, kind);
             }
         }
-        for name in &result.names {
-            match autoload.resolve(tree, name) {
-                php::Resolved::Files(files) => {
-                    let ids: Vec<u32> = files.iter().filter_map(|f| graph.id(f)).collect();
-                    for to in ids {
-                        if to != from {
-                            graph.add_edge(from, to, EdgeKind::Import);
-                        }
-                    }
-                }
-                php::Resolved::Missing(paths) => {
-                    graph.dangling.extend(paths.into_iter().map(|p| (from, p)));
-                }
-                php::Resolved::External => {}
+        let mut reached = Vec::new();
+        for (name, kind) in &result.names {
+            let (files, missing) = named.resolve(tree, &file, name, *kind);
+            let kind = if *kind == SpecKind::Require && language(&file) == golang::ID {
+                EdgeKind::PathLiteral
+            } else {
+                EdgeKind::Import
+            };
+            reached.extend(files.into_iter().map(|f| (f, kind)));
+            graph
+                .dangling
+                .extend(missing.into_iter().map(|p| (from, p)));
+        }
+        if golang::is_test(&file) {
+            reached.extend(
+                named
+                    .modules
+                    .siblings(&file)
+                    .into_iter()
+                    .map(|f| (f, EdgeKind::Import)),
+            );
+        }
+        for (to, kind) in reached {
+            if let Some(to) = graph.id(&to).filter(|&to| to != from) {
+                graph.add_edge(from, to, kind);
             }
         }
         for package in result.packages {
@@ -211,14 +260,9 @@ fn add_results(
         if result.fell_back {
             graph.tsconfig_fallbacks.push(from);
         }
-        let added = graph.dependencies(from).len() - before;
-        if is_php(&file) {
-            php_edges += added;
-        } else {
-            builtin += added;
-        }
+        *counts.entry(language(&file)).or_default() += graph.dependencies(from).len() - before;
     }
-    (builtin, php_edges)
+    counts
 }
 
 /// Runs each external provider on the files it claims; returns the files of
@@ -284,11 +328,12 @@ fn scan_file(
         unknown: extracted.unknown_dynamic,
         ..FileResult::default()
     };
-    if is_php(file) {
-        result.names = extracted.specs.iter().map(|(n, _)| n.clone()).collect();
+    let by_name = language(file) != provider::BUILTIN;
+    if by_name {
+        result.names = extracted.specs.clone();
         result.declares = extracted.declares.clone();
     }
-    for (spec, kind) in extracted.specs.iter().filter(|_| !is_php(file)) {
+    for (spec, kind) in extracted.specs.iter().filter(|_| !by_name) {
         if *kind == SpecKind::TypeImport && !type_imports {
             continue;
         }
