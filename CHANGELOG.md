@@ -4,6 +4,7 @@
 
 ### Fixed
 
+- `fairlead hooks install` in a repository that lists Fairlead as a package dependency writes hooks that run the project's own copy: the Claude Code hook calls the binary the npm package unpacked, falling back to the lockfile's package runner (`bun x`, `pnpm exec`, `yarn` or `npx --no-install`), and the lefthook entry runs through that runner. Before, both called `fairlead` by name, which a dev-dependency install doesn't put on the PATH, so the write hook silently let every edit through. `hooks status`, `doctor` and `uninstall` recognise a commit-stage entry run through a package runner or by path.
 - A captured segment containing glob characters, such as `[slug]`, now selects only its own files in owner rules and rule edges; the captured value used to be read as glob syntax. `{foo-bar}` and other brace groups whose name isn't letters, digits and `_` are no longer taken for placeholders by config validation, matching how patterns read them.
 
 ## 0.4.2 (2026-09-28)
