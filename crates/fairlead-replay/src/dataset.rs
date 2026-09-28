@@ -65,14 +65,16 @@ impl Job {
 
 /// The log lines worth keeping for extraction: each `FAIL`, `●` or bun
 /// `(fail)` line and the two after it, the bun file header a failure sits
-/// under, and bun's summary line, which ends what the extractor reads. Capped
-/// so one noisy job can't bloat the dataset.
+/// under, and bun's summary line, which ends what the extractor reads.
+/// PHPUnit's section headers and numbered failures, and Pest's `FAILED`,
+/// keep the frames after them. Capped so one noisy job can't bloat the dataset.
 pub fn log_excerpt(log: &str) -> Vec<String> {
     const AFTER: usize = 2;
     const CAP: usize = 400;
     let lines: Vec<&str> = log.lines().collect();
     let mut keep = BTreeSet::new();
     let mut header = None;
+    let mut frames_until = 0;
     for (i, line) in lines.iter().enumerate() {
         let cleaned = clean(line);
         if bun_header(&cleaned).is_some() {
@@ -86,11 +88,44 @@ pub fn log_excerpt(log: &str) -> Vec<String> {
         if cleaned.trim_end().ends_with("failed:") {
             keep.insert(i);
         }
+        if php_failure(&cleaned) {
+            keep.insert(i);
+            frames_until = i + PHP_FRAMES;
+        } else if i <= frames_until && is_php_frame(&cleaned) {
+            keep.insert(i);
+        }
     }
     keep.into_iter()
         .take(CAP)
         .map(|i| lines[i].trim_end().to_string())
         .collect()
+}
+
+/// How far after a PHP failure its frames are kept.
+const PHP_FRAMES: usize = 400;
+
+/// A PHPUnit section header or numbered failure, or a Pest `FAILED` line.
+fn php_failure(line: &str) -> bool {
+    static FAILURE: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
+    FAILURE
+        .get_or_init(|| {
+            regex::Regex::new(
+                r"^\s*(?:There (?:was|were) \d+ [\w ]+:|\d+\) [\w\\]+::\w|FAILED\s+[\w\\]+ > )",
+            )
+            .expect("built-in pattern compiles")
+        })
+        .is_match(line)
+}
+
+fn is_php_frame(line: &str) -> bool {
+    let line = line.trim();
+    let line = line.strip_prefix("at ").unwrap_or(line);
+    let line = line
+        .trim_start_matches(|c: char| c.is_ascii_digit())
+        .trim_start();
+    line.rsplit_once(".php:").is_some_and(|(path, n)| {
+        !path.contains(' ') && !n.is_empty() && n.chars().all(|c| c.is_ascii_digit())
+    })
 }
 
 /// A hosted runner's image and version, as its log's "Runner Image" group

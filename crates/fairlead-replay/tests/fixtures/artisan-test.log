@@ -1,0 +1,86 @@
+
+   FAIL  Tests\Unit\Billing\PricingTest
+  ⨯ total adds the items
+  ⨯ an empty basket is priced at zero
+  ✓ each basket with data set "pair"
+  ⨯ each basket with data set "wrong"
+
+   PASS  Tests\Unit\ExampleTest
+  ✓ that true is true                                                    0.01s  
+
+   PASS  Tests\Feature\ExampleTest
+  ✓ the application returns a successful response                        0.09s  
+
+   FAIL  Tests\Feature\HomeTest
+  ⨯ the home page has a title                                            0.01s  
+  ────────────────────────────────────────────────────────────────────────────  
+   FAILED  Tests\Unit\Billing\PricingTest > total adds the items                
+  Failed asserting that 30 is identical to 31.
+
+  at tests/Unit/Billing/PricingTest.php:13
+      9▕ class PricingTest extends TestCase
+     10▕ {
+     11▕     public function test_total_adds_the_items(): void
+     12▕     {
+  ➜  13▕         $this->assertSame(31, (new Pricing)->total([10, 20]));
+     14▕     }
+     15▕ 
+     16▕     public function test_an_empty_basket_is_priced_at_zero(): void
+     17▕     {
+
+  1   tests/Unit/Billing/PricingTest.php:13
+
+  ────────────────────────────────────────────────────────────────────────────  
+   FAILED  Tests\Unit\Billing\PricingTest > an emp…  InvalidArgumentException   
+  No items to price.
+
+  at app/Services/Pricing.php:10
+      6▕ {
+      7▕     public function total(array $items): int
+      8▕     {
+      9▕         if ($items === []) {
+  ➜  10▕             throw new \InvalidArgumentException('No items to price.');
+     11▕         }
+     12▕         return array_sum($items);
+     13▕     }
+     14▕ }
+
+  1   app/Services/Pricing.php:10
+  2   tests/Unit/Billing/PricingTest.php:18
+
+  ────────────────────────────────────────────────────────────────────────────  
+   FAILED  Tests\Unit\Billing\PricingTest > each basket with data set "wrong…   
+  Failed asserting that 4 is identical to 5.
+
+  at tests/Unit/Billing/PricingTest.php:24
+     20▕ 
+     21▕     #[DataProvider('baskets')]
+     22▕     public function test_each_basket(array $items, int $want): void
+     23▕     {
+  ➜  24▕         $this->assertSame($want, (new Pricing)->total($items));
+     25▕     }
+     26▕ 
+     27▕     public static function baskets(): array
+     28▕     {
+
+  1   tests/Unit/Billing/PricingTest.php:24
+
+  ────────────────────────────────────────────────────────────────────────────  
+   FAILED  Tests\Feature\HomeTest > the home page has a title                   
+  Expected response status code [404] but received 200.
+Failed asserting that 200 is identical to 404.
+
+  at tests/Feature/HomeTest.php:11
+      7▕ class HomeTest extends TestCase
+      8▕ {
+      9▕     public function test_the_home_page_has_a_title(): void
+     10▕     {
+  ➜  11▕         $this->get('/')->assertStatus(404);
+     12▕     }
+     13▕ }
+     14▕
+
+
+  Tests:    4 failed, 3 passed (6 assertions)
+  Duration: 0.18s
+

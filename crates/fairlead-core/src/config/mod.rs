@@ -398,7 +398,8 @@ pub enum Provider {
 pub struct FailureSource {
     /// The runner whose files these failures name.
     pub runner: String,
-    /// A built-in extractor ("vitest", "jest", "bun") or "regex" with `pattern`.
+    /// A built-in extractor ("vitest", "jest", "bun", "phpunit", "pest") or
+    /// "regex" with `pattern`.
     pub extractor: String,
     /// CI job names this source reads, as a regex.
     #[serde(default, skip_serializing_if = "Option::is_none")]

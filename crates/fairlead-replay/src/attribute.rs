@@ -28,6 +28,27 @@ fn under(dir: &str, path: &str) -> String {
     }
 }
 
+/// `/home/runner/work/repo/repo/x` or `D:/a/repo/repo/x`: a path on the
+/// runner, not relative to anything the repository knows.
+fn is_absolute(path: &str) -> bool {
+    let b = path.as_bytes();
+    path.starts_with('/')
+        || (b.len() > 2 && b[0].is_ascii_alphabetic() && b[1] == b':' && b[2] == b'/')
+}
+
+/// The longest tail of a runner's path, at a directory boundary, that is a
+/// file in the repository: the checkout's own directories come first.
+fn absolute(path: &str, has: impl Fn(&str) -> bool) -> Attribution {
+    let mut rest = path;
+    while let Some((_, tail)) = rest.split_once('/') {
+        if !tail.is_empty() && has(tail) {
+            return Attribution::File(tail.to_string());
+        }
+        rest = tail;
+    }
+    Attribution::Unattributed(Vec::new())
+}
+
 pub fn attribute(
     printed: &Printed,
     repo: &Repo,
@@ -37,6 +58,9 @@ pub fn attribute(
     let has = |p: &str| repo.files.iter().any(|f| f == p);
     if has(path) {
         return Attribution::File(path.to_string());
+    }
+    if is_absolute(path) {
+        return absolute(path, has);
     }
     if let Some(project) = &printed.project {
         let dir = repo
@@ -98,6 +122,7 @@ mod tests {
             "pkg/a/test/index.ts",
             "pkg/b/test/index.ts",
             "specs/bail-out.test.ts",
+            "tests/Unit/Billing/PricingTest.php",
         ]
         .iter()
         .map(|s| s.to_string())
@@ -145,6 +170,29 @@ mod tests {
         assert_eq!(
             attribute(&ambiguous, &repo, read),
             Attribution::File("pkg/b/test/index.ts".into())
+        );
+    }
+
+    #[test]
+    fn a_runners_absolute_path_matches_its_longest_tail_in_the_repository() {
+        let files = files();
+        let repo = Repo {
+            files: &files,
+            packages: &[],
+        };
+        let at = |p: &str| attribute(&printed(p, None, None), &repo, |_| None);
+        let want = Attribution::File("tests/Unit/Billing/PricingTest.php".into());
+        assert_eq!(
+            at("/home/runner/work/shop/shop/tests/Unit/Billing/PricingTest.php"),
+            want
+        );
+        assert_eq!(
+            at("D:/a/shop/shop/tests/Unit/Billing/PricingTest.php"),
+            want
+        );
+        assert_eq!(
+            at("/home/runner/work/shop/shop/vendor/x/Y.php"),
+            Attribution::Unattributed(Vec::new())
         );
     }
 }
