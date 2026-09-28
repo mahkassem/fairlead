@@ -115,21 +115,21 @@ fn pairs(graph: &Graph, rule: &EdgeRule) -> Result<BTreeSet<(u32, u32)>, String>
             bindings.extend(graph.files.iter().filter_map(|f| to.captures(f)));
         }
     }
-    let matching = |glob: &str| -> Result<Vec<u32>, String> {
-        let p = Pattern::new(glob)?;
+    let matching = |glob: &str, binding: &Captures| -> Result<Vec<u32>, String> {
+        let p = fill(glob, binding)?;
         Ok((0..graph.files.len() as u32)
             .filter(|&id| p.is_match(&graph.files[id as usize]))
             .collect())
     };
     let mut out = BTreeSet::new();
     for binding in &bindings {
-        let from = matching(&fill(&rule.from, binding))?;
+        let from = matching(&rule.from, binding)?;
         if from.is_empty() {
             continue;
         }
         let mut to = Vec::new();
         for glob in &rule.to {
-            to.extend(matching(&fill(glob, binding))?);
+            to.extend(matching(glob, binding)?);
         }
         for &f in &from {
             out.extend(to.iter().filter(|&&t| t != f).map(|&t| (f, t)));
