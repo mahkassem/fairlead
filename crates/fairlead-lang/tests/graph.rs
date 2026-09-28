@@ -653,3 +653,53 @@ fn a_php_test_reaches_a_model_through_a_controller_and_a_deleted_class_through_p
         .collect();
     assert_eq!(importers, ["app/Http/Controllers/UserController.php"]);
 }
+
+#[test]
+fn go_imports_reach_every_file_of_a_package_across_replaced_modules_embeds_and_vendor() {
+    let dir = repo(
+        "go",
+        &[
+            (
+                "app/go.mod",
+                "module example.com/app\n\nrequire example.com/lib v0.0.0\n\nreplace example.com/lib => ../lib\n",
+            ),
+            (
+                "app/server.go",
+                "package app\n\nimport (\n\t\"embed\"\n\t\"example.com/lib/money\"\n\t\"github.com/vend/thing\"\n)\n\n//go:embed templates static/*.css\nvar files embed.FS\n\nvar _ = money.Add\nvar _ = thing.X\n",
+            ),
+            ("app/server_test.go", "package app\n\nimport \"testing\"\n\nfunc TestServe(t *testing.T) {}\n"),
+            ("app/helpers_test.go", "package app\n"),
+            ("app/templates/home.html", "<p>home</p>\n"),
+            ("app/static/site.css", "p {}\n"),
+            ("app/static/site.js", "\n"),
+            ("app/vendor/github.com/vend/thing/thing.go", "package thing\n\nvar X = 1\n"),
+            ("lib/go.mod", "module example.com/lib\n"),
+            ("lib/money/add.go", "package money\n\nfunc Add(a, b int) int { return round(a + b) }\n"),
+            ("lib/money/round.go", "package money\n\nfunc round(x int) int { return x }\n"),
+            ("lib/money/add_test.go", "package money_test\n\nimport \"example.com/lib/money\"\n\nvar _ = money.Add\n"),
+        ],
+    );
+    let s = scan(&dir);
+    let paths =
+        |from: &str| -> Vec<String> { deps(&s, from).into_iter().map(|(f, _)| f).collect() };
+    assert_eq!(
+        paths("app/server.go"),
+        [
+            "app/static/site.css",
+            "app/templates/home.html",
+            "app/vendor/github.com/vend/thing/thing.go",
+            "lib/money/add.go",
+            "lib/money/round.go",
+        ],
+        "a package from another module, embedded files, and the module's vendor/"
+    );
+    assert_eq!(
+        paths("app/server_test.go"),
+        ["app/helpers_test.go", "app/server.go"],
+        "a test is compiled with every file of its directory"
+    );
+    assert!(depends(&s, "lib/money/add_test.go", "lib/money/round.go"));
+    assert!(depends(&s, "app/server_test.go", "lib/money/round.go"));
+    let go = s.providers.iter().find(|p| p.id == "go").unwrap();
+    assert_eq!(go.files, 7);
+}
