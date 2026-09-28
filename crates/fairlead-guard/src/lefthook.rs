@@ -105,12 +105,26 @@ fn child_indent(lines: &[String], at: usize) -> Option<usize> {
 }
 
 pub fn present(text: &str) -> bool {
-    text.lines().any(|l| l.trim() == format!("run: {RUN}"))
+    text.lines().any(runs_stage)
+}
+
+/// Whether a line is a `run:` of the commit stage, called by name, by path
+/// or through a package runner (`npx`, `bun x`, `pnpm exec`).
+fn runs_stage(line: &str) -> bool {
+    let line = line.trim();
+    let line = line.strip_prefix("- ").unwrap_or(line);
+    let Some(value) = line.strip_prefix("run:") else {
+        return false;
+    };
+    let value = value.trim().trim_matches(|c| c == '"' || c == '\'');
+    value
+        .strip_suffix(RUN)
+        .is_some_and(|before| before.is_empty() || before.ends_with([' ', '/']))
 }
 
 /// The config with the entry added: under `pre-commit` `commands`, as a
 /// `jobs` item where the config uses jobs, or as a new block at the end.
-pub fn insert(text: &str) -> Insert {
+pub fn insert(text: &str, run: &str) -> Insert {
     if present(text) {
         return Insert::Already;
     }
@@ -127,7 +141,7 @@ pub fn insert(text: &str) -> Insert {
             "pre-commit:".to_string(),
             "  commands:".to_string(),
             format!("    {NAME}:"),
-            format!("      run: {RUN}"),
+            format!("      run: {run}"),
         ]);
         doc.trailing = true;
         return Insert::Text(doc.join());
@@ -159,7 +173,7 @@ pub fn insert(text: &str) -> Insert {
             c + 1,
             vec![
                 format!("{}{NAME}:", " ".repeat(inner)),
-                format!("{}run: {RUN}", " ".repeat(deeper)),
+                format!("{}run: {run}", " ".repeat(deeper)),
             ],
         )
     } else if let Some(j) = under("jobs") {
@@ -170,7 +184,7 @@ pub fn insert(text: &str) -> Insert {
         let pad = " ".repeat(item);
         (
             j + 1,
-            vec![format!("{pad}- name: {NAME}"), format!("{pad}  run: {RUN}")],
+            vec![format!("{pad}- name: {NAME}"), format!("{pad}  run: {run}")],
         )
     } else {
         let pad = |n: usize| " ".repeat(n);
@@ -179,7 +193,7 @@ pub fn insert(text: &str) -> Insert {
             vec![
                 format!("{}commands:", pad(child)),
                 format!("{}{NAME}:", pad(child + step)),
-                format!("{}run: {RUN}", pad(child + 2 * step)),
+                format!("{}run: {run}", pad(child + 2 * step)),
             ],
         )
     };
@@ -191,10 +205,10 @@ pub fn insert(text: &str) -> Insert {
 /// `pre-commit` it leaves empty; None when the entry isn't there.
 pub fn remove(text: &str) -> Option<String> {
     let mut doc = Lines::parse(text);
-    let run = format!("run: {RUN}");
     let at = (0..doc.lines.len().saturating_sub(1)).find(|&i| {
-        let (head, next) = (doc.lines[i].trim(), doc.lines[i + 1].trim());
-        (head == format!("{NAME}:") || head == format!("- name: {NAME}")) && next == run
+        let head = doc.lines[i].trim();
+        (head == format!("{NAME}:") || head == format!("- name: {NAME}"))
+            && runs_stage(&doc.lines[i + 1])
     })?;
     doc.lines.drain(at..at + 2);
     let mut i = at;
@@ -236,14 +250,14 @@ mod tests {
 
     #[test]
     fn an_empty_or_new_config_gets_a_whole_block_and_loses_it_again() {
-        let made = text(insert(""));
+        let made = text(insert("", RUN));
         assert_eq!(
             made,
             format!("pre-commit:\n  commands:\n    fairlead-guard:\n      run: {RUN}\n")
         );
         assert_eq!(remove(&made).unwrap(), "");
         let other = "# ours\npre-push:\n  commands:\n    test:\n      run: make test\n";
-        let both = text(insert(other));
+        let both = text(insert(other, RUN));
         assert!(both.starts_with(other));
         assert_eq!(remove(&both).unwrap(), other);
     }
@@ -251,19 +265,19 @@ mod tests {
     #[test]
     fn an_existing_commands_block_gets_the_entry_at_its_own_indent_with_comments_kept() {
         let config = "pre-commit:\n    parallel: true\n    commands:\n        # lint first\n        lint:\n            run: npm run lint\n";
-        let added = text(insert(config));
+        let added = text(insert(config, RUN));
         assert_eq!(
             added,
             format!("pre-commit:\n    parallel: true\n    commands:\n        fairlead-guard:\n            run: {RUN}\n        # lint first\n        lint:\n            run: npm run lint\n")
         );
         assert_eq!(remove(&added).unwrap(), config);
-        assert_eq!(insert(&added), Insert::Already);
+        assert_eq!(insert(&added, RUN), Insert::Already);
     }
 
     #[test]
     fn a_jobs_list_gets_an_item_and_a_bare_pre_commit_gets_commands() {
         let jobs = "pre-commit:\n  jobs:\n    - name: lint\n      run: npm run lint\n";
-        let added = text(insert(jobs));
+        let added = text(insert(jobs, RUN));
         assert!(
             added.contains(&format!(
                 "  jobs:\n    - name: fairlead-guard\n      run: {RUN}\n    - name: lint"
@@ -272,7 +286,7 @@ mod tests {
         );
         assert_eq!(remove(&added).unwrap(), jobs);
         let bare = "pre-commit:\n  parallel: true\nskip_output:\n  - meta\n";
-        let added = text(insert(bare));
+        let added = text(insert(bare, RUN));
         assert!(added.starts_with(&format!("pre-commit:\n  commands:\n    fairlead-guard:\n      run: {RUN}\n  parallel: true\n")), "{added}");
         assert_eq!(remove(&added).unwrap(), bare);
     }
@@ -280,26 +294,50 @@ mod tests {
     #[test]
     fn crlf_and_a_missing_final_newline_are_kept() {
         let config = "pre-commit:\r\n  commands:\r\n    lint:\r\n      run: x";
-        let added = text(insert(config));
+        let added = text(insert(config, RUN));
         assert!(
             added.contains("\r\n    fairlead-guard:\r\n") && !added.ends_with('\n'),
             "{added:?}"
         );
         assert_eq!(remove(&added).unwrap(), config);
         let plain = "pre-push:\n  commands: {}";
-        assert!(text(insert(plain)).starts_with("pre-push:\n  commands: {}\npre-commit:\n"));
+        assert!(text(insert(plain, RUN)).starts_with("pre-push:\n  commands: {}\npre-commit:\n"));
     }
 
     #[test]
     fn a_one_line_value_is_refused_and_a_missing_entry_removes_nothing() {
-        assert!(matches!(insert("pre-commit: {}\n"), Insert::Refused(_)));
         assert!(matches!(
-            insert("pre-commit:\n  commands: {}\n"),
+            insert("pre-commit: {}\n", RUN),
+            Insert::Refused(_)
+        ));
+        assert!(matches!(
+            insert("pre-commit:\n  commands: {}\n", RUN),
             Insert::Refused(_)
         ));
         assert_eq!(
             remove("pre-commit:\n  commands:\n    lint:\n      run: x\n"),
             None
         );
+    }
+
+    #[test]
+    fn an_entry_run_through_a_package_runner_is_found_and_removed() {
+        let added = text(insert("", "bun x fairlead guard check --staged"));
+        assert!(
+            added.contains("      run: bun x fairlead guard check --staged\n"),
+            "{added}"
+        );
+        assert!(present(&added));
+        assert_eq!(insert(&added, RUN), Insert::Already);
+        assert_eq!(remove(&added).unwrap(), "");
+        for line in [
+            "run: npx --no-install fairlead guard check --staged",
+            "run: node_modules/.bin/fairlead guard check --staged",
+            "- run: \"pnpm exec fairlead guard check --staged\"",
+        ] {
+            assert!(runs_stage(line), "{line}");
+        }
+        assert!(!runs_stage("run: notfairlead guard check --staged"));
+        assert!(!runs_stage("run: fairlead guard check --staged && make"));
     }
 }
