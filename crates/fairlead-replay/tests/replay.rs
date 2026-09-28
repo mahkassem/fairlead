@@ -94,6 +94,7 @@ fn job(name: &str, conclusion: &str, log: &[&str]) -> Job {
         annotations: Vec::new(),
         annotations_capped: false,
         log: log.iter().map(|s| s.to_string()).collect(),
+        image: None,
     }
 }
 

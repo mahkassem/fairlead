@@ -45,6 +45,9 @@ pub enum Outcome {
     /// The failure came with the base branch: unrelated pull requests on the
     /// same base failed it alike, or the base's own push run did.
     Inherited,
+    /// The job failed alike across unrelated pull requests once its runner
+    /// image changed: the image, not the change, is the likelier cause.
+    Environment,
 }
 
 /// How a hit's target came to be in the plan.
@@ -101,6 +104,7 @@ pub struct Replayed {
     pub runs: usize,
     pub quarantine: Vec<crate::quarantine::Entry>,
     pub inherited: Vec<crate::inherited::Group>,
+    pub waves: Vec<crate::waves::Wave>,
 }
 
 /// A `[[replay.failures]]` or `[[replay.checks]]` entry, compiled.
@@ -391,6 +395,7 @@ pub fn replay_with(
     // An entry someone declared explains a failure better than an inference,
     // so only what quarantine leaves can be inherited.
     out.inherited = crate::inherited::apply(&mut out.failures, &rows);
+    out.waves = crate::waves::apply(&mut out.failures, &rows);
     out
 }
 

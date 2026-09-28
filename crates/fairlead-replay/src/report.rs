@@ -66,6 +66,9 @@ pub struct Report {
     /// Failures that came with the base branch, by base, job and test.
     pub inherited: usize,
     pub inherited_groups: Vec<crate::inherited::Group>,
+    /// Failures of a runner-image change, by job, test and image.
+    pub environment: usize,
+    pub waves: Vec<crate::waves::Wave>,
     /// Hits over hits, misses and unconfirmed failures.
     pub strict_recall: Option<f64>,
     pub by_event: BTreeMap<String, EventRecall>,
@@ -223,6 +226,8 @@ pub fn report(repo: &str, window: &Window, min_failures: u32, replayed: &Replaye
         quarantine: replayed.quarantine.clone(),
         inherited: count(Outcome::Inherited),
         inherited_groups: replayed.inherited.clone(),
+        environment: count(Outcome::Environment),
+        waves: replayed.waves.clone(),
         strict_recall: ratio(hits, judged + unconfirmed),
         by_event,
         min_failures,
@@ -263,17 +268,33 @@ pub fn text(r: &Report) -> String {
         pct(r.recall),
         pct(r.strict_recall)
     );
-    if !r.quarantine.is_empty() || !r.inherited_groups.is_empty() {
+    if !r.quarantine.is_empty() || !r.inherited_groups.is_empty() || !r.waves.is_empty() {
         let _ = writeln!(
             out,
-            "  raw recall {} (n={})  adjusted {} (n={}), {} quarantined, {} inherited",
+            "  raw recall {} (n={})  adjusted {} (n={}), {} quarantined, {} inherited, {} environment",
             pct(r.raw_recall),
             r.raw_judged,
             pct(r.recall),
             r.judged,
             r.quarantined,
-            r.inherited
+            r.inherited,
+            r.environment
         );
+        for w in &r.waves {
+            let pulls: Vec<String> = w.pulls.iter().map(u64::to_string).collect();
+            let _ = writeln!(
+                out,
+                "    wave {}  [{}]  image {} -> {} from {}: PRs {}; {} would-be hits, {} misses",
+                w.path,
+                w.job,
+                w.from,
+                w.to,
+                &w.since[..w.since.len().min(10)],
+                pulls.join(", "),
+                w.would_hit,
+                w.would_miss
+            );
+        }
         for g in &r.inherited_groups {
             let evidence = match g.evidence {
                 crate::inherited::Evidence::Base => "the base's own run failed it",

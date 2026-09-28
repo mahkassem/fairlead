@@ -38,6 +38,7 @@ With `--fetch-missing`, the recorded heads and bases the clone lacks are fetched
 | error | the planner refused the commit, such as a test file no runner matches |
 | unwatched | no `[[replay.failures]]` or `[[replay.checks]]` entry names the job; listed by job name so a gap in the config can't raise recall |
 | quarantined | a `[[replay.quarantine]]` entry declares the test flaky in this job (below) |
+| environment | the job failed alike across unrelated pull requests once its runner image changed (below) |
 | inherited | the failure came with the base branch: the base's own push run failed the test in the job, or three or more unrelated pull requests on the same base did (below) |
 | ignored | `replay.ignore` names the job, such as one that only aggregates others, or it failed only in steps `replay.ignore_steps` names, such as an install |
 
@@ -72,6 +73,17 @@ A pull request can fail a test only because its base branch already did. Replay 
 - **Unrelated pull requests failed it alike.** Pull requests on the same base failed it, and three or more of them changed no file in common with each other. A stack of related changes shares a cause, so it counts once.
 
 Either way, a pull request that changed the test, or a file beside it that isn't another test (a fixture, a helper), stays out of the group: its own change may be what broke it. Hits and misses are grouped alike, so the rule can't be chosen to raise recall. An inherited failure keeps what it would have been; it's left out of adjusted recall and the `min_failures` gate and counted in raw recall, as quarantined ones are. The report lists each group with its base, job, test, pull requests and evidence, and says "fixed later" when a later run on another base passed the job, else "unresolved".
+
+## Runner image waves
+
+When a floating runner label such as `ubuntu-latest` moves to a new image, a job can fail on every pull request for days until someone fixes it, whatever each one changed. `replay fetch` records each failed job's runner image and version from its log's "Runner Image" header, and `replay run` calls a group of failures a wave when all of these hold:
+
+- the same test failed in the same job on an image version that job's failures hadn't run on before;
+- within 7 days of that version first appearing;
+- in three or more pull requests that changed no file in common, none of them touching the test or a non-test file beside it;
+- and the test hadn't failed in that job on an older image, so it isn't an ordinary regression that happens to share the dates.
+
+Wave failures get the outcome `environment`: kept out of adjusted recall and counted in raw recall, hits and misses alike, like inherited ones. The report lists each wave with its job, test, old and new image, when the new one appeared, and its pull requests. Only failed jobs' logs are read, so an image is known only from failures, and datasets fetched before this have none.
 
 ## Quarantine
 
