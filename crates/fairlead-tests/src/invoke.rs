@@ -1,7 +1,8 @@
 //! Invocations: each runner's selected tests, and each selected check, as
 //! an argv in a working directory. `{files}` expands to one argument per
-//! file; a per-module runner gets one invocation per module, with files
-//! relative to its working directory.
+//! file and `{packages}` to one per directory holding them, as `go test`
+//! takes packages (`./dir`, or `./...` for everything); a per-module runner gets
+//! one invocation per module, with files relative to its working directory.
 
 use std::collections::BTreeMap;
 
@@ -20,11 +21,33 @@ fn relative_to(cwd: &str, path: &str) -> String {
         .map_or_else(|| path.to_string(), str::to_string)
 }
 
-fn expand(command: &[String], files: &[String], module: Option<(&str, &str)>) -> Vec<String> {
+fn expand(
+    command: &[String],
+    files: &[String],
+    all: bool,
+    module: Option<(&str, &str)>,
+) -> Vec<String> {
     let mut argv = Vec::new();
     for arg in command {
         if arg == "{files}" {
             argv.extend(files.iter().cloned());
+            continue;
+        }
+        if arg == "{packages}" && all {
+            argv.push("./...".to_string());
+            continue;
+        }
+        if arg == "{packages}" {
+            let mut dirs: Vec<String> = files
+                .iter()
+                .map(|f| match f.rsplit_once('/') {
+                    Some((dir, _)) => format!("./{dir}"),
+                    None => ".".to_string(),
+                })
+                .collect();
+            dirs.sort();
+            dirs.dedup();
+            argv.extend(dirs);
             continue;
         }
         let arg = match module {
@@ -63,7 +86,7 @@ fn runner_invocations(
             } else {
                 tests.iter().map(|t| relative_to(&cwd, &t.path)).collect()
             };
-            vec![invocation(cwd, expand(&runner.command, &files, None))]
+            vec![invocation(cwd, expand(&runner.command, &files, all, None))]
         }
         Invoke::PerModule => {
             let mut groups: BTreeMap<Option<String>, Vec<&TestSelection>> = BTreeMap::new();
@@ -95,7 +118,10 @@ fn runner_invocations(
                     } else {
                         tests.iter().map(|t| relative_to(&cwd, &t.path)).collect()
                     };
-                    invocation(cwd, expand(&runner.command, &files, Some((&root, &id))))
+                    invocation(
+                        cwd,
+                        expand(&runner.command, &files, all, Some((&root, &id))),
+                    )
                 })
                 .collect()
         }
@@ -164,7 +190,7 @@ pub fn invocations(
             id: check.id.clone(),
             kind: InvocationKind::Check,
             cwd: ".".into(),
-            argv: expand(&check.command, &files, None),
+            argv: expand(&check.command, &files, false, None),
         });
     }
     out

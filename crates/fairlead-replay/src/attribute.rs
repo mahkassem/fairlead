@@ -28,6 +28,40 @@ fn under(dir: &str, path: &str) -> String {
     }
 }
 
+/// `/home/runner/work/repo/repo/x` or `D:/a/repo/repo/x`: a path on the
+/// runner, not relative to anything the repository knows.
+fn is_absolute(path: &str) -> bool {
+    let b = path.as_bytes();
+    path.starts_with('/')
+        || (b.len() > 2 && b[0].is_ascii_alphabetic() && b[1] == b':' && b[2] == b'/')
+}
+
+/// The longest tail of a runner's path, at a directory boundary, that is a
+/// file in the repository: the checkout's own directories come first. A
+/// Go import path's tail may sit below a module's folder, so failing that,
+/// the longest tail of two segments or more that ends exactly one file.
+fn absolute(path: &str, files: &[String], has: impl Fn(&str) -> bool) -> Attribution {
+    let tails: Vec<&str> = path
+        .char_indices()
+        .filter(|&(_, c)| c == '/')
+        .map(|(i, _)| &path[i + 1..])
+        .filter(|t| !t.is_empty())
+        .collect();
+    if let Some(tail) = tails.iter().find(|t| has(t)) {
+        return Attribution::File(tail.to_string());
+    }
+    for tail in tails.iter().filter(|t| t.contains('/')) {
+        let suffix = format!("/{tail}");
+        let found: Vec<&String> = files.iter().filter(|f| f.ends_with(&suffix)).collect();
+        match found.as_slice() {
+            [one] => return Attribution::File((*one).clone()),
+            [] => continue,
+            many => return Attribution::Unattributed(many.iter().map(|f| f.to_string()).collect()),
+        }
+    }
+    Attribution::Unattributed(Vec::new())
+}
+
 pub fn attribute(
     printed: &Printed,
     repo: &Repo,
@@ -37,6 +71,9 @@ pub fn attribute(
     let has = |p: &str| repo.files.iter().any(|f| f == p);
     if has(path) {
         return Attribution::File(path.to_string());
+    }
+    if is_absolute(path) {
+        return absolute(path, repo.files, has);
     }
     if let Some(project) = &printed.project {
         let dir = repo
@@ -98,6 +135,7 @@ mod tests {
             "pkg/a/test/index.ts",
             "pkg/b/test/index.ts",
             "specs/bail-out.test.ts",
+            "tests/Unit/Billing/PricingTest.php",
         ]
         .iter()
         .map(|s| s.to_string())
@@ -145,6 +183,34 @@ mod tests {
         assert_eq!(
             attribute(&ambiguous, &repo, read),
             Attribution::File("pkg/b/test/index.ts".into())
+        );
+    }
+
+    #[test]
+    fn a_runners_absolute_path_matches_its_longest_tail_in_the_repository() {
+        let files = files();
+        let repo = Repo {
+            files: &files,
+            packages: &[],
+        };
+        let at = |p: &str| attribute(&printed(p, None, None), &repo, |_| None);
+        let want = Attribution::File("tests/Unit/Billing/PricingTest.php".into());
+        assert_eq!(
+            at("/home/runner/work/shop/shop/tests/Unit/Billing/PricingTest.php"),
+            want
+        );
+        assert_eq!(
+            at("D:/a/shop/shop/tests/Unit/Billing/PricingTest.php"),
+            want
+        );
+        assert_eq!(
+            at("/home/runner/work/shop/shop/vendor/x/Y.php"),
+            Attribution::Unattributed(Vec::new())
+        );
+        assert_eq!(
+            at("/example.com/shop/Billing/PricingTest.php"),
+            want,
+            "an import path below a module's folder, by its unique suffix"
         );
     }
 }

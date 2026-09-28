@@ -1,0 +1,101 @@
+# Replays one public repository's recent CI failures against this commit's
+# planner, with a config from bench/probe/, and reports recall in the run's
+# summary. It measures a language or a framework before a repository joins
+# the benchmark; it publishes nothing and keeps nothing between runs.
+name: replay-probe
+
+on:
+  workflow_dispatch:
+    inputs:
+      repo:
+        description: Repository to replay, owner/name
+        required: true
+      workflow:
+        description: Its CI workflow file, such as ci.yml
+        required: true
+      config:
+        description: The config, a file under bench/probe/
+        required: true
+      since:
+        description: First day to list, YYYY-MM-DD (default 85 days ago)
+        required: false
+        default: ""
+      limit:
+        description: Run attempts to record
+        required: false
+        default: "200"
+
+permissions: {}
+
+# Its own group, so a probe doesn't wait for the weekly bench; both draw on
+# the workflow token's hourly API budget.
+concurrency:
+  group: replay-probe
+  cancel-in-progress: false
+
+jobs:
+  replay:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 150
+    permissions:
+      actions: read
+      checks: read
+      contents: read
+    env:
+      REPO: ${{ inputs.repo }}
+      WORKFLOW: ${{ inputs.workflow }}
+      CONFIG: ${{ inputs.config }}
+      SINCE: ${{ inputs.since }}
+      LIMIT: ${{ inputs.limit }}
+    steps:
+      - name: Check the inputs
+        shell: bash
+        run: |
+          [[ "$REPO" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]] || { echo "repo must be owner/name"; exit 1; }
+          [[ "$WORKFLOW" =~ ^[A-Za-z0-9_.-]+\.ya?ml$ ]] || { echo "workflow must be a file name"; exit 1; }
+          [[ "$CONFIG" =~ ^bench/probe/[A-Za-z0-9_.-]+\.toml$ ]] || { echo "config must be a file under bench/probe/"; exit 1; }
+          [[ -z "$SINCE" || "$SINCE" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]] || { echo "since must be YYYY-MM-DD"; exit 1; }
+          [[ "$LIMIT" =~ ^[0-9]+$ ]] || { echo "limit must be a whole number"; exit 1; }
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: The config exists
+        shell: bash
+        run: test -f "$CONFIG" || { echo "no $CONFIG"; exit 1; }
+      - uses: dtolnay/rust-toolchain@02cb101ec7c40f2c49e1d9714d64511d8e1b74de # master
+        with:
+          toolchain: "1.94.1"
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+      - run: cargo build --release --locked -p fairlead
+      - name: Clone the repository, full history without blobs
+        shell: bash
+        run: git clone --quiet --filter=blob:none --no-checkout "https://github.com/$REPO" clone
+      - name: Record runs
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.BENCH_READ_TOKEN || github.token }}
+        run: |
+          mkdir -p out
+          since="${SINCE:-$(date -u -d '85 days ago' +%F)}"
+          ./target/release/fairlead replay fetch --repo "$REPO" --workflow "$WORKFLOW" \
+            --since "$since" --limit "$LIMIT" --data out/data.jsonl --clone clone | tee out/fetch.txt
+      - name: Replay
+        shell: bash
+        run: |
+          ./target/release/fairlead replay run --data out/data.jsonl --clone clone \
+            --config "$CONFIG" --fetch-missing --json-out out/report.json | tee out/report.txt
+          {
+            echo "### $REPO ($WORKFLOW)"
+            echo
+            echo '~~~text'
+            tr -d '~' < out/fetch.txt
+            tr -d '~' < out/report.txt
+            echo '~~~'
+          } >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        if: ${{ !cancelled() }}
+        with:
+          name: probe
+          path: out/
+          retention-days: 14
+          if-no-files-found: ignore

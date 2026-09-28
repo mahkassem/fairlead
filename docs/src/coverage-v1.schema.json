@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "commit": {
+      "description": "The commit the coverage run tested.",
+      "type": "string"
+    },
+    "created": {
+      "description": "When the map was made, `YYYY-MM-DD`.",
+      "type": "string"
+    },
+    "source": {
+      "description": "What it was imported from, such as `phpunit-xml` or `coverage-py`.",
+      "type": "string"
+    },
+    "tests": {
+      "additionalProperties": {
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "description": "Each test file, repo-relative, and the repo-relative source files it ran.",
+      "type": "object"
+    },
+    "version": {
+      "description": "Always 1 for this shape.",
+      "format": "uint32",
+      "minimum": 0,
+      "type": "integer"
+    }
+  },
+  "required": [
+    "version",
+    "commit",
+    "created",
+    "source",
+    "tests"
+  ],
+  "title": "CoverageMap",
+  "type": "object"
+}

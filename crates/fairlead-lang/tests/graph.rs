@@ -530,3 +530,247 @@ fn a_deleted_file_is_joined_back_to_everything_that_referred_to_it() {
         "through the package edge"
     );
 }
+
+#[test]
+fn a_test_reaches_a_component_through_other_components_in_each_format() {
+    let dir = repo(
+        "components",
+        &[
+            (
+                "src/Card.vue",
+                "<template><Badge /></template>\n<script setup lang=\"ts\">\nimport Badge from './Badge.vue';\nimport { fmt } from './fmt';\n</script>\n",
+            ),
+            (
+                "src/Badge.vue",
+                "<script>\nexport default { name: 'Badge' }\n</script>\n<template><b/></template>\n",
+            ),
+            ("src/fmt.ts", "export const fmt = (s: string) => s;\n"),
+            (
+                "src/List.svelte",
+                "<script context=\"module\" lang=\"ts\">\nexport const n = 1;\n</script>\n<script lang=\"ts\">\nimport Item from './Item.svelte';\n</script>\n<Item />\n",
+            ),
+            ("src/Item.svelte", "<p>item</p>\n"),
+            (
+                "src/Page.astro",
+                "---\nimport Layout from './Layout.astro';\nimport { fmt } from './fmt';\n---\n<Layout /><script src=\"./client.ts\"></script>\n",
+            ),
+            ("src/Layout.astro", "<html><slot /></html>\n"),
+            ("src/client.ts", "console.log('hi');\n"),
+            (
+                "test/card.test.ts",
+                "import Card from '../src/Card.vue';\nimport List from '../src/List.svelte';\nimport Page from '../src/Page.astro';\n",
+            ),
+        ],
+    );
+    let s = scan(&dir);
+    for leaf in [
+        "src/Badge.vue",
+        "src/fmt.ts",
+        "src/Item.svelte",
+        "src/Layout.astro",
+        "src/client.ts",
+    ] {
+        assert!(depends(&s, "test/card.test.ts", leaf), "{leaf}");
+    }
+    assert_eq!(
+        deps(&s, "src/Card.vue"),
+        [
+            ("src/Badge.vue".to_string(), EdgeKind::Import),
+            ("src/fmt.ts".to_string(), EdgeKind::Import)
+        ]
+    );
+}
+
+#[test]
+fn a_php_test_reaches_a_model_through_a_controller_and_a_deleted_class_through_psr4() {
+    let dir = repo(
+        "php",
+        &[
+            (
+                "composer.json",
+                r#"{"autoload":{"psr-4":{"App\\":"app/"},"classmap":["database/seeders"]},
+                   "autoload-dev":{"psr-4":{"Tests\\":"tests/"}}}"#,
+            ),
+            (
+                "app/Models/User.php",
+                "<?php\nnamespace App\\Models;\n\nclass User extends Model {}\n",
+            ),
+            (
+                "app/Models/Model.php",
+                "<?php\nnamespace App\\Models;\n\nabstract class Model {}\n",
+            ),
+            (
+                "app/Http/Controllers/UserController.php",
+                "<?php\nnamespace App\\Http\\Controllers;\n\nuse App\\Models\\User;\nuse App\\Support\\Gone;\n\nclass UserController\n{\n    public function show(int $id): User { return User::find($id); }\n}\n",
+            ),
+            (
+                "database/seeders/DatabaseSeeder.php",
+                "<?php\n\nclass DatabaseSeeder { public function run() { \\App\\Models\\User::factory(); } }\n",
+            ),
+            (
+                "tests/Feature/UserTest.php",
+                "<?php\nnamespace Tests\\Feature;\n\nuse App\\Http\\Controllers\\UserController;\nuse Tests\\TestCase;\n\nclass UserTest extends TestCase\n{\n    public function test_show(): void { (new UserController)->show(1); (new \\DatabaseSeeder)->run(); }\n}\n",
+            ),
+            (
+                "tests/TestCase.php",
+                "<?php\nnamespace Tests;\n\nrequire_once __DIR__ . '/../bootstrap/app.php';\n\nabstract class TestCase {}\n",
+            ),
+            ("bootstrap/app.php", "<?php\nreturn 1;\n"),
+            ("resources/views/home.blade.php", "<div>{{ $user->name }}</div>\n"),
+        ],
+    );
+    let mut s = scan(&dir);
+    let test = "tests/Feature/UserTest.php";
+    assert!(
+        depends(&s, test, "app/Models/Model.php"),
+        "through the controller and the model"
+    );
+    assert!(
+        depends(&s, test, "database/seeders/DatabaseSeeder.php"),
+        "a classmap class, by its declaration"
+    );
+    assert!(
+        depends(&s, test, "bootstrap/app.php"),
+        "through the test case's require"
+    );
+    assert_eq!(
+        deps(&s, "app/Http/Controllers/UserController.php"),
+        [("app/Models/User.php".to_string(), EdgeKind::Import)]
+    );
+    let php = s.providers.iter().find(|p| p.id == "php").unwrap();
+    assert_eq!((php.files, php.edges), (7, 7));
+    assert!(s.graph.id("resources/views/home.blade.php").is_some());
+    let ids = fairlead_lang::deleted::attach_deleted(
+        &mut s,
+        &Config::default().graph,
+        &["app/Support/Gone.php".to_string()],
+    );
+    let importers: Vec<String> = s
+        .graph
+        .importers(ids[0])
+        .into_iter()
+        .map(|(f, _)| s.graph.files[f as usize].clone())
+        .collect();
+    assert_eq!(importers, ["app/Http/Controllers/UserController.php"]);
+}
+
+#[test]
+fn go_imports_reach_every_file_of_a_package_across_replaced_modules_embeds_and_vendor() {
+    let dir = repo(
+        "go",
+        &[
+            (
+                "app/go.mod",
+                "module example.com/app\n\nrequire example.com/lib v0.0.0\n\nreplace example.com/lib => ../lib\n",
+            ),
+            (
+                "app/server.go",
+                "package app\n\nimport (\n\t\"embed\"\n\t\"example.com/lib/money\"\n\t\"github.com/vend/thing\"\n)\n\n//go:embed templates static/*.css\nvar files embed.FS\n\nvar _ = money.Add\nvar _ = thing.X\n",
+            ),
+            ("app/server_test.go", "package app\n\nimport \"testing\"\n\nfunc TestServe(t *testing.T) {}\n"),
+            ("app/helpers_test.go", "package app\n"),
+            ("app/templates/home.html", "<p>home</p>\n"),
+            ("app/static/site.css", "p {}\n"),
+            ("app/static/site.js", "\n"),
+            ("app/vendor/github.com/vend/thing/thing.go", "package thing\n\nvar X = 1\n"),
+            ("lib/go.mod", "module example.com/lib\n"),
+            ("lib/money/add.go", "package money\n\nfunc Add(a, b int) int { return round(a + b) }\n"),
+            ("lib/money/round.go", "package money\n\nfunc round(x int) int { return x }\n"),
+            ("lib/money/add_test.go", "package money_test\n\nimport \"example.com/lib/money\"\n\nvar _ = money.Add\n"),
+        ],
+    );
+    let s = scan(&dir);
+    let paths =
+        |from: &str| -> Vec<String> { deps(&s, from).into_iter().map(|(f, _)| f).collect() };
+    assert_eq!(
+        paths("app/server.go"),
+        [
+            "app/static/site.css",
+            "app/templates/home.html",
+            "app/vendor/github.com/vend/thing/thing.go",
+            "lib/money/add.go",
+            "lib/money/round.go",
+        ],
+        "a package from another module, embedded files, and the module's vendor/"
+    );
+    assert_eq!(
+        paths("app/server_test.go"),
+        ["app/helpers_test.go", "app/server.go"],
+        "a test is compiled with every file of its directory"
+    );
+    assert!(depends(&s, "lib/money/add_test.go", "lib/money/round.go"));
+    assert!(depends(&s, "app/server_test.go", "lib/money/round.go"));
+    let go = s.providers.iter().find(|p| p.id == "go").unwrap();
+    assert_eq!(go.files, 7);
+}
+
+#[test]
+fn python_imports_reach_modules_their_packages_and_a_test_its_conftests() {
+    let dir = repo(
+        "python",
+        &[
+            ("pyproject.toml", "[project]\nname = \"shop\"\n"),
+            ("src/shop/__init__.py", "from .cart import Cart\n"),
+            (
+                "src/shop/cart.py",
+                "from . import pricing\nfrom .pricing import total\n",
+            ),
+            (
+                "src/shop/pricing/__init__.py",
+                "from .rounding import round_up\n",
+            ),
+            (
+                "src/shop/pricing/rounding.py",
+                "def round_up(x):\n    return x\n",
+            ),
+            ("src/shop/pricing/tax.py", "RATE = 0.15\n"),
+            ("conftest.py", "import pytest\n"),
+            ("tests/conftest.py", "from shop.pricing import tax\n"),
+            (
+                "tests/unit/test_cart.py",
+                "import os\nfrom shop.cart import Cart\n\nDATA = 'tests/data/basket.json'\n",
+            ),
+            ("tests/data/basket.json", "{}\n"),
+            ("tests/unit/test_nothing.py", "import json\n"),
+        ],
+    );
+    let s = scan(&dir);
+    let paths =
+        |from: &str| -> Vec<String> { deps(&s, from).into_iter().map(|(f, _)| f).collect() };
+    assert_eq!(
+        paths("tests/unit/test_cart.py"),
+        [
+            "conftest.py",
+            "src/shop/__init__.py",
+            "src/shop/cart.py",
+            "tests/conftest.py",
+            "tests/data/basket.json",
+        ],
+        "the module, its package, both conftests and the data file it names"
+    );
+    assert_eq!(
+        paths("src/shop/cart.py"),
+        ["src/shop/pricing/__init__.py"],
+        "`from . import pricing` names the subpackage; `from .pricing import total` a name in it"
+    );
+    assert_eq!(
+        paths("tests/conftest.py"),
+        [
+            "conftest.py",
+            "src/shop/__init__.py",
+            "src/shop/pricing/__init__.py",
+            "src/shop/pricing/tax.py"
+        ]
+    );
+    assert!(depends(
+        &s,
+        "tests/unit/test_cart.py",
+        "src/shop/pricing/rounding.py"
+    ));
+    assert!(
+        depends(&s, "tests/unit/test_nothing.py", "src/shop/pricing/tax.py"),
+        "through the conftest"
+    );
+    let py = s.providers.iter().find(|p| p.id == "python").unwrap();
+    assert_eq!(py.files, 9);
+}

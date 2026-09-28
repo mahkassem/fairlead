@@ -107,6 +107,6 @@ fairlead.toml: tests.unreachd: unknown field `unreachd`, expected one of ...
 | `done.on_stop` | `"ask"` | What the Claude Code Stop hook does while the tree hasn't passed: `off`, `ask` (send the agent back once) or `require`. See [The done gate](done.md#the-stop-hook) |
 | `guard.comments` | off | `files`, `exclude`, `tests`, `migrations`, `block_length`, `density`, `history`, `item_codes`, `agent_phrases`, `block_marker`, and `ratchet` (default `false`). See [Guard rules](guard.md#comments) |
 
-Commands are always argv arrays, never shell strings, and `{files}` expands to one argument per file. In `tests.runners.cwd`, `{module}` is the module's root path and `{module.id}` its id.
+Commands are always argv arrays, never shell strings, and `{files}` expands to one argument per file. `{packages}` expands to one `./dir` per directory holding a selected test, or `./...` when everything runs, for `go test`. In `tests.runners.cwd`, `{module}` is the module's root path and `{module.id}` its id.
 
 `config check` validates every key's type, the ids, placeholders and references between sections, and lists test files that match no runner or more than one. In `tests.owners`, a placeholder used in `covers` must be captured in `match`.

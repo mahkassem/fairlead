@@ -1,0 +1,21 @@
+<?xml version="1.0"?>
+<phpunit xmlns="https://schema.phpunit.de/coverage/1.0">
+  <file name="Pricing.php" path="/Billing" hash="ceeb99a9bc9445af83c8f793634b669796b6e7bd">
+    <totals>
+      <lines total="12" comments="0" code="12" executable="1" executed="1" percent="100.00"/>
+      <methods count="1" tested="1" percent="100.00"/>
+      <functions count="0" tested="0" percent="0"/>
+      <classes count="1" tested="1" percent="100.00"/>
+      <traits count="0" tested="0" percent="0"/>
+    </totals>
+    <class name="App\Billing\Pricing" start="5" executable="1" executed="1" crap="1">
+      <namespace name="App\Billing"/>
+      <method name="total" signature="total(array $items): int" start="7" end="10" crap="1" executable="1" executed="1" coverage="100"/>
+    </class>
+    <coverage>
+      <line nr="9">
+        <covered by="Tests\Unit\PricingTest::test_total" count="1"/>
+      </line>
+    </coverage>
+    </file>
+</phpunit>

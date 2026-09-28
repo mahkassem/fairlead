@@ -65,25 +65,50 @@ impl Job {
 
 /// The log lines worth keeping for extraction: each `FAIL`, `●` or bun
 /// `(fail)` line and the two after it, the bun file header a failure sits
-/// under, and bun's summary line, which ends what the extractor reads. Capped
-/// so one noisy job can't bloat the dataset.
+/// under, and bun's summary line, which ends what the extractor reads.
+/// PHPUnit's section headers and numbered failures, and Pest's `FAILED`,
+/// keep the frames after them. Capped so one noisy job can't bloat the dataset.
 pub fn log_excerpt(log: &str) -> Vec<String> {
     const AFTER: usize = 2;
     const CAP: usize = 400;
     let lines: Vec<&str> = log.lines().collect();
     let mut keep = BTreeSet::new();
     let mut header = None;
+    let mut frames_until = 0;
     for (i, line) in lines.iter().enumerate() {
         let cleaned = clean(line);
         if bun_header(&cleaned).is_some() {
             header = Some(i);
         }
         let unhandled = cleaned.trim() == "# Unhandled error between tests";
-        if line.contains("FAIL") || line.contains('●') || line.contains("(fail)") || unhandled {
+        let pytest_error =
+            cleaned.trim_start().starts_with("ERROR ") || cleaned.contains(" ERROR collecting ");
+        if line.contains("FAIL")
+            || line.contains('●')
+            || line.contains("(fail)")
+            || unhandled
+            || pytest_error
+        {
             keep.extend(i..(i + 1 + AFTER).min(lines.len()));
             keep.extend(header.filter(|_| line.contains("(fail)") || unhandled));
         }
         if cleaned.trim_end().ends_with("failed:") {
+            keep.insert(i);
+        }
+        if let Some(name) = cleaned.trim_start().strip_prefix("--- FAIL: ") {
+            keep.extend(go_run_lines(
+                &lines,
+                i,
+                name.split_whitespace().next().unwrap_or(""),
+            ));
+        }
+        if go_file_line(&cleaned) {
+            keep.insert(i);
+        }
+        if php_failure(&cleaned) {
+            keep.insert(i);
+            frames_until = i + PHP_FRAMES;
+        } else if i <= frames_until && is_php_frame(&cleaned) {
             keep.insert(i);
         }
     }
@@ -91,6 +116,78 @@ pub fn log_excerpt(log: &str) -> Vec<String> {
         .take(CAP)
         .map(|i| lines[i].trim_end().to_string())
         .collect()
+}
+
+/// Under `go test -v` a test's log lines come before its `--- FAIL`: the
+/// lines back to its `=== RUN` that name a test file, and that line.
+fn go_run_lines(lines: &[&str], at: usize, name: &str) -> Vec<usize> {
+    let top = name.split('/').next().unwrap_or(name);
+    let mut out = Vec::new();
+    for j in (at.saturating_sub(50)..at).rev() {
+        let line = clean(lines[j]);
+        let run = line
+            .strip_prefix("=== RUN")
+            .or_else(|| line.strip_prefix("=== CONT"))
+            .map(str::trim);
+        if run == Some(top) {
+            out.push(j);
+            break;
+        }
+        if run.is_some_and(|r| r.split('/').next() == Some(top)) || is_go_logged(&line) {
+            out.push(j);
+        }
+    }
+    out
+}
+
+fn is_go_logged(line: &str) -> bool {
+    line.starts_with(char::is_whitespace)
+        && line
+            .trim_start()
+            .split_once(':')
+            .is_some_and(|(file, rest)| {
+                file.ends_with("_test.go") && rest.starts_with(|c: char| c.is_ascii_digit())
+            })
+}
+
+/// A panic's frame in a test file, or a compile error in one.
+fn go_file_line(line: &str) -> bool {
+    let t = line.trim();
+    let Some((path, rest)) = t.split_once("_test.go:") else {
+        return false;
+    };
+    !path.contains(' ')
+        && rest.starts_with(|c: char| c.is_ascii_digit())
+        && (rest.contains(" +0x")
+            || rest.chars().all(|c| c.is_ascii_digit())
+            || !line.starts_with(char::is_whitespace))
+}
+
+/// How far after a PHP failure its frames are kept.
+const PHP_FRAMES: usize = 400;
+
+/// A PHPUnit section header or numbered failure, or a Pest `FAILED` line.
+fn php_failure(line: &str) -> bool {
+    static FAILURE: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
+    FAILURE
+        .get_or_init(|| {
+            regex::Regex::new(
+                r"^\s*(?:There (?:was|were) \d+ [\w ]+:|\d+\) [\w\\]+::\w|FAILED\s+[\w\\]+ > )",
+            )
+            .expect("built-in pattern compiles")
+        })
+        .is_match(line)
+}
+
+fn is_php_frame(line: &str) -> bool {
+    let line = line.trim();
+    let line = line.strip_prefix("at ").unwrap_or(line);
+    let line = line
+        .trim_start_matches(|c: char| c.is_ascii_digit())
+        .trim_start();
+    line.rsplit_once(".php:").is_some_and(|(path, n)| {
+        !path.contains(' ') && !n.is_empty() && n.chars().all(|c| c.is_ascii_digit())
+    })
 }
 
 /// A hosted runner's image and version, as its log's "Runner Image" group
