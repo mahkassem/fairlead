@@ -12,7 +12,7 @@ use fairlead_core::config::{self, LoadOptions};
 use fairlead_guard::edit::Rebuilt;
 use fairlead_guard::events::{Event, EventLog};
 use fairlead_guard::hook::{self, Request};
-use fairlead_guard::{added, git, Finding, Guard, Source};
+use fairlead_guard::{added, git, head_paths, Finding, Guard, Source};
 use serde_json::Value;
 
 /// A file larger than this is let through unread: a minified bundle would
@@ -175,7 +175,7 @@ fn check_file(
     {
         let existed = match m.base().map(|b| git::merge_base(root, b)) {
             Some(Ok(base)) => git::exists_at(root, &base, &rel),
-            _ => git::in_head(root, &rel),
+            _ => head_paths::exists_at_head(root, &m.dirs(), &rel),
         };
         if existed {
             let text = format!(

@@ -5,7 +5,7 @@
 use std::path::Path;
 use std::process::Command;
 
-fn git(root: &Path, args: &[&str]) -> Result<Vec<u8>, String> {
+pub(crate) fn git(root: &Path, args: &[&str]) -> Result<Vec<u8>, String> {
     let out = Command::new("git")
         .args(args)
         .current_dir(root)
@@ -147,12 +147,6 @@ fn plain(path: std::path::PathBuf) -> std::path::PathBuf {
 /// Whether `path`, relative to `root`, is in `rev`'s tree.
 pub fn exists_at(root: &Path, rev: &str, path: &str) -> bool {
     git(root, &["cat-file", "-e", &format!("{rev}:./{path}")]).is_ok()
-}
-
-/// Whether `path`, relative to `root`, is in HEAD's tree: from the index
-/// when it can say, else from `git`.
-pub fn in_head(root: &Path, path: &str) -> bool {
-    crate::head::in_head(root, path).unwrap_or_else(|| exists_at(root, "HEAD", path))
 }
 
 /// The commit HEAD and `rev` share.

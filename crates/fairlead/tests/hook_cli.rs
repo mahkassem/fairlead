@@ -262,9 +262,12 @@ fn a_command_rule_denies_a_shell_command_with_its_reason() {
 
 #[test]
 fn editing_a_migration_that_exists_is_denied_and_adding_one_is_not() {
-    // The default budget, and no git to start: the check reads `.git`.
+    // The default budget, and no git to start once `guard check` has
+    // listed HEAD's migrations: the hook reads them from `.git`.
     let config = "[guard.migrations]\nfiles = [\"db/*.sql\"]\n";
     let dir = repo("migration", config, &[("db/001.sql", "select 1;\n".into())]);
+    fairlead(&dir, &["guard", "check"]);
+    assert_eq!(cached(&dir), vec![head_id(&dir)]);
     let existing =
         json!({"file_path": dir.join("db/001.sql"), "old_string": "1", "new_string": "2"});
     let answer = hook_without_git(&dir, call(&dir, "Edit", existing)).unwrap();
@@ -282,6 +285,79 @@ fn editing_a_migration_that_exists_is_denied_and_adding_one_is_not() {
     std::fs::write(dir.join("db/002.sql"), "select 2;\n").unwrap();
     git(&dir, &["add", "db/002.sql"]);
     assert_eq!(hook_without_git(&dir, call(&dir, "Write", new)), None);
+}
+
+fn head_id(dir: &Path) -> String {
+    let out = command(dir, "git", &["rev-parse", "HEAD"])
+        .output()
+        .unwrap();
+    String::from_utf8(out.stdout).unwrap().trim().to_string()
+}
+
+/// The commits whose migrations are cached, sorted.
+fn cached(dir: &Path) -> Vec<String> {
+    let mut names: Vec<String> = std::fs::read_dir(dir.join(".git/fairlead/head-paths"))
+        .map(|d| {
+            d.map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
+                .collect()
+        })
+        .unwrap_or_default();
+    names.sort();
+    names
+}
+
+#[test]
+fn a_new_head_gets_its_own_list_of_migrations_and_the_answer_follows_it() {
+    let config = "[guard]\nbudget_ms = 10000\n[guard.migrations]\nfiles = [\"db/*.sql\"]\n";
+    let dir = repo(
+        "migration-head",
+        config,
+        &[("db/001.sql", "select 1;\n".into())],
+    );
+    let edit = |name: &str| {
+        let path = dir.join(format!("db/{name}"));
+        call(
+            &dir,
+            "Write",
+            json!({"file_path": path, "content": "select 0;\n"}),
+        )
+    };
+    assert!(
+        hook(&dir, edit("001.sql")).is_some(),
+        "a miss asks git once"
+    );
+    assert_eq!(cached(&dir), vec![head_id(&dir)]);
+    assert_eq!(hook_without_git(&dir, edit("002.sql")), None);
+
+    std::fs::write(dir.join("db/002.sql"), "select 2;\n").unwrap();
+    git(&dir, &["add", "db/002.sql"]);
+    git(&dir, &["commit", "-q", "-m", "second"]);
+    assert!(
+        hook(&dir, edit("002.sql")).is_some(),
+        "002.sql is at HEAD now"
+    );
+    assert!(cached(&dir).contains(&head_id(&dir)));
+    // With the branch's ref packed, and from a linked worktree, HEAD still reads.
+    git(&dir, &["pack-refs", "--all"]);
+    assert!(hook_without_git(&dir, edit("002.sql")).is_some());
+    let worktree = dir.with_extension("wt");
+    let _ = std::fs::remove_dir_all(&worktree);
+    git(
+        &dir,
+        &["worktree", "add", "-q", &worktree.to_string_lossy()],
+    );
+    let path = worktree.join("db/001.sql");
+    let write = json!({"file_path": path, "content": "select 0;\n"});
+    assert!(hook_without_git(&worktree, call(&worktree, "Write", write)).is_some());
+
+    for n in 3..8 {
+        std::fs::write(dir.join(format!("db/00{n}.sql")), "select;\n").unwrap();
+        git(&dir, &["add", "-A"]);
+        git(&dir, &["commit", "-q", "-m", "more"]);
+        hook(&dir, edit("001.sql"));
+    }
+    let kept = cached(&dir);
+    assert!(kept.len() <= 4 && kept.contains(&head_id(&dir)), "{kept:?}");
 }
 
 #[test]
