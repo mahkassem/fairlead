@@ -38,6 +38,11 @@ pub enum ReplayAction {
         /// repeat for several.
         #[arg(long = "workflow", value_name = "NAME")]
         workflows: Vec<String>,
+        /// Also record this event's runs: `push`, the default branch's push
+        /// runs, where a failure the merge's plan left out is an escape.
+        /// Repeat for several; pull_request and merge_group are always read.
+        #[arg(long = "event", value_name = "EVENT")]
+        events: Vec<String>,
     },
     /// Re-plan every recorded failure in the window and report recall.
     Run {
@@ -98,7 +103,16 @@ pub fn run(action: ReplayAction) -> ExitCode {
             clone,
             limit,
             workflows,
-        } => run_fetch(&repo, &data, &since, clone.as_deref(), limit, workflows),
+            events,
+        } => run_fetch(
+            &repo,
+            &data,
+            &since,
+            clone.as_deref(),
+            limit,
+            workflows,
+            events,
+        ),
     };
     match result {
         Ok(()) => ExitCode::SUCCESS,
@@ -116,7 +130,14 @@ fn run_fetch(
     clone: Option<&Path>,
     limit: Option<usize>,
     workflows: Vec<String>,
+    extra: Vec<String>,
 ) -> Result<(), String> {
+    let mut events: Vec<String> = fairlead_replay::fetch::EVENTS.map(String::from).to_vec();
+    for event in extra {
+        if !events.contains(&event) {
+            events.push(event);
+        }
+    }
     let seen = dataset::read(data)?
         .iter()
         .map(|r| (r.run_id, r.attempt))
@@ -129,6 +150,7 @@ fn run_fetch(
         limit,
         workflows,
         until: None,
+        events,
     };
     let (rows, stop) = fairlead_replay::fetch::fetch(&http, &opts, &seen);
     let added = dataset::append(data, &rows)?;

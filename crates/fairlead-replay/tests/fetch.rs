@@ -26,6 +26,12 @@ impl Http for Recorded {
         if let Some(reply) = self.take_once(key) {
             return Ok(reply);
         }
+        // `<path>#push` answers a listing filtered to that event.
+        if path.contains("event=push") {
+            if let Some(v) = self.responses.get(&format!("{key}#push")) {
+                return Ok(Reply::new(200, v.clone()));
+            }
+        }
         if let Some(status) = self.status.get(key) {
             return Ok(Reply::new(*status, Value::Null));
         }
@@ -192,6 +198,7 @@ fn opts(limit: Option<usize>) -> Options<'static> {
         limit,
         workflows: Vec::new(),
         until: Some("2026-09-30"),
+        events: Vec::new(),
     }
 }
 
@@ -429,4 +436,62 @@ fn retry_after_is_honoured_and_an_exhausted_budget_stops_at_once() {
     let (_, stop) = fetch(&spent, &opts(None), &BTreeSet::new());
     assert!(matches!(stop, Stop::Error(e) if e.contains("API rate limit exceeded")));
     assert!(spent.paused.lock().unwrap().is_empty());
+}
+
+#[test]
+fn a_push_on_the_default_branch_is_a_row_with_the_pull_request_that_merged_it() {
+    let mut http = api();
+    http.responses
+        .insert("/repos/o/r".into(), json!({ "default_branch": "main" }));
+    http.responses.insert(
+        "/repos/o/r/actions/runs#push".into(),
+        json!({ "total_count": 1, "workflow_runs": [
+            { "id": 21, "name": "ci", "head_sha": "ccc", "head_branch": "main", "run_attempt": 1, "created_at": "2026-09-22T10:00:00Z" }
+        ]}),
+    );
+    http.responses.insert(
+        "/repos/o/r/actions/runs/21/attempts/1/jobs".into(),
+        json!({ "jobs": [{ "id": 105, "name": "test", "conclusion": "success", "steps": [] }] }),
+    );
+    http.responses.insert(
+        "/repos/o/r/commits/ccc/pulls".into(),
+        json!([
+            { "number": 9, "merge_commit_sha": "other", "base": { "ref": "main" } },
+            { "number": 8, "merge_commit_sha": "ccc", "base": { "ref": "main" } }
+        ]),
+    );
+    let opts = Options {
+        events: vec!["push".into()],
+        ..opts(None)
+    };
+    let (rows, stop) = fetch(&http, &opts, &BTreeSet::new());
+    assert_eq!(stop, Stop::Complete);
+    let pushed: Vec<_> = rows.iter().filter(|r| r.event == "push").collect();
+    assert_eq!(pushed.len(), 1, "{rows:?}");
+    assert_eq!((pushed[0].run_id, pushed[0].pr), (21, Some(8)));
+    assert_eq!(
+        pushed[0].base_sha, None,
+        "without a clone the replay finds the parent"
+    );
+    let asked = http.asked.lock().unwrap();
+    assert!(
+        asked.iter().any(|p| p.contains("event=push&branch=main")),
+        "{asked:?}"
+    );
+    assert!(
+        !asked.iter().any(|p| p.contains("event=pull_request")),
+        "only the events asked for"
+    );
+}
+
+#[test]
+fn an_event_replay_does_not_record_stops_the_fetch() {
+    let http = api();
+    let opts = Options {
+        events: vec!["schedule".into()],
+        ..opts(None)
+    };
+    let (rows, stop) = fetch(&http, &opts, &BTreeSet::new());
+    assert!(rows.is_empty());
+    assert!(matches!(stop, Stop::Error(e) if e.contains("`schedule`")));
 }

@@ -15,7 +15,9 @@ use regex::Regex;
 use crate::attribute::{attribute, Attribution, Repo};
 use crate::dataset::{Job, Row};
 use crate::extract::{extract, Extractor};
-use crate::git::{first_parent_before, has_commit, merge_base, patch_id, tree_of, Worktree};
+use crate::git::{
+    first_parent, first_parent_before, has_commit, merge_base, patch_id, tree_of, Worktree,
+};
 use crate::window::Window;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -517,12 +519,17 @@ fn replay_row(r: &Replayer, row: &Row, all: &[&Row], out: &mut Replayed) {
     }
 }
 
-/// The recorded base, or for a row without one (its pull request wasn't
-/// found), the default branch as it stood when the run started.
+/// The recorded base, or for a row without one: a push's first parent, the
+/// diff its pull request's plan saw at merge time; else (the pull request
+/// wasn't found) the default branch as it stood when the run started.
 fn base_of(r: &Replayer, row: &Row) -> Option<String> {
-    row.base_sha
-        .clone()
-        .or_else(|| first_parent_before(r.clone, "refs/remotes/origin/HEAD", &row.created_at))
+    if let Some(base) = &row.base_sha {
+        return Some(base.clone());
+    }
+    if row.event == "push" {
+        return first_parent(r.clone, &row.head_sha);
+    }
+    first_parent_before(r.clone, "refs/remotes/origin/HEAD", &row.created_at)
 }
 
 fn passed_on_another_attempt(row: &Row, job: &Job, all: &[&Row]) -> bool {
@@ -540,6 +547,9 @@ fn passed_on_another_attempt(row: &Row, job: &Job, all: &[&Row]) -> bool {
 /// the same head, or a head whose diff from its merge base has the same
 /// patch id (a rebase). The change can't be what failed.
 fn passed_with_same_change(r: &Replayer, row: &Row, base: &str, job: &Job, all: &[&Row]) -> bool {
+    if row.event == "push" {
+        return passed_on_same_tree(r, row, job, all);
+    }
     let Some(pr) = row.pr else {
         return false;
     };
@@ -562,5 +572,25 @@ fn passed_with_same_change(r: &Replayer, row: &Row, base: &str, job: &Job, all: 
             .and_then(|mb| patch_id(r.clone, &mb, &other.head_sha));
         let ours = ours.get_or_insert_with(|| patch_id(r.clone, base, &row.head_sha));
         theirs.is_some() && &theirs == ours
+    })
+}
+
+/// A later push of the same tree passed the job, so the tree can't be what
+/// failed: a revert and reland, or a re-run the history recorded as a new run.
+fn passed_on_same_tree(r: &Replayer, row: &Row, job: &Job, all: &[&Row]) -> bool {
+    let mut ours: Option<Option<String>> = None;
+    all.iter().any(|other| {
+        let passed = other.event == "push"
+            && other.run_id != row.run_id
+            && other.created_at > row.created_at
+            && other
+                .jobs
+                .iter()
+                .any(|j| j.name == job.name && j.conclusion == "success");
+        if !passed {
+            return false;
+        }
+        let ours = ours.get_or_insert_with(|| tree_of(r.clone, &row.head_sha));
+        ours.is_some() && &tree_of(r.clone, &other.head_sha) == ours
     })
 }

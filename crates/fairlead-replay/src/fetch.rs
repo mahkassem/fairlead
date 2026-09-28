@@ -1,5 +1,6 @@
 //! `replay fetch`: every completed pull request and merge queue run in the
-//! window, each attempt as its own row, so a job that failed and then passed
+//! window, and with `push` the default branch's push runs, each attempt as
+//! its own row, so a job that failed and then passed
 //! on a re-run is visible as flaky. Failed jobs keep their failure-level
 //! annotations and log excerpts; rows already recorded are skipped before
 //! any of their jobs are fetched, so weekly runs stay incremental.
@@ -18,7 +19,10 @@ const PER_PAGE: usize = 100;
 /// GitHub stops adding annotations past a per-step limit; a job with this
 /// many may be missing some.
 const ANNOTATION_CAP: usize = 10;
-const EVENTS: [&str; 2] = ["pull_request", "merge_group"];
+/// The events recorded unless others are asked for.
+pub const EVENTS: [&str; 2] = ["pull_request", "merge_group"];
+/// Every event a row can come from.
+pub const KNOWN_EVENTS: [&str; 3] = ["pull_request", "merge_group", "push"];
 
 pub struct Options<'a> {
     pub repo: &'a str,
@@ -32,6 +36,8 @@ pub struct Options<'a> {
     pub workflows: Vec<String>,
     /// The last day to list; the listing runs to the present without one.
     pub until: Option<&'a str>,
+    /// The events to record, from `KNOWN_EVENTS`; `EVENTS` when empty.
+    pub events: Vec<String>,
 }
 
 /// Why a fetch stopped.
@@ -201,6 +207,53 @@ struct Lookups {
     default_branch: Option<Option<String>>,
 }
 
+impl Lookups {
+    fn branch(&mut self, http: &dyn Http, repo: &str) -> Result<Option<String>, String> {
+        if let Some(cached) = &self.default_branch {
+            return Ok(cached.clone());
+        }
+        let branch = default_branch(http, repo)?;
+        self.default_branch = Some(branch.clone());
+        Ok(branch)
+    }
+}
+
+fn plain_ref(s: &str) -> bool {
+    !s.is_empty()
+        && s.chars()
+            .all(|c| c.is_ascii_alphanumeric() || "._-/".contains(c))
+}
+
+/// A push's pull request, the one that merged it when the commit has
+/// several, and its base: the pushed commit's first parent, the branch as
+/// it stood before the merge.
+fn push_pull_and_base(
+    http: &dyn Http,
+    opts: &Options,
+    sha: &str,
+    lookups: &mut Lookups,
+) -> Result<(Option<u64>, Option<String>), String> {
+    let pr = match lookups.pulls.get(sha) {
+        Some(found) => found.as_ref().map(|(n, _)| *n),
+        None => {
+            let pulls = get_gone_ok(http, &format!("/repos/{}/commits/{sha}/pulls", opts.repo))?;
+            let pulls = pulls.as_array().cloned().unwrap_or_default();
+            let found = pulls
+                .iter()
+                .find(|p| str_of(p, "merge_commit_sha") == sha)
+                .or(pulls.first())
+                .and_then(number_and_base);
+            lookups.pulls.insert(sha.to_string(), found.clone());
+            found.map(|(n, _)| n)
+        }
+    };
+    let base = opts.clone.and_then(|clone| {
+        let _ = git(clone, &["fetch", "-q", "origin", "--end-of-options", sha]);
+        git(clone, &["rev-parse", "--verify", "-q", &format!("{sha}^1")]).filter(|s| !s.is_empty())
+    });
+    Ok((pr, base))
+}
+
 /// The base branch's first-parent commit when the run started.
 fn base_at(clone: &Path, branch: &str, created_at: &str) -> Option<String> {
     git(
@@ -269,12 +322,17 @@ fn job_of(http: &dyn Http, repo: &str, job: &Value) -> Result<Job, String> {
 
 /// Runs of the named workflows, or of every workflow when none is named.
 /// Listing per workflow spends no requests on the others.
-fn runs(http: &dyn Http, opts: &Options, event: &str) -> Result<Vec<Value>, String> {
+fn runs(http: &dyn Http, opts: &Options, event: &str, branch: &str) -> Result<Vec<Value>, String> {
+    let filter = if branch.is_empty() {
+        format!("event={event}")
+    } else {
+        format!("event={event}&branch={branch}")
+    };
     if opts.workflows.is_empty() {
         return runs_at(
             http,
             opts,
-            event,
+            &filter,
             &format!("/repos/{}/actions/runs", opts.repo),
         );
     }
@@ -288,14 +346,14 @@ fn runs(http: &dyn Http, opts: &Options, event: &str) -> Result<Vec<Value>, Stri
             return Err(format!("`{workflow}` isn't a workflow file name or id"));
         }
         let at = format!("/repos/{}/actions/workflows/{workflow}/runs", opts.repo);
-        all.extend(runs_at(http, opts, event, &at)?);
+        all.extend(runs_at(http, opts, &filter, &at)?);
     }
     Ok(all)
 }
 
 /// One listing query returns at most 1,000 runs, so the window is listed a
 /// week at a time.
-fn runs_at(http: &dyn Http, opts: &Options, event: &str, at: &str) -> Result<Vec<Value>, String> {
+fn runs_at(http: &dyn Http, opts: &Options, filter: &str, at: &str) -> Result<Vec<Value>, String> {
     let mut all = Vec::new();
     let mut from = opts.since.to_string();
     loop {
@@ -307,7 +365,7 @@ fn runs_at(http: &dyn Http, opts: &Options, event: &str, at: &str) -> Result<Vec
         };
         for page in 1.. {
             let path = format!(
-                "{at}?event={event}&status=completed&created={created}&per_page={PER_PAGE}&page={page}"
+                "{at}?{filter}&status=completed&created={created}&per_page={PER_PAGE}&page={page}"
             );
             let body = get(http, &path)?;
             let batch = body
@@ -353,8 +411,39 @@ pub fn fetch(http: &dyn Http, opts: &Options, seen: &BTreeSet<(u64, u32)>) -> (V
     let mut rows = Vec::new();
     let mut seen = seen.clone();
     let mut lookups = Lookups::default();
-    for event in EVENTS {
-        let listed = match runs(http, opts, event) {
+    let events: Vec<&str> = if opts.events.is_empty() {
+        EVENTS.to_vec()
+    } else {
+        opts.events.iter().map(String::as_str).collect()
+    };
+    for event in events {
+        if !KNOWN_EVENTS.contains(&event) {
+            return (
+                rows,
+                Stop::Error(format!(
+                    "`{event}` isn't an event replay records; use {}",
+                    KNOWN_EVENTS.join(", ")
+                )),
+            );
+        }
+        // Only the default branch's pushes: that's where a merged change lands.
+        let branch = if event == "push" {
+            match lookups.branch(http, opts.repo) {
+                Ok(Some(b)) if plain_ref(&b) => b,
+                Ok(_) => {
+                    return (
+                        rows,
+                        Stop::Error(
+                            "the repository has no default branch to read pushes from".into(),
+                        ),
+                    )
+                }
+                Err(e) => return (rows, Stop::Error(e)),
+            }
+        } else {
+            String::new()
+        };
+        let listed = match runs(http, opts, event, &branch) {
             Ok(r) => r,
             Err(e) => return (rows, Stop::Error(e)),
         };
@@ -404,7 +493,9 @@ fn row_of(
         .flatten()
         .map(|j| job_of(http, opts.repo, j))
         .collect::<Result<Vec<Job>, String>>()?;
-    let (pr, base_sha) = if event == "merge_group" {
+    let (pr, base_sha) = if event == "push" {
+        push_pull_and_base(http, opts, &head_sha, lookups)?
+    } else if event == "merge_group" {
         merge_queue_branch(str_of(run, "head_branch"))
             .map_or((None, None), |(n, sha)| (Some(n), Some(sha)))
     } else {
@@ -419,14 +510,7 @@ fn row_of(
         let branch = match &found {
             Some((_, branch)) => Some(branch.clone()),
             None if opts.clone.is_none() => None,
-            None => match &lookups.default_branch {
-                Some(cached) => cached.clone(),
-                None => {
-                    let branch = default_branch(http, opts.repo)?;
-                    lookups.default_branch = Some(branch.clone());
-                    branch
-                }
-            },
+            None => lookups.branch(http, opts.repo)?,
         };
         let base = branch
             .zip(opts.clone)

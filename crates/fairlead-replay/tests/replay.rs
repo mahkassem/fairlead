@@ -711,3 +711,87 @@ fn a_quarantine_entry_applies_only_while_the_dataset_bears_it_out() {
         "a test that no longer fails makes the entry stale"
     );
 }
+
+#[test]
+fn a_default_branch_push_is_judged_by_its_merge_and_a_failure_it_left_out_is_an_escape() {
+    let dir = std::env::temp_dir().join(format!("fairlead-replay-push-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    git(&dir, &["init", "-q", "-b", "main"]);
+    write(&dir, "src/a.ts", "export const a = 1;\n");
+    write(&dir, "src/b.ts", "export const b = 1;\n");
+    write(&dir, "test/a.test.ts", "import { a } from '../src/a';\n");
+    write(&dir, "test/b.test.ts", "import { b } from '../src/b';\n");
+    commit(&dir, "base");
+    let merge = |branch: &str, value: u32| {
+        git(&dir, &["checkout", "-q", "-b", branch]);
+        write(&dir, "src/a.ts", &format!("export const a = {value};\n"));
+        commit(&dir, branch);
+        git(&dir, &["checkout", "-q", "main"]);
+        git(&dir, &["merge", "-q", "--no-ff", "-m", branch, branch]);
+        git(&dir, &["rev-parse", "HEAD"])
+    };
+    let first = merge("pr1", 2);
+    let second = merge("pr2", 3);
+    git(&dir, &["revert", "--no-edit", "-m", "1", &second]);
+    git(&dir, &["revert", "--no-edit", "HEAD"]);
+    let relanded = git(&dir, &["rev-parse", "HEAD"]);
+    let third = merge("pr3", 4);
+    let fail_a = " FAIL  test/a.test.ts > a works";
+    let fail_b = " FAIL  test/b.test.ts > b works";
+    let push = |run: u64, head: &str, day: u32, job: Job| {
+        let mut r = row(run, 1, run, head, "", day, vec![job]);
+        r.event = "push".into();
+        r.pr = None;
+        r.base_sha = None;
+        r
+    };
+    let rows = vec![
+        push(1, &first, 10, job("test", "failure", &[fail_a])),
+        push(2, &second, 11, job("test", "failure", &[fail_b])),
+        push(3, &relanded, 12, job("test", "success", &[])),
+        push(4, &third, 13, job("test", "failure", &[fail_b])),
+    ];
+    let mut config: Config = toml::from_str(CONFIG).unwrap();
+    config.graph.cache = false;
+    let wt_path =
+        std::env::temp_dir().join(format!("fairlead-replay-push-wt-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&wt_path);
+    let replayer = Replayer {
+        clone: &dir,
+        worktree: Worktree::open(&dir, &wt_path, &first).unwrap(),
+        config: &config,
+        sources: Sources::new(&config).unwrap(),
+    };
+    let window = Window::ending("2026-09-16", 7).unwrap();
+    let replayed = replay(&replayer, &rows, &window);
+    let outcomes: Vec<(u64, String)> = replayed
+        .failures
+        .iter()
+        .map(|f| (f.run_id, format!("{:?}", f.outcome)))
+        .collect();
+    assert_eq!(
+        outcomes,
+        [
+            (1, "Hit".to_string()),
+            (2, "Unconfirmed".to_string()),
+            (4, "Miss".to_string())
+        ],
+        "a hit, an escape the relanded tree passed, and an escape"
+    );
+    assert!(
+        replayed.failures.iter().all(|f| f.changed == ["src/a.ts"]),
+        "each push is planned against its first parent: {:?}",
+        replayed.failures
+    );
+    let r = report("example/repo", &window, 30, &replayed);
+    let push = &r.by_event["push"];
+    assert_eq!((push.hits, push.misses, push.unconfirmed), (1, 1, 1));
+    assert_eq!(r.misses[0].event, "push");
+    let text = fairlead_replay::report::text(&r);
+    assert!(
+        text.contains("push (after merge): hits 1  escapes 1  unconfirmed 1"),
+        "{text}"
+    );
+    assert!(text.contains("\n  escape  run 4 attempt 1"), "{text}");
+}
