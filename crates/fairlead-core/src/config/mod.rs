@@ -398,7 +398,7 @@ pub enum Provider {
 pub struct FailureSource {
     /// The runner whose files these failures name.
     pub runner: String,
-    /// A built-in extractor ("vitest", "jest", "bun", "phpunit", "pest") or
+    /// A built-in extractor ("vitest", "jest", "bun", "phpunit", "pest", "go") or
     /// "regex" with `pattern`.
     pub extractor: String,
     /// CI job names this source reads, as a regex.
