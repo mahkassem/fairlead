@@ -5,7 +5,7 @@
 use std::path::Path;
 use std::process::Command;
 
-fn git(root: &Path, args: &[&str]) -> Result<Vec<u8>, String> {
+pub(crate) fn git(root: &Path, args: &[&str]) -> Result<Vec<u8>, String> {
     let out = Command::new("git")
         .args(args)
         .current_dir(root)
@@ -111,15 +111,21 @@ pub fn staged(root: &Path) -> Result<Vec<Staged>, String> {
 /// points. Read from the filesystem, since the write hook can't spare a
 /// `git` process.
 pub fn git_dir(root: &Path) -> Option<std::path::PathBuf> {
+    repo(root).map(|(_, dir)| plain(dir))
+}
+
+/// The worktree's top, canonical, and its git directory.
+pub(crate) fn repo(root: &Path) -> Option<(std::path::PathBuf, std::path::PathBuf)> {
     let root = std::fs::canonicalize(root).ok()?;
     for dir in root.ancestors() {
         let dot = dir.join(".git");
         if dot.is_dir() {
-            return Some(plain(dot));
+            return Some((dir.to_path_buf(), dot));
         }
         if let Ok(text) = std::fs::read_to_string(&dot) {
             let target = text.lines().find_map(|l| l.strip_prefix("gitdir:"))?.trim();
-            return std::fs::canonicalize(dir.join(target)).ok().map(plain);
+            let found = std::fs::canonicalize(dir.join(target)).ok()?;
+            return Some((dir.to_path_buf(), found));
         }
     }
     None

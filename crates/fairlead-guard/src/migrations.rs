@@ -72,6 +72,23 @@ impl Migrations {
         self.immutable
     }
 
+    /// The literal directory each pattern starts with: `db/` for
+    /// `db/*.sql`, and an empty one for a pattern that starts with a wildcard.
+    pub fn dirs(&self) -> Vec<String> {
+        let mut dirs: Vec<String> = self
+            .files
+            .iter()
+            .map(|p| {
+                let glob = p.source();
+                let literal = &glob[..glob.find(['*', '?', '[', '{']).unwrap_or(glob.len())];
+                literal[..literal.rfind('/').map_or(0, |i| i + 1)].to_string()
+            })
+            .collect();
+        dirs.sort();
+        dirs.dedup();
+        dirs
+    }
+
     pub fn covers(&self, path: &str) -> bool {
         self.files.iter().any(|p| p.is_match(path))
     }
@@ -157,6 +174,21 @@ mod tests {
 
     fn paths(list: &[&str]) -> Vec<String> {
         list.iter().map(|s| s.to_string()).collect()
+    }
+
+    #[test]
+    fn each_pattern_gives_the_directory_before_its_first_wildcard() {
+        let globs = ["db/*.sql", "db/schema.sql", "a/b/{x,y}/*.sql", "**/m/*.sql"];
+        let m = Migrations::new(&config::Migrations {
+            files: globs
+                .iter()
+                .map(|g| g.to_string())
+                .collect::<Vec<_>>()
+                .into(),
+            ..config::Migrations::default()
+        })
+        .unwrap();
+        assert_eq!(m.dirs(), paths(&["", "a/b/", "db/"]));
     }
 
     #[test]

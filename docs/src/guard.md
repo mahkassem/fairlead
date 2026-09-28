@@ -211,7 +211,12 @@ denies the edit, and the agent reads the findings as the reason, fixes them
 and writes again. With `on_finding = "warn"` it lets the edit through and
 passes the findings to the agent as a note instead. It never answers
 "allow", which would also skip your own permission prompt. An edit to a
-migration that already exists is denied outright.
+migration that already exists is denied outright. To tell which exist
+without starting `git`, the hook reads HEAD's commit from the ref files and
+keeps the paths under the migration directories for it in
+`.git/fairlead/head-paths/`, for the last four commits; `guard check` and
+the commit stage fill it for the current HEAD, and the hook fills it with
+one `git ls-tree` when HEAD has moved since.
 
 The hook lets a call go ahead, and says so in the event log, when it can't
 decide: the edit's old text isn't in the file or occurs more than once, the

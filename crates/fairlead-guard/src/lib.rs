@@ -13,6 +13,7 @@ pub mod external;
 mod finding;
 mod functions;
 pub mod git;
+pub mod head_paths;
 pub mod hook;
 pub mod lefthook;
 pub mod migrations;

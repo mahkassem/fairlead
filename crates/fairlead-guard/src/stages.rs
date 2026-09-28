@@ -18,6 +18,14 @@ pub struct TreeRules {
     pub notes: Vec<String>,
 }
 
+/// Lists HEAD's migrations for the write hook, which can't spare the
+/// process; at commit that is the parent, which a refused commit keeps.
+fn warm(m: &crate::migrations::Migrations, root: &Path) {
+    if m.immutable() {
+        crate::head_paths::warm(root, &m.dirs());
+    }
+}
+
 /// The check stage: migrations over every tracked path, their history
 /// against `base` (the flag, else `guard.migrations.base`), and each
 /// external rule that runs at `check`.
@@ -30,6 +38,7 @@ pub fn tree(
     let mut findings = Vec::new();
     let mut notes = Vec::new();
     if let Some(m) = &guard.migrations {
+        warm(m, root);
         findings.extend(m.prefix_findings(tracked));
         match base.or(m.base()) {
             Some(rev) if m.immutable() => {
@@ -58,6 +67,7 @@ pub fn tree(
 pub fn staged(guard: &Guard, root: &Path, staged: &[String]) -> Result<Vec<Finding>, String> {
     let mut findings = Vec::new();
     if let Some(m) = &guard.migrations {
+        warm(m, root);
         // Before the first commit, or with the base ref not fetched, there's
         // no merge base; HEAD is the nearest thing that existed.
         let (rev, label) = match m.base().map(|b| (git::merge_base(root, b), b)) {
