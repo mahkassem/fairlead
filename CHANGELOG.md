@@ -4,6 +4,8 @@
 
 ### Fixed
 
+- `fairlead hooks install` in a repository that lists Fairlead as a package dependency writes hooks that run the project's own copy: the Claude Code hook calls the binary the npm package unpacked, falling back to the lockfile's package runner (`bun x`, `pnpm exec`, `yarn` or `npx --no-install`), and the lefthook entry runs through that runner. Before, both called `fairlead` by name, which a dev-dependency install doesn't put on the PATH, so the write hook silently let every edit through. `hooks status`, `doctor` and `uninstall` recognise a commit-stage entry run through a package runner or by path.
+- Replay's `bun` extractor counts a test file that failed to load (an import or syntax error, which bun reports as an unhandled error under the file's header with no `(fail)` line) as that file's failure, instead of finding nothing. Datasets fetched before this keep no such lines, so re-fetch to see them.
 - The write hook no longer starts `git` to ask whether a migration exists at HEAD: it reads the index and HEAD's commit from `.git`, and asks `git` only when those can't say for sure (something staged, a split or sparse index, a deltified commit). On a slow machine the old way could run past `guard.budget_ms` and let an edit to an existing migration through.
 
 ## 0.4.2 (2026-09-28)

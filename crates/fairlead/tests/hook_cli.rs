@@ -581,3 +581,69 @@ fn doctor_reports_the_hooks_and_what_the_event_log_recorded() {
         ]
     );
 }
+
+#[cfg(unix)]
+#[test]
+fn a_package_dependency_gets_hooks_that_run_the_projects_own_copy() {
+    let package = r#"{"devDependencies": {"fairlead": "^0.4.0"}}"#;
+    let dir = repo(
+        "package",
+        SIZE,
+        &[
+            ("package.json", package.to_string()),
+            ("bun.lock", String::new()),
+            ("lefthook.yml", LEFTHOOK.to_string()),
+            ("src/a.ts", lines(2)),
+        ],
+    );
+    let (ok, _, err) = fairlead(&dir, &["hooks", "install"]);
+    assert!(ok, "{err}");
+    let added = file(&dir, "lefthook.yml").unwrap();
+    assert!(
+        added.contains("      run: bun x fairlead guard check --staged\n"),
+        "{added}"
+    );
+    let (_, out, _) = fairlead(&dir, &["hooks", "status", "--git"]);
+    assert!(out.contains("the commit stage is in"), "{out}");
+    let (_, out, _) = fairlead(&dir, &["doctor"]);
+    assert!(
+        out.contains("the project's own copy, through `bun x`"),
+        "{out}"
+    );
+
+    let after: Value = serde_json::from_str(&settings(&dir, "settings.json")).unwrap();
+    let shell = after["hooks"]["PreToolUse"][0]["hooks"][0]["command"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    assert!(shell.contains("bun x fairlead guard hook"), "{shell}");
+    // Where the package has unpacked its binary, the hook calls it directly.
+    let unpacked = dir.join("node_modules/fairlead/node_modules/.bin_real");
+    std::fs::create_dir_all(&unpacked).unwrap();
+    std::os::unix::fs::symlink(env!("CARGO_BIN_EXE_fairlead"), unpacked.join("fairlead")).unwrap();
+    let path = dir.join("src/a.ts");
+    let input = call(
+        &dir,
+        "Write",
+        json!({"file_path": path, "content": lines(4)}),
+    );
+    let mut child = command(&dir, "sh", &["-c", &shell])
+        .env("CLAUDE_PROJECT_DIR", &dir)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .spawn()
+        .unwrap();
+    child
+        .stdin
+        .take()
+        .unwrap()
+        .write_all(input.to_string().as_bytes())
+        .unwrap();
+    let (ok, out, _) = text(child.wait_with_output().unwrap());
+    assert!(ok, "the command always exits 0");
+    let answer: Value = serde_json::from_str(out.trim()).unwrap();
+    assert_eq!(answer["hookSpecificOutput"]["permissionDecision"], "deny");
+
+    assert!(fairlead(&dir, &["hooks", "uninstall"]).0);
+    assert_eq!(file(&dir, "lefthook.yml").unwrap(), LEFTHOOK);
+}
