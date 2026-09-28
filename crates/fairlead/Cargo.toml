@@ -17,11 +17,11 @@ path = "src/main.rs"
 
 [dependencies]
 clap = { version = "4", features = ["derive"] }
-fairlead-core = { version = "0.4.1", path = "../fairlead-core" }
-fairlead-lang = { version = "0.4.1", path = "../fairlead-lang" }
-fairlead-tests = { version = "0.4.1", path = "../fairlead-tests" }
-fairlead-replay = { version = "0.4.1", path = "../fairlead-replay" }
-fairlead-guard = { version = "0.4.1", path = "../fairlead-guard" }
+fairlead-core = { version = "0.4.2", path = "../fairlead-core" }
+fairlead-lang = { version = "0.4.2", path = "../fairlead-lang" }
+fairlead-tests = { version = "0.4.2", path = "../fairlead-tests" }
+fairlead-replay = { version = "0.4.2", path = "../fairlead-replay" }
+fairlead-guard = { version = "0.4.2", path = "../fairlead-guard" }
 rayon = "1"
 regex = "1"
 serde = { version = "1", features = ["derive"] }
