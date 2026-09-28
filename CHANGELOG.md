@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### New
+
+- `fairlead replay fetch --event push` also records the default branch's push runs, and `replay run` plans each against its first parent, the diff the merged pull request's plan saw. A failing test that plan left out is reported as an escape, on its own `push (after merge)` line, so a repository whose pull requests run only the plan can still measure what got past it. See [`replay fetch`](https://mahkassem.github.io/fairlead/docs/replay.html#replay-fetch).
+
 ### Fixed
 
 - `fairlead hooks install` in a repository that lists Fairlead as a package dependency writes hooks that run the project's own copy: the Claude Code hook calls the binary the npm package unpacked, falling back to the lockfile's package runner (`bun x`, `pnpm exec`, `yarn` or `npx --no-install`), and the lefthook entry runs through that runner. Before, both called `fairlead` by name, which a dev-dependency install doesn't put on the PATH, so the write hook silently let every edit through. `hooks status`, `doctor` and `uninstall` recognise a commit-stage entry run through a package runner or by path.

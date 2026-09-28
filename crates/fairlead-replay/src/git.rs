@@ -103,6 +103,13 @@ pub fn first_parent_before(clone: &Path, rev: &str, before: &str) -> Option<Stri
     .filter(|s| !s.is_empty())
 }
 
+/// A commit's first parent: for a merge, the branch before it.
+pub fn first_parent(clone: &Path, sha: &str) -> Option<String> {
+    git(clone, &["rev-parse", "--verify", "-q", &format!("{sha}^1")])
+        .ok()
+        .filter(|s| !s.is_empty())
+}
+
 pub fn tree_of(clone: &Path, sha: &str) -> Option<String> {
     git(clone, &["rev-parse", &format!("{sha}^{{tree}}")]).ok()
 }
