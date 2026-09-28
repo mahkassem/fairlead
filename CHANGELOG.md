@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### New
+
+- `fairlead replay run` prints progress on stderr: every 25 planned runs and at least once a minute, with the failures judged, the misses so far and an estimate of the time left, and a line for any run slower than 10 seconds. `--quiet` turns it off; the report doesn't change.
+
 ### Fixed
 
 - `fairlead hooks install` in a repository that lists Fairlead as a package dependency writes hooks that run the project's own copy: the Claude Code hook calls the binary the npm package unpacked, falling back to the lockfile's package runner (`bun x`, `pnpm exec`, `yarn` or `npx --no-install`), and the lefthook entry runs through that runner. Before, both called `fairlead` by name, which a dev-dependency install doesn't put on the PATH, so the write hook silently let every edit through. `hooks status`, `doctor` and `uninstall` recognise a commit-stage entry run through a package runner or by path.

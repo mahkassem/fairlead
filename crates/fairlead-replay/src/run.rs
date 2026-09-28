@@ -324,16 +324,55 @@ fn changed_paths(plan: &Plan) -> Vec<String> {
         .collect()
 }
 
+/// Where a replay has got to, after each failed run it planned.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Progress {
+    pub planned: usize,
+    /// Failed runs in the window, the ones there are to plan.
+    pub runs: usize,
+    /// Hits and misses so far.
+    pub judged: usize,
+    pub misses: usize,
+    pub run_id: u64,
+    /// How long this run took to plan and judge.
+    pub seconds: f64,
+}
+
 pub fn replay(replayer: &Replayer, rows: &[Row], window: &Window) -> Replayed {
+    replay_with(replayer, rows, window, &mut |_| {})
+}
+
+/// `replay`, calling `progress` after each failed run is planned and judged.
+pub fn replay_with(
+    replayer: &Replayer,
+    rows: &[Row],
+    window: &Window,
+    progress: &mut dyn FnMut(&Progress),
+) -> Replayed {
     let mut out = Replayed::default();
     let mut rows: Vec<&Row> = rows
         .iter()
         .filter(|r| window.contains(&r.created_at))
         .collect();
     rows.sort_by(|a, b| a.created_at.cmp(&b.created_at));
-    for row in rows.iter().filter(|r| r.jobs.iter().any(Job::failed)) {
+    let failed: Vec<&Row> = rows
+        .iter()
+        .copied()
+        .filter(|r| r.jobs.iter().any(Job::failed))
+        .collect();
+    for row in &failed {
         out.runs += 1;
+        let started = Instant::now();
         replay_row(replayer, row, &rows, &mut out);
+        let count = |o: Outcome| out.failures.iter().filter(|f| f.outcome == o).count();
+        progress(&Progress {
+            planned: out.runs,
+            runs: failed.len(),
+            judged: count(Outcome::Hit) + count(Outcome::Miss),
+            misses: count(Outcome::Miss),
+            run_id: row.run_id,
+            seconds: started.elapsed().as_secs_f64(),
+        });
     }
     out.quarantine = crate::quarantine::apply(
         &replayer.sources.quarantine,
