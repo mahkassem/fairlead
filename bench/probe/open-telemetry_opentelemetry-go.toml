@@ -1,0 +1,19 @@
+# open-telemetry/opentelemetry-go's CI: `make test-race` and the coverage and
+# compatibility jobs run `go test` in each of the repository's modules.
+
+[tests]
+match = { replace = ["**/*_test.go"] }
+
+[[tests.runners]]
+id = "go"
+match = ["**/*_test.go"]
+command = ["go", "test", "{packages}"]
+
+[replay]
+window_days = 90
+min_failures = 10
+
+[[replay.failures]]
+runner = "go"
+extractor = "go"
+job = "^(test-race|test-coverage|test-concurrent-safe|compatibility-test)"
