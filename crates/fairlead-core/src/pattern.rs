@@ -17,12 +17,7 @@ pub type Captures = BTreeMap<String, String>;
 
 impl Pattern {
     pub fn new(glob: &str) -> Result<Pattern, String> {
-        let body = translate(glob)?;
-        let regex = Regex::new(&format!("^{body}$")).map_err(|e| format!("`{glob}`: {e}"))?;
-        Ok(Pattern {
-            source: glob.to_string(),
-            regex,
-        })
+        compile(glob, &Captures::new())
     }
 
     pub fn source(&self) -> &str {
@@ -57,20 +52,28 @@ impl Pattern {
     }
 }
 
-/// `glob` with each `{name}` replaced by its captured value.
-pub fn fill(glob: &str, captures: &Captures) -> String {
-    let mut out = glob.to_string();
-    for (name, value) in captures {
-        out = out.replace(&format!("{{{name}}}"), value);
-    }
-    out
+/// `glob` with each `{name}` fixed to its captured value. The value is
+/// matched literally, never as glob syntax, so a segment like `[slug]` or
+/// `{id}` stands for itself.
+pub fn fill(glob: &str, captures: &Captures) -> Result<Pattern, String> {
+    compile(glob, captures)
 }
 
-fn is_capture(inner: &str) -> bool {
+fn compile(glob: &str, values: &Captures) -> Result<Pattern, String> {
+    let body = translate(glob, values)?;
+    let regex = Regex::new(&format!("^{body}$")).map_err(|e| format!("`{glob}`: {e}"))?;
+    Ok(Pattern {
+        source: glob.to_string(),
+        regex,
+    })
+}
+
+/// Whether `{inner}` is a capture; any other brace group is an alternation.
+pub fn is_capture(inner: &str) -> bool {
     !inner.is_empty() && inner.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
 }
 
-fn translate(glob: &str) -> Result<String, String> {
+fn translate(glob: &str, values: &Captures) -> Result<String, String> {
     let chars: Vec<char> = glob.chars().collect();
     let mut out = String::new();
     let mut i = 0;
@@ -101,10 +104,13 @@ fn translate(glob: &str) -> Result<String, String> {
                     .ok_or_else(|| format!("`{glob}`: unclosed `{{`"))?;
                 let inner: String = chars[i + 1..i + close].iter().collect();
                 if is_capture(&inner) {
-                    out.push_str(&format!("(?P<{inner}>[^/]+)"));
+                    match values.get(&inner) {
+                        Some(value) => out.push_str(&regex::escape(value)),
+                        None => out.push_str(&format!("(?P<{inner}>[^/]+)")),
+                    }
                 } else {
                     let alternatives: Result<Vec<String>, String> =
-                        inner.split(',').map(translate).collect();
+                        inner.split(',').map(|a| translate(a, values)).collect();
                     out.push_str(&format!("(?:{})", alternatives?.join("|")));
                 }
                 i += close + 1;
@@ -158,7 +164,20 @@ mod tests {
         let caps = p.captures("services/api/test/a/b.test.ts").unwrap();
         assert_eq!(caps.get("name").map(String::as_str), Some("api"));
         assert!(p.captures("services/a/b/test/x.ts").is_none());
-        assert_eq!(fill("services/{name}/src/**", &caps), "services/api/src/**");
+        let filled = fill("services/{name}/src/**", &caps).unwrap();
+        assert!(filled.is_match("services/api/src/x.ts"));
+        assert!(!filled.is_match("services/web/src/x.ts"));
+    }
+
+    #[test]
+    fn a_filled_value_is_matched_literally_not_as_glob_syntax() {
+        for value in ["[slug]", "{id}", "*", "a?b", "{a,b}"] {
+            let caps = Captures::from([("name".to_string(), value.to_string())]);
+            let filled = fill("pages/{name}/**", &caps).unwrap();
+            assert!(filled.is_match(&format!("pages/{value}/x.ts")), "{value}");
+            assert!(!filled.is_match("pages/s/x.ts"), "{value}");
+            assert!(!filled.is_match("pages/other/x.ts"), "{value}");
+        }
     }
 
     #[test]

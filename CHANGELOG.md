@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- A captured segment containing glob characters, such as `[slug]`, now selects only its own files in owner rules and rule edges; the captured value used to be read as glob syntax. `{foo-bar}` and other brace groups whose name isn't letters, digits and `_` are no longer taken for placeholders by config validation, matching how patterns read them.
+
 ## 0.4.2 (2026-09-28)
 
 ### Fixed

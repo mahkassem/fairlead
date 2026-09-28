@@ -21,8 +21,17 @@ fn problem(key: impl Into<String>, message: impl Into<String>) -> Problem {
     }
 }
 
-/// The `{name}` style placeholders in a pattern.
+/// The `{name}` captures in a glob, by the same rule `Pattern` matches with;
+/// `{foo-bar}` is an alternation of one, not a capture.
 fn placeholders(pattern: &str) -> BTreeSet<String> {
+    let mut found = braces(pattern);
+    found.retain(|inner| crate::pattern::is_capture(inner));
+    found
+}
+
+/// Every `{...}` without a comma, for templates such as `cwd`, which aren't
+/// globs and name `{module.id}`.
+fn braces(pattern: &str) -> BTreeSet<String> {
     let mut found = BTreeSet::new();
     let mut rest = pattern;
     while let Some(open) = rest.find('{') {
@@ -420,7 +429,7 @@ fn runners(config: &Config, problems: &mut Vec<Problem>) {
             problems.push(problem(format!("tests.runners[{i}].match"), "is empty"));
         }
         if let Some(cwd) = &runner.cwd {
-            for name in placeholders(cwd) {
+            for name in braces(cwd) {
                 if !CWD_PLACEHOLDERS.contains(&name.as_str()) {
                     problems.push(problem(
                         format!("tests.runners[{i}].cwd"),
@@ -538,6 +547,20 @@ mod tests {
         assert_eq!(
             found.into_iter().collect::<Vec<_>>(),
             vec!["name".to_string()]
+        );
+    }
+
+    #[test]
+    fn placeholders_are_only_the_names_a_pattern_captures() {
+        let glob = "test/{foo-bar}/{area}/**";
+        let captured = crate::pattern::Pattern::new(glob)
+            .unwrap()
+            .captures_names()
+            .unwrap();
+        assert_eq!(placeholders(glob), captured);
+        assert_eq!(
+            placeholders(glob).into_iter().collect::<Vec<_>>(),
+            vec!["area".to_string()]
         );
     }
 
