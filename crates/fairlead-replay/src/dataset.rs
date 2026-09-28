@@ -44,6 +44,10 @@ pub struct Job {
     pub annotations_capped: bool,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub log: Vec<String>,
+    /// The runner image and its version, `ubuntu-24.04 20260907.1`, from a
+    /// failed job's log header; none for a passing job or a self-hosted runner.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub image: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -87,6 +91,21 @@ pub fn log_excerpt(log: &str) -> Vec<String> {
         .take(CAP)
         .map(|i| lines[i].trim_end().to_string())
         .collect()
+}
+
+/// A hosted runner's image and version, as its log's "Runner Image" group
+/// prints them near the top.
+pub fn runner_image(log: &str) -> Option<String> {
+    let mut image = None;
+    for line in log.lines().take(120).map(clean) {
+        let line = line.trim();
+        if let Some(name) = line.strip_prefix("Image: ") {
+            image = Some(name.trim().to_string());
+        } else if let (Some(name), Some(version)) = (&image, line.strip_prefix("Version: ")) {
+            return Some(format!("{name} {}", version.trim()));
+        }
+    }
+    None
 }
 
 pub fn read(path: &Path) -> Result<Vec<Row>, String> {

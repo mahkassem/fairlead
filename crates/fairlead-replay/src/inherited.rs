@@ -39,7 +39,7 @@ pub struct Group {
     pub would_unconfirmed: usize,
 }
 
-fn judged(outcome: Outcome) -> bool {
+pub(crate) fn judged(outcome: Outcome) -> bool {
     matches!(outcome, Outcome::Hit | Outcome::Miss | Outcome::Unconfirmed)
 }
 
@@ -50,7 +50,7 @@ fn dir_of(path: &str) -> &str {
 /// Whether a change may be what broke `test`: the test itself, or a file
 /// beside it that isn't another test, such as a fixture or a helper. A
 /// sibling test can't break it.
-fn touches(changed: &str, test: &str) -> bool {
+pub(crate) fn touches(changed: &str, test: &str) -> bool {
     let name = changed.rsplit('/').next().unwrap_or(changed);
     let sibling_test = name.contains(".test.") || name.contains(".spec.");
     changed == test
@@ -133,7 +133,7 @@ pub fn apply(failures: &mut [Failure], rows: &[&Row]) -> Vec<Group> {
 /// How many of the pull requests changed no file in common with each other,
 /// taken in order: a stack of related changes shares a cause, so only the
 /// unrelated ones are evidence about the base.
-fn unrelated(failures: &[Failure], members: &[usize]) -> usize {
+pub(crate) fn unrelated(failures: &[Failure], members: &[usize]) -> usize {
     let mut by_pull: BTreeMap<u64, BTreeSet<&str>> = BTreeMap::new();
     for &i in members {
         if let Some(pr) = failures[i].pr {
@@ -268,6 +268,7 @@ mod tests {
                 annotations: Vec::new(),
                 annotations_capped: false,
                 log: Vec::new(),
+                image: None,
             }],
         };
         let mut fs = three();

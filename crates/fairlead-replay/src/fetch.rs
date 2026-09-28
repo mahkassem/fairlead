@@ -282,6 +282,7 @@ fn job_of(http: &dyn Http, repo: &str, job: &Value) -> Result<Job, String> {
         annotations: Vec::new(),
         annotations_capped: false,
         log: Vec::new(),
+        image: None,
     };
     if !out.failed() {
         return Ok(out);
@@ -316,6 +317,7 @@ fn job_of(http: &dyn Http, repo: &str, job: &Value) -> Result<Job, String> {
     })?;
     if let Some(log) = log.body {
         out.log = log_excerpt(&log);
+        out.image = crate::dataset::runner_image(&log);
     }
     Ok(out)
 }

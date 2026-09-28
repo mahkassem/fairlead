@@ -12,4 +12,5 @@ pub mod inherited;
 pub mod quarantine;
 pub mod report;
 pub mod run;
+pub mod waves;
 pub mod window;
