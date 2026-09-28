@@ -4,6 +4,7 @@
 
 mod bench_cmd;
 mod ci_cmd;
+mod done_cmd;
 mod graph_cmd;
 mod guard_cmd;
 mod hook_cmd;
@@ -85,6 +86,12 @@ enum Command {
         /// Override a config value for this run.
         #[arg(long = "set", value_name = "KEY=VALUE", global = true)]
         sets: Vec<String>,
+    },
+    /// Run the gate a change passes before it's finished: its planned tests
+    /// and checks, `done.always` and the guard, recorded against the tree.
+    Done {
+        #[command(flatten)]
+        args: done_cmd::DoneArgs,
     },
     /// Install, check or remove the Claude Code hook that runs the guard.
     Hooks {
@@ -315,6 +322,7 @@ fn main() -> ExitCode {
         Some(Command::Graph { action, sets }) => graph_cmd::run(action, sets, &cwd()),
         Some(Command::Guard { action, sets }) => guard_cmd::run(action, sets, &cwd()),
         Some(Command::Hooks { action }) => hooks_cmd::run(action, &cwd()),
+        Some(Command::Done { args }) => done_cmd::run(args, &cwd()),
         Some(Command::Plan {
             changes,
             json,

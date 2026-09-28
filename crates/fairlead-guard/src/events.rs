@@ -39,6 +39,19 @@ pub struct Event {
     pub fairlead: &'static str,
     #[serde(skip_serializing_if = "std::ops::Not::not")]
     pub truncated: bool,
+    /// The tree a `done` run checked: the plan's tree hash.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tree: Option<String>,
+    /// A `done` run's steps, by id, outcome and seconds; never their output.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub steps: Vec<Step>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct Step {
+    pub id: String,
+    pub passed: bool,
+    pub seconds: f64,
 }
 
 impl Event {
@@ -57,6 +70,8 @@ impl Event {
             ms: (elapsed.as_secs_f64() * 10_000.0).round() / 10.0,
             fairlead: env!("CARGO_PKG_VERSION"),
             truncated: false,
+            tree: None,
+            steps: Vec::new(),
         }
     }
 
@@ -73,6 +88,7 @@ impl Event {
             file: None,
             session: None,
             rules: Vec::new(),
+            steps: Vec::new(),
             truncated: true,
             ..self.clone()
         };
@@ -97,6 +113,12 @@ impl EventLog {
 
     pub fn path(&self) -> PathBuf {
         self.dir.join(FILE)
+    }
+
+    /// The log's text, the kept old file first, so lines run oldest to newest.
+    pub fn read(&self) -> String {
+        let old = std::fs::read_to_string(self.dir.join(OLD_FILE)).unwrap_or_default();
+        old + &std::fs::read_to_string(self.path()).unwrap_or_default()
     }
 
     /// Appends one event, first moving a full log aside so one old file is

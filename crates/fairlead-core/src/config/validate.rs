@@ -453,7 +453,8 @@ fn checks(config: &Config, problems: &mut Vec<Problem>) {
         if check.command.is_empty() {
             problems.push(problem(format!("checks[{i}].command"), "is empty"));
         }
-        if check.paths.is_empty() && check.modules.is_empty() {
+        let always = config.done.always.items().contains(&check.id);
+        if check.paths.is_empty() && check.modules.is_empty() && !always {
             problems.push(problem(
                 format!("checks[{i}]"),
                 "needs `paths` or `modules`, or it never runs",
@@ -532,6 +533,14 @@ fn replay(config: &Config, problems: &mut Vec<Problem>) {
             problems.push(problem(
                 format!("replay.checks[{i}].check"),
                 format!("no check has id `{}`", step.check),
+            ));
+        }
+    }
+    for (i, id) in config.done.always.items().iter().enumerate() {
+        if !check_ids.contains(id.as_str()) {
+            problems.push(problem(
+                format!("done.always[{i}]"),
+                format!("no check has id `{id}`"),
             ));
         }
     }

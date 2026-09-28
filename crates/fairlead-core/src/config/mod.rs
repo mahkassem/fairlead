@@ -74,6 +74,7 @@ pub struct Config {
     pub replay: Replay,
     pub guard: Guard,
     pub hooks: Hooks,
+    pub done: Done,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
@@ -583,6 +584,39 @@ pub enum Findings {
     Added,
     /// Every finding in a file the change touches.
     All,
+}
+
+/// What `fairlead done` runs before a change counts as finished.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields, default)]
+pub struct Done {
+    /// The test files the change's plan selects, or none.
+    pub tests: DoneTests,
+    /// The `[[checks]]` the change's plan selects, or none.
+    pub checks: DoneTests,
+    /// `[[checks]]` ids that run for every change, planned or not.
+    pub always: List<String>,
+    /// `fairlead guard check` over the whole tree, as CI runs it.
+    pub guard: bool,
+}
+
+impl Default for Done {
+    fn default() -> Self {
+        Done {
+            tests: DoneTests::Planned,
+            checks: DoneTests::Planned,
+            always: List::default(),
+            guard: true,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "kebab-case")]
+pub enum DoneTests {
+    #[default]
+    Planned,
+    None,
 }
 
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize, JsonSchema)]
