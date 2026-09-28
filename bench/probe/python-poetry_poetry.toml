@@ -1,5 +1,6 @@
 # python-poetry/poetry's CI: pytest under tests/, one job per OS and Python
-# version, named like "Ubuntu (Python 3.12)".
+# version, named like "Ubuntu (Python 3.12) / pytest"; the "/ mypy" jobs
+# beside them print no test failures.
 
 [tests]
 match = { replace = ["tests/**/test_*.py"] }
@@ -17,4 +18,4 @@ min_failures = 10
 [[replay.failures]]
 runner = "pytest"
 extractor = "pytest"
-job = "\\(Python "
+job = "\\(Python [^)]*\\) / pytest$"
