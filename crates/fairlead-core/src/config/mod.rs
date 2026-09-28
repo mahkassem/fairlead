@@ -359,8 +359,6 @@ impl Default for Plan {
                 "**/vitest.workspace.*",
                 "**/jest.config.*",
                 "**/playwright.config.*",
-                "**/go.mod",
-                "**/go.sum",
                 "go.work",
                 "go.work.sum",
                 "composer.json",

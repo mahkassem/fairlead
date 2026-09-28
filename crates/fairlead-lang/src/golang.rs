@@ -215,6 +215,22 @@ impl Modules {
             .unwrap_or_default()
     }
 
+    /// The `go.mod` and `go.sum` of the module `file` belongs to.
+    pub fn manifests(&self, tree: &Tree, file: &str) -> Vec<String> {
+        let Some(root) = self
+            .roots
+            .iter()
+            .find(|r| r.is_empty() || file.starts_with(&format!("{r}/")))
+        else {
+            return Vec::new();
+        };
+        ["go.mod", "go.sum"]
+            .into_iter()
+            .map(|name| normalize(root, name).unwrap_or_else(|| name.to_string()))
+            .filter(|path| tree.contains(path))
+            .collect()
+    }
+
     /// Every other Go file in `file`'s directory.
     pub fn siblings(&self, file: &str) -> Vec<String> {
         self.dirs

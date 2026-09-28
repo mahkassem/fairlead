@@ -83,7 +83,7 @@ match = ["**/*_test.go"]
 command = ["go", "test", "{packages}"]
 ```
 
-A change to any `go.mod`, `go.sum`, `go.work` or `go.work.sum` runs everything by default (`plan.run_all`), as a lockfile does.
+Each Go file depends on its module's `go.mod` and `go.sum` (edge kind `manifest`), since they pick the versions of everything it imports. A dependency bump in one module therefore selects that module's tests and the tests of every module importing it, not the whole repository. A change to `go.work` or `go.work.sum`, which spans the workspace, runs everything by default (`plan.run_all`), as a lockfile does. To have a `go.mod` change run everything anyway, add `**/go.mod` to `plan.run_all`.
 
 ## Python
 

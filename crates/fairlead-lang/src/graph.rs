@@ -21,6 +21,9 @@ pub enum EdgeKind {
     Provider,
     /// A test ran this file in the coverage map's run.
     Coverage,
+    /// A Go file to its module's `go.mod` and `go.sum`, which pick the
+    /// versions of everything it imports.
+    Manifest,
     /// A `[[graph.edges]]` rule. Last, so an import between the same two
     /// files names itself first.
     Rule,
