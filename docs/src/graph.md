@@ -129,6 +129,38 @@ files = ["**/*.go"]
 
 Build tools that already know their graph plug in the same way, through a command that turns their output into this shape, such as `cargo metadata` for Rust, or a monorepo tool's project graph.
 
+## Coverage maps
+
+Some dependencies only show up when the code runs: a container that builds a class from a string, `importlib.import_module`, framework wiring. A coverage run sees them all. A coverage map records which source files each test ran, and its edges (kind `coverage`) join the static graph. A change reaches a test through either, and a new file the map predates still reaches its tests through its imports. It's off by default, since it needs a full coverage run to make.
+
+Make the map from a coverage run's report, in the same job:
+
+```bash
+# PHPUnit, with pcov or Xdebug
+vendor/bin/phpunit --coverage-xml build/coverage-xml
+fairlead coverage import --format phpunit-xml build/coverage-xml
+
+# pytest
+pytest --cov=src --cov-context=test
+coverage json --show-contexts -o coverage.json
+fairlead coverage import --format coverage-py coverage.json
+```
+
+and name it:
+
+```toml
+[graph.coverage]
+map = ".fairlead/coverage.json"
+max_age_days = 14
+```
+
+- **PHPUnit** names each test `Class::method`, so the test file is the file that declares the class, through the same autoloading as [PHP](#php). **coverage.py** needs the per-test contexts pytest-cov records with `--cov-context=test`; lines run outside any test, such as imports at collection, count for none.
+- **The map** is `{"version": 1, "commit": ..., "created": ..., "source": ..., "tests": {"tests/a_test.py": ["src/a.py", ...]}}`, stamped with the commit it tested and the day it was made. The shape is a public contract, committed as [`coverage-v1.schema.json`](coverage-v1.schema.json), so any tool can write one. A path from another checkout is matched by its longest tail that's a file here.
+- **A map older than `max_age_days`** leaves a `coverage-stale` warning on the plan, naming its date and commit; **one that can't be read** leaves `coverage-unreadable`, and the plan uses the static graph alone. Neither fails the plan. A change to the map itself selects nothing.
+- **`graph stats`** reports the map's edges, tests, source, date and commit, and how many of its pairs name a file no longer in the tree.
+
+Refresh it on a schedule, such as a nightly workflow that runs the suite with coverage, imports the report and commits the map or keeps it where CI can fetch it.
+
 ## Barriers
 
 In a typical server, every area imports a shared module for its routes or its auth, and that module imports every area. A walk through it reaches every test from any change. A barrier stops that:
