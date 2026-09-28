@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.1 (2026-09-28)
+
+### Fixed
+
+- Generated npm packages no longer include `npm-shrinkwrap.json`.
+
 ## 0.4.0 (2026-09-27)
 
 ### New
