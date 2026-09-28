@@ -81,7 +81,14 @@ pub fn log_excerpt(log: &str) -> Vec<String> {
             header = Some(i);
         }
         let unhandled = cleaned.trim() == "# Unhandled error between tests";
-        if line.contains("FAIL") || line.contains('●') || line.contains("(fail)") || unhandled {
+        let pytest_error =
+            cleaned.trim_start().starts_with("ERROR ") || cleaned.contains(" ERROR collecting ");
+        if line.contains("FAIL")
+            || line.contains('●')
+            || line.contains("(fail)")
+            || unhandled
+            || pytest_error
+        {
             keep.extend(i..(i + 1 + AFTER).min(lines.len()));
             keep.extend(header.filter(|_| line.contains("(fail)") || unhandled));
         }

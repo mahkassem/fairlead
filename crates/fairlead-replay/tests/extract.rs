@@ -254,3 +254,38 @@ fn go_test_names_each_failed_test_by_its_logged_file_a_panic_frame_or_a_compile_
         );
     }
 }
+
+#[test]
+fn pytest_reads_its_summary_verbose_lines_and_collection_errors() {
+    let unit = "tests/unit/test_pricing.py";
+    let broken = printed("tests/api/test_broken.py", None, None);
+    let failed = [
+        printed(unit, None, Some("test_total_adds")),
+        printed(unit, None, Some("test_empty_basket")),
+        printed(unit, None, Some("test_baskets")),
+        printed(unit, None, Some("test_half")),
+    ];
+    let mut full = vec![broken.clone()];
+    full.extend(failed.iter().cloned());
+    let mut verbose = failed.to_vec();
+    verbose.push(broken.clone());
+    for (name, expected) in [
+        ("pytest-full.log", full),
+        ("pytest-v.log", verbose),
+        ("pytest-default.log", vec![broken]),
+    ] {
+        let log = fixture(name);
+        assert_eq!(extract(&Extractor::Pytest, &log), expected, "{name}");
+        let excerpt = fairlead_replay::dataset::log_excerpt(&log).join("\n");
+        assert_eq!(
+            extract(&Extractor::Pytest, &excerpt),
+            expected,
+            "{name} excerpt"
+        );
+    }
+    let xdist = "[gw1] [ 50%] FAILED tests/unit/test_pricing.py::TestRounding::test_half[up] \n";
+    assert_eq!(
+        extract(&Extractor::Pytest, xdist),
+        [printed(unit, None, Some("test_half"))]
+    );
+}
