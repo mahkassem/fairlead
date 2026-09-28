@@ -703,3 +703,74 @@ fn go_imports_reach_every_file_of_a_package_across_replaced_modules_embeds_and_v
     let go = s.providers.iter().find(|p| p.id == "go").unwrap();
     assert_eq!(go.files, 7);
 }
+
+#[test]
+fn python_imports_reach_modules_their_packages_and_a_test_its_conftests() {
+    let dir = repo(
+        "python",
+        &[
+            ("pyproject.toml", "[project]\nname = \"shop\"\n"),
+            ("src/shop/__init__.py", "from .cart import Cart\n"),
+            (
+                "src/shop/cart.py",
+                "from . import pricing\nfrom .pricing import total\n",
+            ),
+            (
+                "src/shop/pricing/__init__.py",
+                "from .rounding import round_up\n",
+            ),
+            (
+                "src/shop/pricing/rounding.py",
+                "def round_up(x):\n    return x\n",
+            ),
+            ("src/shop/pricing/tax.py", "RATE = 0.15\n"),
+            ("conftest.py", "import pytest\n"),
+            ("tests/conftest.py", "from shop.pricing import tax\n"),
+            (
+                "tests/unit/test_cart.py",
+                "import os\nfrom shop.cart import Cart\n\nDATA = 'tests/data/basket.json'\n",
+            ),
+            ("tests/data/basket.json", "{}\n"),
+            ("tests/unit/test_nothing.py", "import json\n"),
+        ],
+    );
+    let s = scan(&dir);
+    let paths =
+        |from: &str| -> Vec<String> { deps(&s, from).into_iter().map(|(f, _)| f).collect() };
+    assert_eq!(
+        paths("tests/unit/test_cart.py"),
+        [
+            "conftest.py",
+            "src/shop/__init__.py",
+            "src/shop/cart.py",
+            "tests/conftest.py",
+            "tests/data/basket.json",
+        ],
+        "the module, its package, both conftests and the data file it names"
+    );
+    assert_eq!(
+        paths("src/shop/cart.py"),
+        ["src/shop/pricing/__init__.py"],
+        "`from . import pricing` names the subpackage; `from .pricing import total` a name in it"
+    );
+    assert_eq!(
+        paths("tests/conftest.py"),
+        [
+            "conftest.py",
+            "src/shop/__init__.py",
+            "src/shop/pricing/__init__.py",
+            "src/shop/pricing/tax.py"
+        ]
+    );
+    assert!(depends(
+        &s,
+        "tests/unit/test_cart.py",
+        "src/shop/pricing/rounding.py"
+    ));
+    assert!(
+        depends(&s, "tests/unit/test_nothing.py", "src/shop/pricing/tax.py"),
+        "through the conftest"
+    );
+    let py = s.providers.iter().find(|p| p.id == "python").unwrap();
+    assert_eq!(py.files, 9);
+}

@@ -105,7 +105,7 @@ pub fn fingerprint() -> String {
     let languages = [Grammar::TypeScript, Grammar::Tsx, Grammar::JavaScript]
         .map(language)
         .into_iter()
-        .chain([crate::php::language()]);
+        .chain([crate::php::language(), crate::python::language()]);
     for language in languages {
         let shape = format!(
             "/{}/{}/{}",
@@ -195,6 +195,9 @@ pub fn extract(rel: &str, source: &[u8]) -> Extracted {
     }
     if ext == "go" {
         return crate::golang::extract(source);
+    }
+    if ext == "py" {
+        return crate::python::extract(source);
     }
     let Some(g) = grammar(rel) else {
         return Extracted::default();

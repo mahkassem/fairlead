@@ -13,7 +13,7 @@ use crate::extract::{self, Extracted};
 
 /// Bumped when extraction code changes what it returns for the same bytes;
 /// query, limit and grammar changes are covered by `extract::fingerprint`.
-const EXTRACTOR: u32 = 3;
+const EXTRACTOR: u32 = 4;
 const FILE: &str = "parse-cache.json";
 /// A temp file this old was left by a process that died mid-write.
 const STALE_TMP: Duration = Duration::from_secs(600);

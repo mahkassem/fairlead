@@ -28,6 +28,7 @@ pub enum Extractor {
     Jest,
     Bun,
     Phpunit,
+    Pytest,
     /// Pest, and Laravel's `artisan test`, which prints the same way.
     Pest,
     /// A pattern with a named `file` group, and optionally `project` and `title`.
@@ -41,6 +42,7 @@ impl Extractor {
             ("jest", _) => Ok(Extractor::Jest),
             ("bun", _) => Ok(Extractor::Bun),
             ("phpunit", _) => Ok(Extractor::Phpunit),
+            ("pytest", _) => Ok(Extractor::Pytest),
             ("pest", _) => Ok(Extractor::Pest),
             ("regex", Some(p)) => {
                 let re = Regex::new(p).map_err(|e| format!("replay.failures pattern: {e}"))?;
@@ -51,7 +53,7 @@ impl Extractor {
             }
             ("regex", None) => Err("replay.failures: extractor \"regex\" needs a pattern".into()),
             (other, _) => Err(format!(
-                "unknown extractor `{other}`; use vitest, jest, bun, phpunit, pest or regex"
+                "unknown extractor `{other}`; use vitest, jest, bun, phpunit, pest, pytest or regex"
             )),
         }
     }
@@ -113,6 +115,7 @@ pub fn extract(extractor: &Extractor, log: &str) -> Vec<Printed> {
                 p.title = jest_title(&lines[i + 1..]);
                 p
             }),
+            Extractor::Pytest => pytest(line),
             Extractor::Regex(re) => custom(re, line),
             Extractor::Bun | Extractor::Phpunit | Extractor::Pest => {
                 unreachable!("handled above")
@@ -255,6 +258,43 @@ fn bun(lines: &[String]) -> Vec<Printed> {
         push(&mut out, whole_file(path));
     }
     out
+}
+
+/// pytest's `FAILED path::Class::test[param] - message` and `ERROR path`
+/// summary lines, `-v`'s `path::test FAILED [ 50%]`, xdist's `[gw0]`
+/// prefix, and the `ERROR collecting path` header of a module that failed
+/// to import.
+fn pytest(line: &str) -> Option<Printed> {
+    static SUMMARY: OnceLock<Regex> = OnceLock::new();
+    static COLLECTING: OnceLock<Regex> = OnceLock::new();
+    let summary = re(
+        &SUMMARY,
+        r"^\s*(?:\[gw\d+\]\s+\[\s*\d+%\]\s+)?(?:(?:FAILED|ERROR)\s+(?P<a>[^\s:]+\.py)(?:::(?P<ida>\S+))?(?:\s+-\s.*)?|(?P<b>[^\s:]+\.py)::(?P<idb>\S+)\s+(?:FAILED|ERROR)(?:\s+\[\s*\d+%\])?)\s*$",
+    );
+    let collecting = re(
+        &COLLECTING,
+        r"^_+ ERROR collecting (?P<path>\S+\.py) _+\s*$",
+    );
+    if let Some(c) = collecting.captures(line) {
+        return Some(Printed {
+            path: c["path"].to_string(),
+            project: None,
+            title: None,
+        });
+    }
+    let c = summary.captures(line)?;
+    let path = c.name("a").or(c.name("b"))?.as_str().to_string();
+    let title = c
+        .name("ida")
+        .or(c.name("idb"))
+        .and_then(|id| id.as_str().rsplit("::").next())
+        .map(|t| t.split('[').next().unwrap_or(t).to_string())
+        .filter(|t| !t.is_empty());
+    Some(Printed {
+        path,
+        project: None,
+        title,
+    })
 }
 
 fn custom(re: &Regex, line: &str) -> Option<Printed> {
