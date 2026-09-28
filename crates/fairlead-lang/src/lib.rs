@@ -9,6 +9,7 @@ pub mod golang;
 pub mod graph;
 pub mod php;
 pub mod provider;
+pub mod python;
 pub mod resolve;
 pub mod rules;
 pub mod scan;

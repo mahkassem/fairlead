@@ -346,6 +346,13 @@ impl Default for Plan {
                 "go.work.sum",
                 "composer.json",
                 "composer.lock",
+                "pyproject.toml",
+                "setup.py",
+                "setup.cfg",
+                "requirements*.txt",
+                "poetry.lock",
+                "uv.lock",
+                "Pipfile.lock",
                 ".github/workflows/**",
             ]),
             ignore: strings(&[
@@ -404,7 +411,7 @@ pub enum Provider {
 pub struct FailureSource {
     /// The runner whose files these failures name.
     pub runner: String,
-    /// A built-in extractor ("vitest", "jest", "bun", "phpunit", "pest", "go") or
+    /// A built-in extractor ("vitest", "jest", "bun", "phpunit", "pest", "go", "pytest") or
     /// "regex" with `pattern`.
     pub extractor: String,
     /// CI job names this source reads, as a regex.
