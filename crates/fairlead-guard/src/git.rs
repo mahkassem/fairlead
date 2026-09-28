@@ -111,15 +111,21 @@ pub fn staged(root: &Path) -> Result<Vec<Staged>, String> {
 /// points. Read from the filesystem, since the write hook can't spare a
 /// `git` process.
 pub fn git_dir(root: &Path) -> Option<std::path::PathBuf> {
+    repo(root).map(|(_, dir)| plain(dir))
+}
+
+/// The worktree's top, canonical, and its git directory.
+pub(crate) fn repo(root: &Path) -> Option<(std::path::PathBuf, std::path::PathBuf)> {
     let root = std::fs::canonicalize(root).ok()?;
     for dir in root.ancestors() {
         let dot = dir.join(".git");
         if dot.is_dir() {
-            return Some(plain(dot));
+            return Some((dir.to_path_buf(), dot));
         }
         if let Ok(text) = std::fs::read_to_string(&dot) {
             let target = text.lines().find_map(|l| l.strip_prefix("gitdir:"))?.trim();
-            return std::fs::canonicalize(dir.join(target)).ok().map(plain);
+            let found = std::fs::canonicalize(dir.join(target)).ok()?;
+            return Some((dir.to_path_buf(), found));
         }
     }
     None
@@ -141,6 +147,12 @@ fn plain(path: std::path::PathBuf) -> std::path::PathBuf {
 /// Whether `path`, relative to `root`, is in `rev`'s tree.
 pub fn exists_at(root: &Path, rev: &str, path: &str) -> bool {
     git(root, &["cat-file", "-e", &format!("{rev}:./{path}")]).is_ok()
+}
+
+/// Whether `path`, relative to `root`, is in HEAD's tree: from the index
+/// when it can say, else from `git`.
+pub fn in_head(root: &Path, path: &str) -> bool {
+    crate::head::in_head(root, path).unwrap_or_else(|| exists_at(root, "HEAD", path))
 }
 
 /// The commit HEAD and `rev` share.

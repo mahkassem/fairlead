@@ -52,7 +52,24 @@ fn text(out: Output) -> (bool, String, String) {
 
 /// Runs the hook on one call and returns its answer, if it gave one.
 fn hook(dir: &Path, call: Value) -> Option<Value> {
-    let mut child = command(dir, env!("CARGO_BIN_EXE_fairlead"), &["guard", "hook"])
+    answer(
+        command(dir, env!("CARGO_BIN_EXE_fairlead"), &["guard", "hook"]),
+        call,
+    )
+}
+
+/// The hook with a PATH that holds no `git`, so any process it tries to
+/// start fails.
+fn hook_without_git(dir: &Path, call: Value) -> Option<Value> {
+    let empty = dir.with_extension("nopath");
+    std::fs::create_dir_all(&empty).unwrap();
+    let mut cmd = command(dir, env!("CARGO_BIN_EXE_fairlead"), &["guard", "hook"]);
+    cmd.env("PATH", &empty);
+    answer(cmd, call)
+}
+
+fn answer(mut cmd: Command, call: Value) -> Option<Value> {
+    let mut child = cmd
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -103,7 +120,6 @@ fn repo(name: &str, config: &str, files: &[(&str, String)]) -> PathBuf {
 
 /// Tests judge decisions, not speed, so a slow machine's process start can't
 /// push a call past the budget and let it through.
-const BUDGET: &str = "[guard]\nbudget_ms = 10000\n";
 const SIZE: &str = "[guard]\nbudget_ms = 10000\n[guard.size]\nfiles = [\"src/**\"]\nfile_lines = 3\nratchet = false\n";
 
 fn events(dir: &Path) -> Vec<Value> {
@@ -246,21 +262,26 @@ fn a_command_rule_denies_a_shell_command_with_its_reason() {
 
 #[test]
 fn editing_a_migration_that_exists_is_denied_and_adding_one_is_not() {
-    let config = format!("{BUDGET}[guard.migrations]\nfiles = [\"db/*.sql\"]\n");
-    let dir = repo(
-        "migration",
-        &config,
-        &[("db/001.sql", "select 1;\n".into())],
-    );
+    // The default budget, and no git to start: the check reads `.git`.
+    let config = "[guard.migrations]\nfiles = [\"db/*.sql\"]\n";
+    let dir = repo("migration", config, &[("db/001.sql", "select 1;\n".into())]);
     let existing =
         json!({"file_path": dir.join("db/001.sql"), "old_string": "1", "new_string": "2"});
-    let answer = hook(&dir, call(&dir, "Edit", existing)).unwrap();
+    let answer = hook_without_git(&dir, call(&dir, "Edit", existing)).unwrap();
     assert!(
         reason(&answer).contains("db/001.sql is a migration that already exists"),
         "{answer}"
     );
     let new = json!({"file_path": dir.join("db/002.sql"), "content": "select 2;\n"});
-    assert_eq!(hook(&dir, call(&dir, "Write", new)), None);
+    assert_eq!(
+        hook_without_git(&dir, call(&dir, "Write", new.clone())),
+        None
+    );
+
+    // Staged but not yet committed, a migration is still being added.
+    std::fs::write(dir.join("db/002.sql"), "select 2;\n").unwrap();
+    git(&dir, &["add", "db/002.sql"]);
+    assert_eq!(hook_without_git(&dir, call(&dir, "Write", new)), None);
 }
 
 #[test]

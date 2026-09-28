@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- The write hook no longer starts `git` to ask whether a migration exists at HEAD: it reads the index and HEAD's commit from `.git`, and asks `git` only when those can't say for sure (something staged, a split or sparse index, a deltified commit). On a slow machine the old way could run past `guard.budget_ms` and let an edit to an existing migration through.
+
 ## 0.4.2 (2026-09-28)
 
 ### Fixed

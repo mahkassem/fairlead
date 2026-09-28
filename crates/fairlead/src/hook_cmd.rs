@@ -173,11 +173,11 @@ fn check_file(
         .as_ref()
         .filter(|m| m.immutable() && m.covers(&rel))
     {
-        let base = m
-            .base()
-            .and_then(|b| git::merge_base(root, b).ok())
-            .unwrap_or_else(|| "HEAD".into());
-        if git::exists_at(root, &base, &rel) {
+        let existed = match m.base().map(|b| git::merge_base(root, b)) {
+            Some(Ok(base)) => git::exists_at(root, &base, &rel),
+            _ => git::in_head(root, &rel),
+        };
+        if existed {
             let text = format!(
                 "fairlead guard: {rel} is a migration that already exists, and a database that ran it won't run it again. Add a new migration instead."
             );
