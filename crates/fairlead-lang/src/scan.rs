@@ -10,6 +10,7 @@ use rayon::prelude::*;
 use crate::cache::{self, CacheStats, ParseCache};
 use crate::extract::{extract, Extracted, SpecKind};
 use crate::graph::{EdgeKind, Graph};
+use crate::php;
 use crate::provider;
 use crate::resolve::{Resolver, Target};
 use crate::rules::{RuleStats, Rules};
@@ -28,6 +29,10 @@ struct FileResult {
     unknown: bool,
     fell_back: bool,
     parsed: Option<Parsed>,
+    /// A PHP file's fully qualified references, resolved once every file
+    /// is read, and the names it declares.
+    names: Vec<String>,
+    declares: Vec<String>,
 }
 
 /// A file's extraction, with its cache key when the cache is on.
@@ -109,12 +114,83 @@ pub fn build(root: &Path, config: &Config) -> std::io::Result<Scan> {
         }
     }
     parse_cache.save(used);
-    let before = graph.stats().edges;
+    let autoload = php::Autoload::new(
+        &tree,
+        results
+            .iter()
+            .map(|(f, r)| (f.as_str(), r.declares.as_slice())),
+    );
+    let (builtin_edges, php_edges) = add_results(&tree, &autoload, &mut graph, results);
+    let php_files = sources.iter().filter(|f| is_php(f)).count();
+    let mut providers = vec![provider::Report {
+        id: provider::BUILTIN.into(),
+        files: scanned - php_files,
+        edges: builtin_edges,
+        ignored: 0,
+        failed: None,
+    }];
+    if php_files > 0 {
+        providers.push(provider::Report {
+            id: php::ID.into(),
+            files: php_files,
+            edges: php_edges,
+            ignored: 0,
+            failed: None,
+        });
+    }
+    let uncertain = run_externals(&root, externals, &owner, &mut graph, &mut providers);
+    add_snapshot_edges(&tree, &mut graph);
+    let rules = Rules::new(&config.graph).map_err(std::io::Error::other)?;
+    let rule_stats = rules.apply(&mut graph).map_err(std::io::Error::other)?;
+    let all = 0..graph.files.len() as u32;
+    rules.mark(&mut graph, all);
+    Ok(Scan {
+        tree,
+        graph,
+        packages,
+        cache: stats,
+        rules: rule_stats,
+        providers,
+        conflicts,
+        uncertain,
+    })
+}
+
+fn is_php(file: &str) -> bool {
+    file.ends_with(".php")
+}
+
+/// Adds each file's edges, resolving PHP names now that every declaration
+/// is known; returns the edges added for the built-in scanner and for PHP.
+fn add_results(
+    tree: &Tree,
+    autoload: &php::Autoload,
+    graph: &mut Graph,
+    results: Vec<(String, FileResult)>,
+) -> (usize, usize) {
+    let (mut builtin, mut php_edges) = (0, 0);
     for (file, result) in results {
         let from = graph.id(&file).expect("every source is in the tree");
+        let before = graph.dependencies(from).len();
         for (to, kind) in result.edges {
             if let Some(to) = graph.id(&to) {
                 graph.add_edge(from, to, kind);
+            }
+        }
+        for name in &result.names {
+            match autoload.resolve(tree, name) {
+                php::Resolved::Files(files) => {
+                    let ids: Vec<u32> = files.iter().filter_map(|f| graph.id(f)).collect();
+                    for to in ids {
+                        if to != from {
+                            graph.add_edge(from, to, EdgeKind::Import);
+                        }
+                    }
+                }
+                php::Resolved::Missing(paths) => {
+                    graph.dangling.extend(paths.into_iter().map(|p| (from, p)));
+                }
+                php::Resolved::External => {}
             }
         }
         for package in result.packages {
@@ -135,30 +211,14 @@ pub fn build(root: &Path, config: &Config) -> std::io::Result<Scan> {
         if result.fell_back {
             graph.tsconfig_fallbacks.push(from);
         }
+        let added = graph.dependencies(from).len() - before;
+        if is_php(&file) {
+            php_edges += added;
+        } else {
+            builtin += added;
+        }
     }
-    let mut providers = vec![provider::Report {
-        id: provider::BUILTIN.into(),
-        files: scanned,
-        edges: graph.stats().edges - before,
-        ignored: 0,
-        failed: None,
-    }];
-    let uncertain = run_externals(&root, externals, &owner, &mut graph, &mut providers);
-    add_snapshot_edges(&tree, &mut graph);
-    let rules = Rules::new(&config.graph).map_err(std::io::Error::other)?;
-    let rule_stats = rules.apply(&mut graph).map_err(std::io::Error::other)?;
-    let all = 0..graph.files.len() as u32;
-    rules.mark(&mut graph, all);
-    Ok(Scan {
-        tree,
-        graph,
-        packages,
-        cache: stats,
-        rules: rule_stats,
-        providers,
-        conflicts,
-        uncertain,
-    })
+    (builtin, php_edges)
 }
 
 /// Runs each external provider on the files it claims; returns the files of
@@ -224,7 +284,11 @@ fn scan_file(
         unknown: extracted.unknown_dynamic,
         ..FileResult::default()
     };
-    for (spec, kind) in &extracted.specs {
+    if is_php(file) {
+        result.names = extracted.specs.iter().map(|(n, _)| n.clone()).collect();
+        result.declares = extracted.declares.clone();
+    }
+    for (spec, kind) in extracted.specs.iter().filter(|_| !is_php(file)) {
         if *kind == SpecKind::TypeImport && !type_imports {
             continue;
         }

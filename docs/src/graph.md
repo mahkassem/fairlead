@@ -37,9 +37,33 @@ to = ["apps/api/src/{area}/**"]
 
 Each file matching `from` depends on every file its `to` globs match. A `{name}` stands for one path segment, with the same value on both sides, so `orders.test.ts` and `orders-refunds.test.ts` depend on `src/orders/`. Its value is read from the side where it's a whole segment: `{area}*` alone would also take `orders-refunds` as the name. `config check` refuses a `{name}` that is never a whole segment, or a `to` glob that names different ones than `from` (a `to` with none links to the same files for every match). `graph stats` counts rule edges, and names any rule that linked no file.
 
+## PHP
+
+`.php` files are scanned too (Blade templates, `.blade.php`, are left as plain files), and `graph stats` lists them as the `php` provider. PHP refers to classes by name, not by path, so each reference is first made fully qualified the way PHP does it: through the file's `namespace`, its `use` imports (grouped and aliased ones included), and `\` or `namespace\` prefixes. A file depends on:
+
+- each class it names in a type, `new`, `::`, `extends`, `implements`, a trait `use`, an attribute or `instanceof`, and each name it imports with `use`;
+- each function it calls by name, tried in its namespace and then globally, as PHP does, so a call to a helper reaches the file that declares it;
+- each file an `include` or `require` names with a literal: `'x.php'`, `__DIR__ . '/x.php'` or `dirname(__DIR__, 2) . '/x.php'`; any other string that looks like a path counts as a path literal, as in JavaScript.
+
+A name becomes a file through composer's autoloading, read from every `composer.json` in the tree, so path repositories count: the longest `psr-4` or `psr-0` prefix under `autoload` or `autoload-dev` whose file exists, else any file that declares the class or function, which covers classmaps and `files`. A name under one of the repository's own prefixes that no file declares is kept as the path autoloading would load, so deleting that file still reaches the files that named it. Anything else is a vendor or built-in name and is left out.
+
+PHP tests aren't matched by default. Name them, and the runner that runs them:
+
+```toml
+[tests]
+match = ["tests/**/*Test.php"]
+
+[[tests.runners]]
+id = "phpunit"
+match = ["tests/**/*Test.php"]
+command = ["vendor/bin/phpunit", "{files}"]
+```
+
+In a Laravel application every test boots the app, and booting it loads `bootstrap/app.php`, which names every route file, which names every controller, so a change to one controller reaches every test. That's the safe answer, and the one this gives today. Views, routes, bindings and the other links a framework makes at runtime will come from framework packs, which let a feature test reach the controller behind the route it calls without the walk passing through the app's boot.
+
 ## Other languages: external providers
 
-The built-in scanner reads JavaScript and TypeScript. For any other language, or a build tool that already knows its own graph, a `[[graph.providers]]` entry names a command that prints the graph for the files it claims:
+The built-in scanner reads JavaScript, TypeScript and PHP. For any other language, or a build tool that already knows its own graph, a `[[graph.providers]]` entry names a command that prints the graph for the files it claims:
 
 ```toml
 [[graph.providers]]
@@ -52,7 +76,7 @@ files = ["**/*.go"]
 - **Claims:** a file a provider's `files` match belongs to that provider, and the built-in scanner leaves it alone. When two providers match one file, the one whose pattern has the longer literal part before its first wildcard wins (`src/go/**` over `**/*.go`), the earlier one on a tie, and `graph stats` reports the conflict.
 - **Its edges** count only from files it claims, to files in the tree; the rest are counted as ignored in `graph stats`. They're followed like imports, with their own edge kind, `provider`.
 - **A provider that fails** (it can't start, exits non-zero, runs past `timeout_seconds`, 120 by default, or prints something that isn't a version 1 graph) tells nothing about its files. A change to one of them runs every test, with a `provider-failed` warning naming the provider and why, as other uncertainty does.
-- **`graph stats`** lists each provider with its files and edges, the built-in scanner as `typescript`.
+- **`graph stats`** lists each provider with its files and edges, the built-in scanners as `typescript` and `php`.
 
 Build tools that already know their graph plug in the same way, through a command that turns their output into this shape, such as `go list -deps -json` for Go, `cargo metadata` for Rust, or a monorepo tool's project graph.
 
