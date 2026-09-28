@@ -4,6 +4,12 @@
 
 ### New
 
+- Vue, Svelte and Astro components are in the import graph: each `<script>` block, and Astro's frontmatter, is parsed as its `lang` says, a `<script src>` counts as an import, and a change to a component reaches the tests that import it through other components. On the vitest benchmark, recall is unchanged and the share of plans that ran everything fell from 34.9% to 34.7%.
+
+## Unreleased
+
+### New
+
 - External graph providers: a `[[graph.providers]]` entry names a command that prints `{"version": 1, "edges": [...]}` for the files it claims, so any language or build tool can feed the plan. The built-in JavaScript and TypeScript scanner runs as the `typescript` provider, unchanged. A provider that fails runs every test for a change to its files, with a `provider-failed` warning, and `graph stats` reports each provider's files and edges. The output schema is committed as `provider-v1.schema.json`. See [Other languages](https://mahkassem.github.io/fairlead/docs/graph.html#other-languages-external-providers).
 
 ## 0.5.0 (2026-09-28)
