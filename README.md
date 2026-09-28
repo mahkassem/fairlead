@@ -107,7 +107,7 @@ commands. The [quick start](#quick-start) shows them, and the
 
 ## Status
 
-Pre-alpha. The latest release, v0.4.1, removes `npm-shrinkwrap.json` from the
+Pre-alpha. The latest release, v0.4.2, removes `npm-shrinkwrap.json` from the
 generated npm package. v0.4.0 added guard rules and check, write and commit
 hooks, guard compare and benchmark commands, and layered config environments.
 Recall on real CI failures, with every miss and its cause, is in the
