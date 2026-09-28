@@ -35,6 +35,25 @@ to = ["apps/api/src/{area}/**"]
 
 Each file matching `from` depends on every file its `to` globs match. A `{name}` stands for one path segment, with the same value on both sides, so `orders.test.ts` and `orders-refunds.test.ts` depend on `src/orders/`. Its value is read from the side where it's a whole segment: `{area}*` alone would also take `orders-refunds` as the name. `config check` refuses a `{name}` that is never a whole segment, or a `to` glob that names different ones than `from` (a `to` with none links to the same files for every match). `graph stats` counts rule edges, and names any rule that linked no file.
 
+## Other languages: external providers
+
+The built-in scanner reads JavaScript and TypeScript. For any other language, or a build tool that already knows its own graph, a `[[graph.providers]]` entry names a command that prints the graph for the files it claims:
+
+```toml
+[[graph.providers]]
+id = "go"
+command = ["./tools/go-graph.sh"]
+files = ["**/*.go"]
+```
+
+- **The command** runs at the project root and reads the files it claims on stdin, one per line. It prints `{"version": 1, "edges": [{"from": "pkg/a_test.go", "to": "pkg/a.go"}]}`: repo-relative paths, where `from` depends on `to`. The shape is a public contract, committed as [`provider-v1.schema.json`](provider-v1.schema.json).
+- **Claims:** a file a provider's `files` match belongs to that provider, and the built-in scanner leaves it alone. When two providers match one file, the one whose pattern has the longer literal part before its first wildcard wins (`src/go/**` over `**/*.go`), the earlier one on a tie, and `graph stats` reports the conflict.
+- **Its edges** count only from files it claims, to files in the tree; the rest are counted as ignored in `graph stats`. They're followed like imports, with their own edge kind, `provider`.
+- **A provider that fails** (it can't start, exits non-zero, runs past `timeout_seconds`, 120 by default, or prints something that isn't a version 1 graph) tells nothing about its files. A change to one of them runs every test, with a `provider-failed` warning naming the provider and why, as other uncertainty does.
+- **`graph stats`** lists each provider with its files and edges, the built-in scanner as `typescript`.
+
+Build tools that already know their graph plug in the same way, through a command that turns their output into this shape, such as `go list -deps -json` for Go, `cargo metadata` for Rust, or a monorepo tool's project graph.
+
 ## Barriers
 
 In a typical server, every area imports a shared module for its routes or its auth, and that module imports every area. A walk through it reaches every test from any change. A barrier stops that:

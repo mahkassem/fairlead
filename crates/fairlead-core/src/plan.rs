@@ -146,7 +146,7 @@ pub fn json_schema() -> serde_json::Value {
     sorted(serde_json::to_value(schemars::schema_for!(Plan)).expect("schema serializes"))
 }
 
-fn sorted(value: serde_json::Value) -> serde_json::Value {
+pub(crate) fn sorted(value: serde_json::Value) -> serde_json::Value {
     match value {
         serde_json::Value::Object(map) => {
             let ordered: std::collections::BTreeMap<String, serde_json::Value> =
