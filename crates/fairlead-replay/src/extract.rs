@@ -28,6 +28,8 @@ pub enum Extractor {
     Jest,
     Bun,
     Phpunit,
+    /// `go test`, plain or `-v`, and gotestsum.
+    Go,
     Pytest,
     /// Pest, and Laravel's `artisan test`, which prints the same way.
     Pest,
@@ -42,6 +44,7 @@ impl Extractor {
             ("jest", _) => Ok(Extractor::Jest),
             ("bun", _) => Ok(Extractor::Bun),
             ("phpunit", _) => Ok(Extractor::Phpunit),
+            ("go", _) => Ok(Extractor::Go),
             ("pytest", _) => Ok(Extractor::Pytest),
             ("pest", _) => Ok(Extractor::Pest),
             ("regex", Some(p)) => {
@@ -53,7 +56,7 @@ impl Extractor {
             }
             ("regex", None) => Err("replay.failures: extractor \"regex\" needs a pattern".into()),
             (other, _) => Err(format!(
-                "unknown extractor `{other}`; use vitest, jest, bun, phpunit, pest, pytest or regex"
+                "unknown extractor `{other}`; use vitest, jest, bun, phpunit, pest, go, pytest or regex"
             )),
         }
     }
@@ -101,6 +104,7 @@ pub fn extract(extractor: &Extractor, log: &str) -> Vec<Printed> {
         Extractor::Bun => return bun(&lines),
         Extractor::Phpunit => return crate::phpunit::phpunit(&lines),
         Extractor::Pest => return crate::phpunit::pest(&lines),
+        Extractor::Go => return crate::gotest::gotest(&lines),
         _ => {}
     }
     let mut out: Vec<Printed> = Vec::new();
@@ -117,7 +121,7 @@ pub fn extract(extractor: &Extractor, log: &str) -> Vec<Printed> {
             }),
             Extractor::Pytest => pytest(line),
             Extractor::Regex(re) => custom(re, line),
-            Extractor::Bun | Extractor::Phpunit | Extractor::Pest => {
+            Extractor::Bun | Extractor::Phpunit | Extractor::Pest | Extractor::Go => {
                 unreachable!("handled above")
             }
         };

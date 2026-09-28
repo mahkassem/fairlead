@@ -37,14 +37,27 @@ fn is_absolute(path: &str) -> bool {
 }
 
 /// The longest tail of a runner's path, at a directory boundary, that is a
-/// file in the repository: the checkout's own directories come first.
-fn absolute(path: &str, has: impl Fn(&str) -> bool) -> Attribution {
-    let mut rest = path;
-    while let Some((_, tail)) = rest.split_once('/') {
-        if !tail.is_empty() && has(tail) {
-            return Attribution::File(tail.to_string());
+/// file in the repository: the checkout's own directories come first. A
+/// Go import path's tail may sit below a module's folder, so failing that,
+/// the longest tail of two segments or more that ends exactly one file.
+fn absolute(path: &str, files: &[String], has: impl Fn(&str) -> bool) -> Attribution {
+    let tails: Vec<&str> = path
+        .char_indices()
+        .filter(|&(_, c)| c == '/')
+        .map(|(i, _)| &path[i + 1..])
+        .filter(|t| !t.is_empty())
+        .collect();
+    if let Some(tail) = tails.iter().find(|t| has(t)) {
+        return Attribution::File(tail.to_string());
+    }
+    for tail in tails.iter().filter(|t| t.contains('/')) {
+        let suffix = format!("/{tail}");
+        let found: Vec<&String> = files.iter().filter(|f| f.ends_with(&suffix)).collect();
+        match found.as_slice() {
+            [one] => return Attribution::File((*one).clone()),
+            [] => continue,
+            many => return Attribution::Unattributed(many.iter().map(|f| f.to_string()).collect()),
         }
-        rest = tail;
     }
     Attribution::Unattributed(Vec::new())
 }
@@ -60,7 +73,7 @@ pub fn attribute(
         return Attribution::File(path.to_string());
     }
     if is_absolute(path) {
-        return absolute(path, has);
+        return absolute(path, repo.files, has);
     }
     if let Some(project) = &printed.project {
         let dir = repo
@@ -193,6 +206,11 @@ mod tests {
         assert_eq!(
             at("/home/runner/work/shop/shop/vendor/x/Y.php"),
             Attribution::Unattributed(Vec::new())
+        );
+        assert_eq!(
+            at("/example.com/shop/Billing/PricingTest.php"),
+            want,
+            "an import path below a module's folder, by its unique suffix"
         );
     }
 }

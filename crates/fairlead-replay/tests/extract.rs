@@ -231,6 +231,31 @@ fn artisan_test_and_pest_name_the_test_file_even_when_the_error_is_thrown_elsewh
 }
 
 #[test]
+fn go_test_names_each_failed_test_by_its_logged_file_a_panic_frame_or_a_compile_error() {
+    let price = "/example.com/shop/price/price_test.go";
+    let expected = [
+        printed("/example.com/shop/broken/broken_test.go", None, None),
+        printed(
+            "/home/runner/work/shop/shop/cart/cart_test.go",
+            None,
+            Some("TestItem"),
+        ),
+        printed(price, None, Some("TestTotal")),
+        printed(price, None, Some("TestTable")),
+    ];
+    for name in ["go-plain.log", "go-verbose.log"] {
+        let log = fixture(name);
+        assert_eq!(extract(&Extractor::Go, &log), expected, "{name}");
+        let excerpt = fairlead_replay::dataset::log_excerpt(&log).join("\n");
+        assert_eq!(
+            extract(&Extractor::Go, &excerpt),
+            expected,
+            "{name} excerpt"
+        );
+    }
+}
+
+#[test]
 fn pytest_reads_its_summary_verbose_lines_and_collection_errors() {
     let unit = "tests/unit/test_pricing.py";
     let broken = printed("tests/api/test_broken.py", None, None);
