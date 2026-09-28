@@ -4,6 +4,7 @@
 
 ### New
 
+- `fairlead done` runs the gate a change passes before it counts as finished (the planned tests and checks, the checks `done.always` names, and the guard) and records the outcome against the tree it checked, so any later edit makes a pass stale. `--check` says whether the working tree as it stands has passed. See [The done gate](https://mahkassem.github.io/fairlead/docs/done.html).
 - `fairlead replay fetch --event push` also records the default branch's push runs, and `replay run` plans each against its first parent, the diff the merged pull request's plan saw. A failing test that plan left out is reported as an escape, on its own `push (after merge)` line, so a repository whose pull requests run only the plan can still measure what got past it. See [`replay fetch`](https://mahkassem.github.io/fairlead/docs/replay.html#replay-fetch).
 
 ### Fixed

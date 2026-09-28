@@ -198,9 +198,9 @@ fn run_step(root: &Path, step: &Invocation) -> bool {
 /// Whether the newest `done` run for `tree` passed, if one ran.
 pub fn last_outcome(log: &str, tree: &str) -> Option<bool> {
     log.lines()
+        .rev()
         .filter_map(|l| serde_json::from_str::<serde_json::Value>(l).ok())
-        .filter(|e| e["stage"] == "done" && e["tree"] == tree)
-        .last()
+        .find(|e| e["stage"] == "done" && e["tree"] == tree)
         .map(|e| e["decision"] == "pass")
 }
 
