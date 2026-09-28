@@ -43,9 +43,18 @@ fn judged(outcome: Outcome) -> bool {
     matches!(outcome, Outcome::Hit | Outcome::Miss | Outcome::Unconfirmed)
 }
 
-/// The directory a test sits in: a change there may be what broke it.
 fn dir_of(path: &str) -> &str {
     path.rsplit_once('/').map_or("", |(dir, _)| dir)
+}
+
+/// Whether a change may be what broke `test`: the test itself, or a file
+/// beside it that isn't another test, such as a fixture or a helper. A
+/// sibling test can't break it.
+fn touches(changed: &str, test: &str) -> bool {
+    let name = changed.rsplit('/').next().unwrap_or(changed);
+    let sibling_test = name.contains(".test.") || name.contains(".spec.");
+    changed == test
+        || (!dir_of(test).is_empty() && dir_of(changed) == dir_of(test) && !sibling_test)
 }
 
 /// Marks inherited failures in place and reports each group.
@@ -65,16 +74,9 @@ pub fn apply(failures: &mut [Failure], rows: &[&Row]) -> Vec<Group> {
     }
     let mut groups = Vec::new();
     for ((base, job, path), members) in by_key {
-        let dir = dir_of(&path);
-        // A pull request that changed the test or its directory may be the cause.
         let members: Vec<usize> = members
             .into_iter()
-            .filter(|&i| {
-                !failures[i]
-                    .changed
-                    .iter()
-                    .any(|c| *c == path || (!dir.is_empty() && dir_of(c) == dir))
-            })
+            .filter(|&i| !failures[i].changed.iter().any(|c| touches(c, &path)))
             .collect();
         let pulls: BTreeSet<u64> = members.iter().filter_map(|&i| failures[i].pr).collect();
         let proven = failures.iter().any(|f| {
@@ -85,7 +87,7 @@ pub fn apply(failures: &mut [Failure], rows: &[&Row]) -> Vec<Group> {
         });
         let evidence = if proven {
             Evidence::Base
-        } else if pulls.len() >= MIN_PULLS && disjoint(failures, &members) {
+        } else if unrelated(failures, &members) >= MIN_PULLS {
             Evidence::Pulls
         } else {
             continue;
@@ -128,9 +130,10 @@ pub fn apply(failures: &mut [Failure], rows: &[&Row]) -> Vec<Group> {
     groups
 }
 
-/// Whether no two of the pull requests changed a file in common: a stack of
-/// related changes shares a cause, so it isn't evidence about the base.
-fn disjoint(failures: &[Failure], members: &[usize]) -> bool {
+/// How many of the pull requests changed no file in common with each other,
+/// taken in order: a stack of related changes shares a cause, so only the
+/// unrelated ones are evidence about the base.
+fn unrelated(failures: &[Failure], members: &[usize]) -> usize {
     let mut by_pull: BTreeMap<u64, BTreeSet<&str>> = BTreeMap::new();
     for &i in members {
         if let Some(pr) = failures[i].pr {
@@ -140,10 +143,13 @@ fn disjoint(failures: &[Failure], members: &[usize]) -> bool {
                 .extend(failures[i].changed.iter().map(String::as_str));
         }
     }
-    let sets: Vec<&BTreeSet<&str>> = by_pull.values().collect();
-    sets.iter()
-        .enumerate()
-        .all(|(i, a)| sets[i + 1..].iter().all(|b| a.is_disjoint(b)))
+    let mut kept: Vec<&BTreeSet<&str>> = Vec::new();
+    for set in by_pull.values() {
+        if kept.iter().all(|k| k.is_disjoint(set)) {
+            kept.push(set);
+        }
+    }
+    kept.len()
 }
 
 #[cfg(test)]
@@ -190,6 +196,19 @@ mod tests {
         assert!(!g.resolved, "nothing passed the job later");
         assert!(fs.iter().all(|f| f.outcome == Outcome::Inherited));
         assert_eq!(fs[2].judged, Some(Outcome::Hit));
+    }
+
+    #[test]
+    fn one_related_pair_among_enough_unrelated_pulls_still_shows_the_base() {
+        let mut fs = three();
+        fs.push(failure(4, &["src/watch.ts"], Outcome::Miss));
+        fs.push(failure(5, &["test/e2e/other.test.ts"], Outcome::Miss));
+        let groups = apply(&mut fs, &[]);
+        assert_eq!(
+            groups[0].pulls,
+            [1, 2, 3, 4, 5],
+            "a sibling test isn't a cause, and the pair doesn't sink the group"
+        );
     }
 
     #[test]

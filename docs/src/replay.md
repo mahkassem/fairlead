@@ -69,9 +69,9 @@ check = "typecheck"
 A pull request can fail a test only because its base branch already did. Replay groups failures by base commit, job and test file, and calls a group inherited when either holds:
 
 - **The base's own run failed it.** A push run recorded with `--event push` whose commit is the base failed the same test in the same job. That's direct proof, so one pull request is enough.
-- **Unrelated pull requests failed it alike.** Three or more pull requests on the same base failed it, and no two of them changed a file in common. A stack of related changes shares a cause, so it doesn't count.
+- **Unrelated pull requests failed it alike.** Pull requests on the same base failed it, and three or more of them changed no file in common with each other. A stack of related changes shares a cause, so it counts once.
 
-Either way, a pull request that changed the test or a file in its directory stays out of the group: its own change may be what broke it. Hits and misses are grouped alike, so the rule can't be chosen to raise recall. An inherited failure keeps what it would have been; it's left out of adjusted recall and the `min_failures` gate and counted in raw recall, as quarantined ones are. The report lists each group with its base, job, test, pull requests and evidence, and says "fixed later" when a later run on another base passed the job, else "unresolved".
+Either way, a pull request that changed the test, or a file beside it that isn't another test (a fixture, a helper), stays out of the group: its own change may be what broke it. Hits and misses are grouped alike, so the rule can't be chosen to raise recall. An inherited failure keeps what it would have been; it's left out of adjusted recall and the `min_failures` gate and counted in raw recall, as quarantined ones are. The report lists each group with its base, job, test, pull requests and evidence, and says "fixed later" when a later run on another base passed the job, else "unresolved".
 
 ## Quarantine
 
