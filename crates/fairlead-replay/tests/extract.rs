@@ -155,3 +155,27 @@ fn bun_reads_a_header_whose_path_has_a_space() {
         )]
     );
 }
+
+#[test]
+fn bun_counts_a_file_that_failed_to_load_as_that_files_failure() {
+    let log = fixture("bun-load-error.log");
+    let expected = [
+        printed("packages/api/test/broken.test.ts", None, None),
+        printed("packages/api/test/typo.test.ts", None, None),
+    ];
+    assert_eq!(extract(&Extractor::Bun, &log), expected);
+    let excerpt = fairlead_replay::dataset::log_excerpt(&log).join("\n");
+    assert_eq!(extract(&Extractor::Bun, &excerpt), expected);
+}
+
+#[test]
+fn bun_pins_an_unhandled_error_on_the_test_that_follows_it_and_ends_it_at_a_pass() {
+    let log = "a.test.ts:\n# Unhandled error between tests\nerror: boom\n(fail) a > breaks [1ms]\nb.test.ts:\n(pass) b > one [1ms]\n# Unhandled error between tests\nerror: late\n(pass) b > two [1ms]\n";
+    assert_eq!(
+        extract(&Extractor::Bun, log),
+        [
+            printed("a.test.ts", None, Some("breaks")),
+            printed("b.test.ts", None, None),
+        ]
+    );
+}
