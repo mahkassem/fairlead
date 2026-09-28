@@ -15,6 +15,9 @@ use serde_json::{json, Map, Value};
 /// Runs the write stage, and does nothing where `fairlead` isn't installed,
 /// so a teammate without it can still work.
 const COMMAND: &str = "command -v fairlead >/dev/null 2>&1 && fairlead guard hook || true";
+/// Where the npm package unpacks the binary; calling it skips the package
+/// runner's own start-up on every edit.
+const NPM_BINARY: &str = "node_modules/fairlead/node_modules/.bin_real/fairlead";
 /// How an installed entry is recognised, whatever else is in the command.
 const MARK: &str = "fairlead guard hook";
 const EDIT_TOOLS: &str = "Edit|Write|MultiEdit";
@@ -115,17 +118,20 @@ pub fn run(action: HooksAction, cwd: &Path) -> ExitCode {
     let git = target.git
         || (!target.claude
             && (lefthook.exists() || !matches!(action, HooksAction::Install { .. })));
+    let runner = package_runner(&root);
     let mut result = Ok(());
     if claude {
         result = match action {
-            HooksAction::Install { .. } => install(&file, &manifest, bash),
+            HooksAction::Install { .. } => install(&file, &manifest, bash, runner),
             HooksAction::Status { .. } => status(&file, &manifest),
             HooksAction::Uninstall { .. } => uninstall(&file, &manifest),
         };
     }
     if git && result.is_ok() {
         result = match action {
-            HooksAction::Install { .. } => git_install(&lefthook, &lefthook_manifest, &git_dir),
+            HooksAction::Install { .. } => {
+                git_install(&lefthook, &lefthook_manifest, &git_dir, runner)
+            }
             HooksAction::Status { .. } => git_status(&lefthook, &lefthook_manifest, &git_dir),
             HooksAction::Uninstall { .. } => git_uninstall(&lefthook, &lefthook_manifest),
         };
@@ -175,6 +181,42 @@ pub fn describe(root: &Path, config: &fairlead_core::config::Config) -> Vec<Stri
     vec![claude, git]
 }
 
+/// How a repository that lists Fairlead as a package dependency runs its
+/// own copy, told by its lockfile: that copy isn't on the PATH.
+pub fn package_runner(root: &Path) -> Option<&'static str> {
+    let text = std::fs::read_to_string(root.join("package.json")).ok()?;
+    let manifest: Value = serde_json::from_str(&text).ok()?;
+    let listed = ["dependencies", "devDependencies", "optionalDependencies"]
+        .iter()
+        .any(|k| manifest.get(k).and_then(|d| d.get("fairlead")).is_some());
+    if !listed {
+        return None;
+    }
+    let has = |name: &str| root.join(name).is_file();
+    Some(if has("bun.lock") || has("bun.lockb") {
+        "bun x"
+    } else if has("pnpm-lock.yaml") {
+        "pnpm exec"
+    } else if has("yarn.lock") {
+        "yarn"
+    } else {
+        "npx --no-install"
+    })
+}
+
+/// The write stage's command: the project's own copy where it has one, else
+/// `fairlead` on the PATH. Either way it does nothing where neither runs.
+fn claude_command(runner: Option<&str>) -> String {
+    match runner {
+        None => COMMAND.to_string(),
+        Some(runner) => format!(
+            "cd \"${{CLAUDE_PROJECT_DIR:-.}}\" 2>/dev/null || exit 0; \
+             if [ -x {NPM_BINARY} ]; then {NPM_BINARY} guard hook; \
+             else {runner} fairlead guard hook 2>/dev/null; fi; exit 0"
+        ),
+    }
+}
+
 /// The lefthook config lefthook would read, or where a new one goes.
 pub fn lefthook_file(root: &Path) -> std::path::PathBuf {
     lefthook::FILES
@@ -207,9 +249,18 @@ fn keep_manifest(manifest: &Path, record: &Manifest) -> Result<(), String> {
     )
 }
 
-fn git_install(file: &Path, manifest: &Path, git_dir: &Path) -> Result<(), String> {
+fn git_install(
+    file: &Path,
+    manifest: &Path,
+    git_dir: &Path,
+    runner: Option<&str>,
+) -> Result<(), String> {
     let original = read(file)?;
-    let written = match lefthook::insert(original.as_deref().unwrap_or("")) {
+    let run = match runner {
+        Some(runner) => format!("{runner} {}", lefthook::RUN),
+        None => lefthook::RUN.to_string(),
+    };
+    let written = match lefthook::insert(original.as_deref().unwrap_or(""), &run) {
         lefthook::Insert::Already => {
             println!("hooks: already in {}", file.display());
             return Ok(());
@@ -352,7 +403,7 @@ fn pretty(settings: &Map<String, Value>) -> String {
     serde_json::to_string_pretty(settings).expect("settings serialize") + "\n"
 }
 
-fn install(file: &Path, manifest: &Path, bash: bool) -> Result<(), String> {
+fn install(file: &Path, manifest: &Path, bash: bool, runner: Option<&str>) -> Result<(), String> {
     let original = read(file)?;
     let mut settings = match &original {
         Some(text) => parse(file, text)?,
@@ -373,7 +424,8 @@ fn install(file: &Path, manifest: &Path, bash: bool) -> Result<(), String> {
             file.display()
         ));
     };
-    let entry = json!({ "type": "command", "command": COMMAND, "timeout": TIMEOUT });
+    let command = claude_command(runner);
+    let entry = json!({ "type": "command", "command": command, "timeout": TIMEOUT });
     pre.push(json!({ "matcher": EDIT_TOOLS, "hooks": [entry.clone()] }));
     if bash {
         pre.push(json!({ "matcher": "Bash", "hooks": [entry] }));

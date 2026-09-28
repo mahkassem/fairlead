@@ -142,9 +142,14 @@ fn doctor_hooks(dir: &Path, loaded: Option<&Loaded>) -> String {
         .into_iter()
         .map(|l| l + "\n")
         .collect();
-    out.push_str(&match on_path() {
-        Some(path) => format!("on PATH: {}\n", path.display()),
-        None => "on PATH: no; the hooks do nothing until `fairlead` is installed\n".to_string(),
+    out.push_str(&match (on_path(), hooks_cmd::package_runner(&root)) {
+        (_, Some(runner)) => {
+            format!("binary: the project's own copy, through `{runner}` where it isn't unpacked\n")
+        }
+        (Some(path), None) => format!("on PATH: {}\n", path.display()),
+        (None, None) => {
+            "on PATH: no; the hooks do nothing until `fairlead` is installed\n".to_string()
+        }
     });
     let log =
         std::fs::read_to_string(git_dir.join("fairlead").join("events.jsonl")).unwrap_or_default();
