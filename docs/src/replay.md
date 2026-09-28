@@ -25,7 +25,7 @@ The dataset is JSON lines, appended and never rewritten.
 
 ## `replay run`
 
-With `--fetch-missing`, the recorded heads and bases the clone lacks are fetched first. `--json-out PATH` writes the JSON report as well as printing the text one. For each failed row in the window, replay checks out the head commit into a worktree beside the clone (created once and reused, so the [parse cache](graph.md) carries over), plans the change from the merge base of the recorded base (or, for a row without one, the clone's default branch as it stood when the run started) and the head, and classes every failure the row names:
+With `--fetch-missing`, the recorded heads and bases the clone lacks are fetched first. `--json-out PATH` writes the JSON report as well as printing the text one. While it works it prints progress on stderr, as plain lines a CI log keeps: every 25 planned runs and at least once a minute (`412 of 806 runs planned · 93 failures judged · 3 misses · 10 min, about 10 min left`), and a line for any run that takes over 10 seconds to plan and judge. `--quiet` turns that off; the report on stdout and in `--json-out` is the same either way. For each failed row in the window, replay checks out the head commit into a worktree beside the clone (created once and reused, so the [parse cache](graph.md) carries over), plans the change from the merge base of the recorded base (or, for a row without one, the clone's default branch as it stood when the run started) and the head, and classes every failure the row names:
 
 | Outcome | Meaning |
 | --- | --- |
