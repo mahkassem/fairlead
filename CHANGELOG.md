@@ -14,6 +14,10 @@
 - Replay recognises a failure wave after a runner image changes: `replay fetch` records each failed job's image and version, and failures of one test in one job across three or more unrelated pull requests, within 7 days of a new image version and never before it, get the outcome `environment`, listed by wave and kept out of adjusted recall. See [Runner image waves](https://mahkassem.github.io/fairlead/docs/replay.html#runner-image-waves).
 - External graph providers: a `[[graph.providers]]` entry names a command that prints `{"version": 1, "edges": [...]}` for the files it claims, so any language or build tool can feed the plan. The built-in JavaScript and TypeScript scanner runs as the `typescript` provider, unchanged. A provider that fails runs every test for a change to its files, with a `provider-failed` warning, and `graph stats` reports each provider's files and edges. The output schema is committed as `provider-v1.schema.json`. See [Other languages](https://mahkassem.github.io/fairlead/docs/graph.html#other-languages-external-providers).
 
+### Fixed
+
+- Replay attributes a failing test file a Windows runner printed with backslashes, such as pytest's `FAILED tests\unit\test_a.py::test_x`; it used to match no file and count as unattributed.
+
 ## 0.5.0 (2026-09-28)
 
 ### New
