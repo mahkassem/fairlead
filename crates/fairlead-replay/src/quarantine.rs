@@ -143,6 +143,8 @@ mod tests {
             event: "pull_request".into(),
             pr: Some(pr),
             head_sha: String::new(),
+            base_sha: None,
+            created_at: String::new(),
             job: job.into(),
             target: Target::Test("t.test.ts".into()),
             outcome,

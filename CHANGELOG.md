@@ -4,6 +4,7 @@
 
 ### New
 
+- Replay recognises failures a pull request inherited from its base branch: when the base's own push run failed the same test in the same job, or three or more unrelated pull requests on one base did. They get their own outcome, `inherited`, listed by group and kept out of adjusted recall, hits and misses alike. See [Inherited failures](https://mahkassem.github.io/fairlead/docs/replay.html#inherited-failures).
 - `fairlead replay run` prints progress on stderr: every 25 planned runs and at least once a minute, with the failures judged, the misses so far and an estimate of the time left, and a line for any run slower than 10 seconds. `--quiet` turns it off; the report doesn't change.
 - `fairlead replay fetch --event push` also records the default branch's push runs, and `replay run` plans each against its first parent, the diff the merged pull request's plan saw. A failing test that plan left out is reported as an escape, on its own `push (after merge)` line, so a repository whose pull requests run only the plan can still measure what got past it. See [`replay fetch`](https://mahkassem.github.io/fairlead/docs/replay.html#replay-fetch).
 

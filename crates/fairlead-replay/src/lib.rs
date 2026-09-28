@@ -8,6 +8,7 @@ pub mod extract;
 pub mod fetch;
 pub mod git;
 pub mod github;
+pub mod inherited;
 pub mod quarantine;
 pub mod report;
 pub mod run;

@@ -38,6 +38,7 @@ With `--fetch-missing`, the recorded heads and bases the clone lacks are fetched
 | error | the planner refused the commit, such as a test file no runner matches |
 | unwatched | no `[[replay.failures]]` or `[[replay.checks]]` entry names the job; listed by job name so a gap in the config can't raise recall |
 | quarantined | a `[[replay.quarantine]]` entry declares the test flaky in this job (below) |
+| inherited | the failure came with the base branch: the base's own push run failed the test in the job, or three or more unrelated pull requests on the same base did (below) |
 | ignored | `replay.ignore` names the job, such as one that only aggregates others, or it failed only in steps `replay.ignore_steps` names, such as an install |
 
 Recall is hits over hits and misses. Strict recall also counts unconfirmed failures as misses.
@@ -63,6 +64,15 @@ step = "^Typecheck$"
 check = "typecheck"
 ```
 
+## Inherited failures
+
+A pull request can fail a test only because its base branch already did. Replay groups failures by base commit, job and test file, and calls a group inherited when either holds:
+
+- **The base's own run failed it.** A push run recorded with `--event push` whose commit is the base failed the same test in the same job. That's direct proof, so one pull request is enough.
+- **Unrelated pull requests failed it alike.** Pull requests on the same base failed it, and three or more of them changed no file in common with each other. A stack of related changes shares a cause, so it counts once.
+
+Either way, a pull request that changed the test, or a file beside it that isn't another test (a fixture, a helper), stays out of the group: its own change may be what broke it. Hits and misses are grouped alike, so the rule can't be chosen to raise recall. An inherited failure keeps what it would have been; it's left out of adjusted recall and the `min_failures` gate and counted in raw recall, as quarantined ones are. The report lists each group with its base, job, test, pull requests and evidence, and says "fixed later" when a later run on another base passed the job, else "unresolved".
+
 ## Quarantine
 
 A test that fails in one CI job whatever changes, such as a platform-specific flake, measures that job rather than the planner. A `[[replay.quarantine]]` entry declares it:
@@ -83,7 +93,7 @@ Per repository: runs replayed, attributed failures against the gate, recall and 
 
 ## Limits
 
-- CI ran a pull request's merge commit with its base, while replay plans the head against the merge base. A failure caused by the base alone can show up as a miss.
+- CI ran a pull request's merge commit with its base, while replay plans the head against the merge base. A failure caused by the base alone can show up as a miss, unless it's recognised as inherited (above): with the base's push runs recorded, or when enough unrelated pull requests share it.
 - A repository whose pull request CI already runs only affected tests records only what it chose to run; its merge queue runs or its default branch's pushes (`--event push`), which usually run everything, are the better evidence, and "passed at a later push" is weaker there.
 - A push is planned against its first parent, the diff the pull request's plan saw at merge time, and a failure there is unconfirmed only when a later push of the same tree passed the job (a revert and reland). A failure that appears only because two pull requests, each green alone, conflict shows as an escape on the second one.
 
