@@ -98,6 +98,10 @@ fn stats(scan: &Scan, seconds: f64, json: bool, cache_off: &str) -> ExitCode {
                 "id": p.id, "files": p.files, "edges": p.edges, "ignored": p.ignored, "failed": p.failed,
             })).collect::<Vec<_>>(),
             "conflicts": scan.conflicts.len(),
+            "coverage": scan.coverage.as_ref().map(|c| serde_json::json!({
+                "map": c.map, "commit": c.commit, "created": c.created, "source": c.source,
+                "tests": c.tests, "edges": c.edges, "ignored": c.ignored, "error": c.error,
+            })),
         });
         println!(
             "{}",
@@ -135,6 +139,25 @@ fn stats(scan: &Scan, seconds: f64, json: bool, cache_off: &str) -> ExitCode {
                     c.chosen,
                     c.other
                 );
+            }
+        }
+        if let Some(c) = &scan.coverage {
+            match &c.error {
+                Some(why) => println!("coverage map {}: left out, {why}", c.map),
+                None => println!(
+                    "coverage map {}: {} edges from {} tests, {} from {} at {}{}",
+                    c.map,
+                    c.edges,
+                    c.tests,
+                    c.source,
+                    c.created,
+                    c.commit.get(..12).unwrap_or(&c.commit),
+                    if c.ignored > 0 {
+                        format!("; {} naming files no longer here", c.ignored)
+                    } else {
+                        String::new()
+                    }
+                ),
             }
         }
         println!(

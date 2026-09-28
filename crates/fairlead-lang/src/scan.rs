@@ -56,6 +56,10 @@ pub struct Scan {
     pub conflicts: Vec<provider::Conflict>,
     /// Files claimed by a provider that failed: nothing is known about them.
     pub uncertain: std::collections::HashSet<String>,
+    /// What the coverage map added, when one is configured.
+    pub coverage: Option<crate::coverage::Report>,
+    /// How PHP names resolve here, for turning a coverage run's test names into files.
+    pub autoload: php::Autoload,
 }
 
 pub fn build(root: &Path, config: &Config) -> std::io::Result<Scan> {
@@ -126,6 +130,11 @@ pub fn build(root: &Path, config: &Config) -> std::io::Result<Scan> {
         roots: python::Roots::new(&tree),
     };
     let edges = add_results(&tree, &named, &mut graph, results);
+    let coverage = config
+        .graph
+        .coverage
+        .as_ref()
+        .map(|c| crate::coverage::apply(&root, c, &mut graph));
     let mut providers = Vec::new();
     for id in [provider::BUILTIN, php::ID, golang::ID, python::ID] {
         let files = sources.iter().filter(|f| language(f) == id).count();
@@ -154,6 +163,8 @@ pub fn build(root: &Path, config: &Config) -> std::io::Result<Scan> {
         providers,
         conflicts,
         uncertain,
+        coverage,
+        autoload: named.autoload,
     })
 }
 

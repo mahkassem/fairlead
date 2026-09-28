@@ -2,6 +2,7 @@
 //! refers to, and what those references resolve to without an install.
 
 pub mod cache;
+pub mod coverage;
 pub mod deleted;
 pub mod extract;
 pub mod fs;
