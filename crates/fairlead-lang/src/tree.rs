@@ -5,8 +5,8 @@
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
-pub const SOURCE_EXTENSIONS: [&str; 11] = [
-    "ts", "tsx", "mts", "cts", "js", "jsx", "mjs", "cjs", "vue", "svelte", "astro",
+pub const SOURCE_EXTENSIONS: [&str; 12] = [
+    "ts", "tsx", "mts", "cts", "js", "jsx", "mjs", "cjs", "vue", "svelte", "astro", "php",
 ];
 const SKIPPED_DIRS: [&str; 2] = [".git", "node_modules"];
 
@@ -47,8 +47,9 @@ impl Tree {
     }
 
     pub fn is_source(rel: &str) -> bool {
-        rel.rsplit_once('.')
-            .is_some_and(|(stem, ext)| SOURCE_EXTENSIONS.contains(&ext) && !stem.ends_with(".d"))
+        rel.rsplit_once('.').is_some_and(|(stem, ext)| {
+            SOURCE_EXTENSIONS.contains(&ext) && !stem.ends_with(".d") && !stem.ends_with(".blade")
+        })
     }
 
     pub fn sources(&self) -> impl Iterator<Item = &String> {

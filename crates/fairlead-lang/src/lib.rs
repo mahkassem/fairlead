@@ -6,6 +6,7 @@ pub mod deleted;
 pub mod extract;
 pub mod fs;
 pub mod graph;
+pub mod php;
 pub mod provider;
 pub mod resolve;
 pub mod rules;

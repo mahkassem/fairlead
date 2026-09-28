@@ -580,3 +580,76 @@ fn a_test_reaches_a_component_through_other_components_in_each_format() {
         ]
     );
 }
+
+#[test]
+fn a_php_test_reaches_a_model_through_a_controller_and_a_deleted_class_through_psr4() {
+    let dir = repo(
+        "php",
+        &[
+            (
+                "composer.json",
+                r#"{"autoload":{"psr-4":{"App\\":"app/"},"classmap":["database/seeders"]},
+                   "autoload-dev":{"psr-4":{"Tests\\":"tests/"}}}"#,
+            ),
+            (
+                "app/Models/User.php",
+                "<?php\nnamespace App\\Models;\n\nclass User extends Model {}\n",
+            ),
+            (
+                "app/Models/Model.php",
+                "<?php\nnamespace App\\Models;\n\nabstract class Model {}\n",
+            ),
+            (
+                "app/Http/Controllers/UserController.php",
+                "<?php\nnamespace App\\Http\\Controllers;\n\nuse App\\Models\\User;\nuse App\\Support\\Gone;\n\nclass UserController\n{\n    public function show(int $id): User { return User::find($id); }\n}\n",
+            ),
+            (
+                "database/seeders/DatabaseSeeder.php",
+                "<?php\n\nclass DatabaseSeeder { public function run() { \\App\\Models\\User::factory(); } }\n",
+            ),
+            (
+                "tests/Feature/UserTest.php",
+                "<?php\nnamespace Tests\\Feature;\n\nuse App\\Http\\Controllers\\UserController;\nuse Tests\\TestCase;\n\nclass UserTest extends TestCase\n{\n    public function test_show(): void { (new UserController)->show(1); (new \\DatabaseSeeder)->run(); }\n}\n",
+            ),
+            (
+                "tests/TestCase.php",
+                "<?php\nnamespace Tests;\n\nrequire_once __DIR__ . '/../bootstrap/app.php';\n\nabstract class TestCase {}\n",
+            ),
+            ("bootstrap/app.php", "<?php\nreturn 1;\n"),
+            ("resources/views/home.blade.php", "<div>{{ $user->name }}</div>\n"),
+        ],
+    );
+    let mut s = scan(&dir);
+    let test = "tests/Feature/UserTest.php";
+    assert!(
+        depends(&s, test, "app/Models/Model.php"),
+        "through the controller and the model"
+    );
+    assert!(
+        depends(&s, test, "database/seeders/DatabaseSeeder.php"),
+        "a classmap class, by its declaration"
+    );
+    assert!(
+        depends(&s, test, "bootstrap/app.php"),
+        "through the test case's require"
+    );
+    assert_eq!(
+        deps(&s, "app/Http/Controllers/UserController.php"),
+        [("app/Models/User.php".to_string(), EdgeKind::Import)]
+    );
+    let php = s.providers.iter().find(|p| p.id == "php").unwrap();
+    assert_eq!((php.files, php.edges), (7, 7));
+    assert!(s.graph.id("resources/views/home.blade.php").is_some());
+    let ids = fairlead_lang::deleted::attach_deleted(
+        &mut s,
+        &Config::default().graph,
+        &["app/Support/Gone.php".to_string()],
+    );
+    let importers: Vec<String> = s
+        .graph
+        .importers(ids[0])
+        .into_iter()
+        .map(|(f, _)| s.graph.files[f as usize].clone())
+        .collect();
+    assert_eq!(importers, ["app/Http/Controllers/UserController.php"]);
+}
