@@ -217,6 +217,12 @@ fn artisan_test_and_pest_name_the_test_file_even_when_the_error_is_thrown_elsewh
         printed(cart, None, Some("prices a pair")),
         printed(cart, None, None),
         printed(cart, None, Some("adds with a dataset")),
+        // Pest's own PHPUnit-style section after its report, the same file.
+        printed(
+            "/home/runner/work/shop/shop/tests/Unit/Cart/CartTest.php",
+            None,
+            None,
+        ),
     ];
     for (name, expected) in [("artisan-test.log", &artisan[..]), ("pest.log", &pest[..])] {
         let log = fixture(name);
@@ -228,6 +234,16 @@ fn artisan_test_and_pest_name_the_test_file_even_when_the_error_is_thrown_elsewh
             "{name} excerpt"
         );
     }
+}
+
+#[test]
+fn pest_also_reads_phpunits_format_which_artisan_test_prints_under_parallel() {
+    let log = fixture("phpunit-laravel.log");
+    assert_eq!(
+        extract(&Extractor::Pest, &log),
+        extract(&Extractor::Phpunit, &log)
+    );
+    assert_eq!(extract(&Extractor::Pest, &log).len(), 4);
 }
 
 #[test]
@@ -287,5 +303,18 @@ fn pytest_reads_its_summary_verbose_lines_and_collection_errors() {
     assert_eq!(
         extract(&Extractor::Pytest, xdist),
         [printed(unit, None, Some("test_half"))]
+    );
+}
+
+#[test]
+fn artisan_test_parallel_on_a_real_laravel_app_is_read_as_phpunit() {
+    let log = fixture("artisan-parallel.log");
+    let file = "/home/runner/work/koel/koel/tests/Feature/CleanUrlsTest.php";
+    assert_eq!(
+        extract(&Extractor::Pest, &log),
+        [
+            printed(file, None, Some("serveTheAppForAScreenPathWhenEnabled")),
+            printed(file, None, Some("tellTheAppWhetherCleanUrlsAreOn")),
+        ]
     );
 }

@@ -1,0 +1,14 @@
+2026-09-26T09:13:48.0662965Z There were 2 failures:
+2026-09-26T09:13:48.0665660Z 1) Tests\Feature\CleanUrlsTest::serveTheAppForAScreenPathWhenEnabled
+2026-09-26T09:13:48.0874921Z /home/runner/work/koel/koel/vendor/laravel/framework/src/Illuminate/Testing/TestResponseAssert.php:45
+2026-09-26T09:13:48.0875794Z /home/runner/work/koel/koel/vendor/laravel/framework/src/Illuminate/Testing/TestResponse.php:183
+2026-09-26T09:13:48.0876687Z /home/runner/work/koel/koel/vendor/laravel/framework/src/Illuminate/Testing/Concerns/AssertsStatusCodes.php:16
+2026-09-26T09:13:48.0877465Z /home/runner/work/koel/koel/tests/Feature/CleanUrlsTest.php:18
+2026-09-26T09:13:48.0878195Z 2) Tests\Feature\CleanUrlsTest::tellTheAppWhetherCleanUrlsAreOn
+2026-09-26T09:13:48.1017947Z /home/runner/work/koel/koel/vendor/laravel/framework/src/Illuminate/Testing/TestResponseAssert.php:45
+2026-09-26T09:13:48.1018481Z /home/runner/work/koel/koel/vendor/laravel/framework/src/Illuminate/Testing/TestResponse.php:183
+2026-09-26T09:13:48.1019029Z /home/runner/work/koel/koel/vendor/laravel/framework/src/Illuminate/Testing/Concerns/AssertsStatusCodes.php:16
+2026-09-26T09:13:48.1019496Z /home/runner/work/koel/koel/tests/Feature/CleanUrlsTest.php:42
+2026-09-26T09:13:48.1019767Z FAILURES!
+2026-09-26T09:13:48.1019941Z Tests: 1918, Assertions: 12924, Failures: 2.
+2026-09-26T09:13:48.1645123Z Script @php artisan test --parallel handling the test event returned with error code 1

@@ -16,6 +16,7 @@
 
 ### Fixed
 
+- The `pest` extractor also reads PHPUnit's failure format, which Laravel's `php artisan test --parallel` prints; on a Laravel application's CI those failures used to be unattributed.
 - Replay attributes a failing test file a Windows runner printed with backslashes, such as pytest's `FAILED tests\unit\test_a.py::test_x`; it used to match no file and count as unattributed.
 
 ## 0.5.0 (2026-09-28)
