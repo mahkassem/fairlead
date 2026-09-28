@@ -195,6 +195,16 @@ for you alone. `--shared` and `--local` choose for one run. It runs on
 `[[guard.commands]]`. Where `fairlead` isn't installed the hook does nothing,
 so a teammate without it can still work.
 
+When `package.json` lists Fairlead as a dependency, install writes hooks that
+run the project's own copy rather than one on the PATH, which a package
+install doesn't provide. The Claude Code hook calls the binary the npm package
+unpacked, `node_modules/fairlead/node_modules/.bin_real/fairlead`, and falls
+back to the package runner the lockfile names (`bun x`, `pnpm exec`, `yarn`,
+else `npx --no-install`), which costs that runner's start-up on every edit.
+The lefthook entry runs through the same runner. The npm package unpacks the
+binary in a `postinstall` script run with `node`; where that script isn't
+allowed to run, or there's no `node`, the runner fetches it on first use.
+
 Before an edit, the hook works out what the file would hold and lints it
 with the same presets as the other stages. When the edit adds a finding it
 denies the edit, and the agent reads the findings as the reason, fixes them
@@ -221,6 +231,7 @@ manifest, it removes the entries by their command.
 
 The commit stage runs through [lefthook](https://github.com/evilmartians/lefthook):
 install adds a `fairlead-guard` command running `fairlead guard check --staged`
+(through the package runner where Fairlead is a package dependency)
 to `pre-commit` in `lefthook.yml` (or `lefthook.yaml`, `.lefthook.yml`,
 `.lefthook.yaml`, whichever is there). It adds lines at the indentation around
 them, under `commands`, or as an item where the config uses `jobs`, and never
@@ -240,7 +251,8 @@ install made is removed.
 calls by decision, the rules that denied, the hook's p50 and p95 time, any
 calls that ran out of time or hit an error, and the commit stage's runs. It
 also says where each hook is installed, whether lefthook will run the git one,
-and whether `fairlead` is on the PATH, since the hooks call it by name.
+and whether `fairlead` is on the PATH, since the hooks call it by name, or
+that they run the project's own copy.
 
 ## Checking the guard against your linter
 
