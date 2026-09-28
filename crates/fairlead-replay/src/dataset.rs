@@ -74,9 +74,10 @@ pub fn log_excerpt(log: &str) -> Vec<String> {
         if bun_header(&cleaned).is_some() {
             header = Some(i);
         }
-        if line.contains("FAIL") || line.contains('●') || line.contains("(fail)") {
+        let unhandled = cleaned.trim() == "# Unhandled error between tests";
+        if line.contains("FAIL") || line.contains('●') || line.contains("(fail)") || unhandled {
             keep.extend(i..(i + 1 + AFTER).min(lines.len()));
-            keep.extend(header.filter(|_| line.contains("(fail)")));
+            keep.extend(header.filter(|_| line.contains("(fail)") || unhandled));
         }
         if cleaned.trim_end().ends_with("failed:") {
             keep.insert(i);
