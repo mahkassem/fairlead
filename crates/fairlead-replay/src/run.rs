@@ -42,6 +42,9 @@ pub enum Outcome {
     Ignored,
     /// A `[[replay.quarantine]]` entry declares the test flaky in this job.
     Quarantined,
+    /// The failure came with the base branch: unrelated pull requests on the
+    /// same base failed it alike, or the base's own push run did.
+    Inherited,
 }
 
 /// How a hit's target came to be in the plan.
@@ -66,11 +69,14 @@ pub struct Failure {
     pub event: String,
     pub pr: Option<u64>,
     pub head_sha: String,
+    /// The row's recorded base, and when it ran.
+    pub base_sha: Option<String>,
+    pub created_at: String,
     pub job: String,
     pub target: Target,
     pub outcome: Outcome,
     pub hit_by: Option<HitBy>,
-    /// What a quarantined failure would have been.
+    /// What a quarantined or inherited failure would have been.
     pub judged: Option<Outcome>,
     pub detail: String,
     /// The changed paths of the plan it was judged against.
@@ -94,6 +100,7 @@ pub struct Replayed {
     pub plans: Vec<Planned>,
     pub runs: usize,
     pub quarantine: Vec<crate::quarantine::Entry>,
+    pub inherited: Vec<crate::inherited::Group>,
 }
 
 /// A `[[replay.failures]]` or `[[replay.checks]]` entry, compiled.
@@ -337,6 +344,7 @@ pub fn replay(replayer: &Replayer, rows: &[Row], window: &Window) -> Replayed {
         out.runs += 1;
         replay_row(replayer, row, &rows, &mut out);
     }
+    out.inherited = crate::inherited::apply(&mut out.failures, &rows);
     out.quarantine = crate::quarantine::apply(
         &replayer.sources.quarantine,
         &mut out.failures,
@@ -360,6 +368,8 @@ fn record(
         event: row.event.clone(),
         pr: row.pr,
         head_sha: row.head_sha.clone(),
+        base_sha: row.base_sha.clone(),
+        created_at: row.created_at.clone(),
         job: job.to_string(),
         target,
         outcome,
