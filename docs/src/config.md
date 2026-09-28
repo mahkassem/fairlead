@@ -104,6 +104,7 @@ fairlead.toml: tests.unreachd: unknown field `unreachd`, expected one of ...
 | `done.checks` | `"planned"` | The same for the `[[checks]]` the plan selects |
 | `done.always` | `[]` | `[[checks]]` ids `fairlead done` runs for every change |
 | `done.guard` | `true` | Whether `fairlead done` ends with `fairlead guard check` |
+| `done.on_stop` | `"ask"` | What the Claude Code Stop hook does while the tree hasn't passed: `off`, `ask` (send the agent back once) or `require`. See [The done gate](done.md#the-stop-hook) |
 | `guard.comments` | off | `files`, `exclude`, `tests`, `migrations`, `block_length`, `density`, `history`, `item_codes`, `agent_phrases`, `block_marker`, and `ratchet` (default `false`). See [Guard rules](guard.md#comments) |
 
 Commands are always argv arrays, never shell strings, and `{files}` expands to one argument per file. In `tests.runners.cwd`, `{module}` is the module's root path and `{module.id}` its id.

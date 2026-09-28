@@ -7,9 +7,10 @@ use std::path::Path;
 use std::process::{Command, ExitCode};
 use std::time::Instant;
 
-use fairlead_core::config::DoneTests;
+use fairlead_core::config::{DoneTests, OnStop};
 use fairlead_core::plan::{Invocation, InvocationKind};
 use fairlead_guard::events::{Event, EventLog, Step};
+use fairlead_tests::git;
 
 use crate::plan_cmd::{make, Changes};
 
@@ -193,6 +194,71 @@ fn run_step(root: &Path, step: &Invocation) -> bool {
             false
         }
     }
+}
+
+/// The Claude Code Stop hook. It never runs the gate itself, which would
+/// outlast the hook's timeout: it reads whether the tree the agent leaves
+/// has passed, and on any error lets the stop through.
+pub fn stop() -> ExitCode {
+    let mut input = String::new();
+    let _ = std::io::Read::read_to_string(&mut std::io::stdin(), &mut input);
+    let call: serde_json::Value = serde_json::from_str(&input).unwrap_or_default();
+    let dir = call["cwd"]
+        .as_str()
+        .map(std::path::PathBuf::from)
+        .or_else(|| std::env::current_dir().ok())
+        .unwrap_or_default();
+    let asked = call["stop_hook_active"].as_bool().unwrap_or(false);
+    match stop_reason(&dir, asked) {
+        Some(reason) => {
+            eprintln!("{reason}");
+            ExitCode::from(2)
+        }
+        None => ExitCode::SUCCESS,
+    }
+}
+
+/// Why the agent should keep going, or none to let it stop.
+fn stop_reason(dir: &Path, asked: bool) -> Option<String> {
+    let loaded = fairlead_core::config::load(
+        dir,
+        &fairlead_core::config::LoadOptions::from_process(Vec::new()),
+    )
+    .ok()?;
+    let on_stop = loaded.config.done.on_stop;
+    if on_stop == OnStop::Off || (on_stop == OnStop::Ask && asked) {
+        return None;
+    }
+    let root = crate::graph_cmd::repo_root(dir);
+    let base = git::default_base(&root).ok()?;
+    let merge_base = git::merge_base(&root, &base).ok()?;
+    // Nothing changed means nothing to gate, as for a session that only read.
+    if git::changes(&root, &merge_base).ok()?.is_empty() {
+        return None;
+    }
+    let tree = tree_hash(&root)?;
+    let log = EventLog::open(&root)?;
+    let why = match last_outcome(&log.read(), &tree) {
+        Some(true) => return None,
+        Some(false) => "its last `fairlead done` failed",
+        None => "`fairlead done` hasn't passed for the tree as it is now",
+    };
+    let mut event = Event::new("stop", "block", std::time::Duration::ZERO);
+    event.tree = Some(tree);
+    let _ = log.append(&event);
+    Some(format!(
+        "fairlead: this change isn't finished: {why}. Run `fairlead done` and fix what it reports before stopping."
+    ))
+}
+
+/// The plan's tree hash for the working tree as it stands.
+fn tree_hash(root: &Path) -> Option<String> {
+    if let Some(id) = git::clean_tree_id(root) {
+        return Some(id);
+    }
+    let root = std::fs::canonicalize(root).ok()?;
+    let tree = fairlead_lang::tree::Tree::scan(&fairlead_lang::tree::plain(&root));
+    Some(fairlead_tests::digest::worktree_hash(&tree))
 }
 
 /// Whether the newest `done` run for `tree` passed, if one ran.
