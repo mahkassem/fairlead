@@ -177,35 +177,72 @@ pub fn bun_header(line: &str) -> Option<&str> {
 fn bun(lines: &[String]) -> Vec<Printed> {
     static FAIL: OnceLock<Regex> = OnceLock::new();
     static SUMMARY: OnceLock<Regex> = OnceLock::new();
+    static TOTAL: OnceLock<Regex> = OnceLock::new();
     let fail = re(
         &FAIL,
         r"^\s*\(fail\)\s+(?P<title>.*?)(?:\s+\[[\d.]+m?s\])?\s*$",
     );
     let summary = re(&SUMMARY, r"^\s*\d+ tests? failed:\s*$");
+    let total = re(&TOTAL, r"^\s*\d+ pass\s*$");
     let mut file: Option<&str> = None;
+    // An error bun reports under a file with no test to pin it on: a file
+    // that failed to load prints only this, yet bun counts it as a failure.
+    let mut unhandled = false;
     let mut out: Vec<Printed> = Vec::new();
+    let push = |out: &mut Vec<Printed>, printed: Printed| {
+        if !out.contains(&printed) {
+            out.push(printed);
+        }
+    };
+    let whole_file = |path: &str| Printed {
+        path: path.to_string(),
+        project: None,
+        title: None,
+    };
     for line in lines {
+        let header = bun_header(line);
+        let ends = header.is_some()
+            || summary.is_match(line)
+            || total.is_match(line)
+            || line.starts_with("##[endgroup]")
+            || line.starts_with("::endgroup::");
+        let status =
+            line.trim_start().starts_with("(pass)") || line.trim_start().starts_with("(skip)");
+        if unhandled && (ends || status) {
+            if let Some(path) = file {
+                push(&mut out, whole_file(path));
+            }
+            unhandled = false;
+        }
         // A job can run bun more than once; the next run's headers start over.
-        if summary.is_match(line) {
+        if summary.is_match(line) || total.is_match(line) {
             file = None;
             continue;
         }
-        if let Some(path) = bun_header(line) {
+        if let Some(path) = header {
             file = Some(path);
+            continue;
+        }
+        if file.is_some() && line.trim() == "# Unhandled error between tests" {
+            unhandled = true;
             continue;
         }
         let (Some(path), Some(c)) = (file, fail.captures(line)) else {
             continue;
         };
+        unhandled = false;
         let title = last_segment(&c["title"], " > ").filter(|t| t != "(unnamed)");
-        let printed = Printed {
-            path: path.to_string(),
-            project: None,
-            title,
-        };
-        if !out.contains(&printed) {
-            out.push(printed);
-        }
+        push(
+            &mut out,
+            Printed {
+                path: path.to_string(),
+                project: None,
+                title,
+            },
+        );
+    }
+    if let (true, Some(path)) = (unhandled, file) {
+        push(&mut out, whole_file(path));
     }
     out
 }

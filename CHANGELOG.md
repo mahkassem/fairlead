@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- Replay's `bun` extractor counts a test file that failed to load (an import or syntax error, which bun reports as an unhandled error under the file's header with no `(fail)` line) as that file's failure, instead of finding nothing. Datasets fetched before this keep no such lines, so re-fetch to see them.
+
 ## 0.4.2 (2026-09-28)
 
 ### Fixed
