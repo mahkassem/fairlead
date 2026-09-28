@@ -9,8 +9,11 @@ use rayon::prelude::*;
 
 use crate::cache::{self, CacheStats, ParseCache};
 use crate::extract::{extract, Extracted, SpecKind};
+use crate::golang;
 use crate::graph::{EdgeKind, Graph};
+use crate::php;
 use crate::provider;
+use crate::python;
 use crate::resolve::{Resolver, Target};
 use crate::rules::{RuleStats, Rules};
 use crate::tree::{normalize, parent, Tree};
@@ -28,6 +31,10 @@ struct FileResult {
     unknown: bool,
     fell_back: bool,
     parsed: Option<Parsed>,
+    /// A PHP or Go file's references by name, resolved once every file is
+    /// read, and the names it declares.
+    names: Vec<(String, SpecKind)>,
+    declares: Vec<String>,
 }
 
 /// A file's extraction, with its cache key when the cache is on.
@@ -49,6 +56,10 @@ pub struct Scan {
     pub conflicts: Vec<provider::Conflict>,
     /// Files claimed by a provider that failed: nothing is known about them.
     pub uncertain: std::collections::HashSet<String>,
+    /// What the coverage map added, when one is configured.
+    pub coverage: Option<crate::coverage::Report>,
+    /// How PHP names resolve here, for turning a coverage run's test names into files.
+    pub autoload: php::Autoload,
 }
 
 pub fn build(root: &Path, config: &Config) -> std::io::Result<Scan> {
@@ -74,7 +85,6 @@ pub fn build(root: &Path, config: &Config) -> std::io::Result<Scan> {
         provider::claims(&tree.files, externals).map_err(std::io::Error::other)?
     };
     let sources: Vec<&String> = tree.sources().filter(|f| !owner.contains_key(*f)).collect();
-    let scanned = sources.len();
     let mut results: Vec<(String, FileResult)> = sources
         .par_iter()
         .map(|file| {
@@ -109,11 +119,150 @@ pub fn build(root: &Path, config: &Config) -> std::io::Result<Scan> {
         }
     }
     parse_cache.save(used);
-    let before = graph.stats().edges;
+    let named = Named {
+        autoload: php::Autoload::new(
+            &tree,
+            results
+                .iter()
+                .map(|(f, r)| (f.as_str(), r.declares.as_slice())),
+        ),
+        modules: golang::Modules::new(&tree),
+        roots: python::Roots::new(&tree),
+    };
+    let edges = add_results(&tree, &named, &mut graph, results);
+    let coverage = config
+        .graph
+        .coverage
+        .as_ref()
+        .map(|c| crate::coverage::apply(&root, c, &mut graph));
+    let mut providers = Vec::new();
+    for id in [provider::BUILTIN, php::ID, golang::ID, python::ID] {
+        let files = sources.iter().filter(|f| language(f) == id).count();
+        if files > 0 || id == provider::BUILTIN {
+            providers.push(provider::Report {
+                id: id.into(),
+                files,
+                edges: edges.get(id).copied().unwrap_or(0),
+                ignored: 0,
+                failed: None,
+            });
+        }
+    }
+    let uncertain = run_externals(&root, externals, &owner, &mut graph, &mut providers);
+    add_snapshot_edges(&tree, &mut graph);
+    let rules = Rules::new(&config.graph).map_err(std::io::Error::other)?;
+    let rule_stats = rules.apply(&mut graph).map_err(std::io::Error::other)?;
+    let all = 0..graph.files.len() as u32;
+    rules.mark(&mut graph, all);
+    Ok(Scan {
+        tree,
+        graph,
+        packages,
+        cache: stats,
+        rules: rule_stats,
+        providers,
+        conflicts,
+        uncertain,
+        coverage,
+        autoload: named.autoload,
+    })
+}
+
+/// Which built-in scanner reads a file, by its id in reports.
+fn language(file: &str) -> &'static str {
+    if file.ends_with(".php") {
+        php::ID
+    } else if file.ends_with(".go") {
+        golang::ID
+    } else if file.ends_with(".py") {
+        python::ID
+    } else {
+        provider::BUILTIN
+    }
+}
+
+/// What turns a name into files, for languages that refer by name: known
+/// only once every file is read.
+struct Named {
+    autoload: php::Autoload,
+    modules: golang::Modules,
+    roots: python::Roots,
+}
+
+impl Named {
+    /// The files a reference reaches, and the paths it would need that
+    /// aren't there.
+    fn resolve(
+        &self,
+        tree: &Tree,
+        file: &str,
+        name: &str,
+        kind: SpecKind,
+    ) -> (Vec<String>, Vec<String>) {
+        match language(file) {
+            php::ID => match self.autoload.resolve(tree, name) {
+                php::Resolved::Files(files) => (files, Vec::new()),
+                php::Resolved::Missing(paths) => (Vec::new(), paths),
+                php::Resolved::External => Default::default(),
+            },
+            golang::ID if kind == SpecKind::Require => {
+                (self.modules.embedded(tree, file, name), Vec::new())
+            }
+            golang::ID => (self.modules.package(file, name), Vec::new()),
+            python::ID => (self.roots.resolve(tree, file, name), Vec::new()),
+            _ => Default::default(),
+        }
+    }
+}
+
+/// Adds each file's edges, resolving names now that every file is read;
+/// returns the edges added by each built-in scanner.
+fn add_results(
+    tree: &Tree,
+    named: &Named,
+    graph: &mut Graph,
+    results: Vec<(String, FileResult)>,
+) -> HashMap<&'static str, usize> {
+    let mut counts: HashMap<&'static str, usize> = HashMap::new();
     for (file, result) in results {
         let from = graph.id(&file).expect("every source is in the tree");
+        let before = graph.dependencies(from).len();
         for (to, kind) in result.edges {
             if let Some(to) = graph.id(&to) {
+                graph.add_edge(from, to, kind);
+            }
+        }
+        let mut reached = Vec::new();
+        for (name, kind) in &result.names {
+            let (files, missing) = named.resolve(tree, &file, name, *kind);
+            let kind = if *kind == SpecKind::Require && language(&file) == golang::ID {
+                EdgeKind::PathLiteral
+            } else {
+                EdgeKind::Import
+            };
+            reached.extend(files.into_iter().map(|f| (f, kind)));
+            graph
+                .dangling
+                .extend(missing.into_iter().map(|p| (from, p)));
+        }
+        if python::is_test(&file) {
+            reached.extend(
+                python::conftests(tree, &file)
+                    .into_iter()
+                    .map(|f| (f, EdgeKind::Import)),
+            );
+        }
+        if golang::is_test(&file) {
+            reached.extend(
+                named
+                    .modules
+                    .siblings(&file)
+                    .into_iter()
+                    .map(|f| (f, EdgeKind::Import)),
+            );
+        }
+        for (to, kind) in reached {
+            if let Some(to) = graph.id(&to).filter(|&to| to != from) {
                 graph.add_edge(from, to, kind);
             }
         }
@@ -135,30 +284,9 @@ pub fn build(root: &Path, config: &Config) -> std::io::Result<Scan> {
         if result.fell_back {
             graph.tsconfig_fallbacks.push(from);
         }
+        *counts.entry(language(&file)).or_default() += graph.dependencies(from).len() - before;
     }
-    let mut providers = vec![provider::Report {
-        id: provider::BUILTIN.into(),
-        files: scanned,
-        edges: graph.stats().edges - before,
-        ignored: 0,
-        failed: None,
-    }];
-    let uncertain = run_externals(&root, externals, &owner, &mut graph, &mut providers);
-    add_snapshot_edges(&tree, &mut graph);
-    let rules = Rules::new(&config.graph).map_err(std::io::Error::other)?;
-    let rule_stats = rules.apply(&mut graph).map_err(std::io::Error::other)?;
-    let all = 0..graph.files.len() as u32;
-    rules.mark(&mut graph, all);
-    Ok(Scan {
-        tree,
-        graph,
-        packages,
-        cache: stats,
-        rules: rule_stats,
-        providers,
-        conflicts,
-        uncertain,
-    })
+    counts
 }
 
 /// Runs each external provider on the files it claims; returns the files of
@@ -224,7 +352,12 @@ fn scan_file(
         unknown: extracted.unknown_dynamic,
         ..FileResult::default()
     };
-    for (spec, kind) in &extracted.specs {
+    let by_name = language(file) != provider::BUILTIN;
+    if by_name {
+        result.names = extracted.specs.clone();
+        result.declares = extracted.declares.clone();
+    }
+    for (spec, kind) in extracted.specs.iter().filter(|_| !by_name) {
         if *kind == SpecKind::TypeImport && !type_imports {
             continue;
         }

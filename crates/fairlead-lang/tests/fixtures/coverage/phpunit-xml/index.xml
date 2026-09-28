@@ -1,0 +1,67 @@
+<?xml version="1.0"?>
+<phpunit xmlns="https://schema.phpunit.de/coverage/1.0">
+  <build time="Mon Sep 28 21:17:39 UTC 2026" phpunit="13.3.5" coverage="14.3.5">
+    <runtime name="PHP" version="8.4.19" url="https://www.php.net/"/>
+    <driver name="PCOV" version="1.0.13-dev"/>
+  </build>
+  <project source="/home/runner/work/shop/shop/src">
+    <tests>
+      <test name="Tests\Unit\PricingTest::test_total" size="unknown" status="success" time="Mon Sep 28 21:17:39 UTC 2026"/>
+      <test name="Tests\Unit\TaxTest::test_rate" size="unknown" status="success" time="Mon Sep 28 21:17:39 UTC 2026"/>
+    </tests>
+    <directory name="/">
+      <totals>
+        <lines total="49" comments="0" code="49" executable="7" executed="7" percent="100.00"/>
+        <methods count="3" tested="3" percent="100.00"/>
+        <functions count="1" tested="1" percent="100.00"/>
+        <classes count="3" tested="3" percent="100.00"/>
+        <traits count="0" tested="0" percent="0"/>
+      </totals>
+      <directory name="Billing">
+        <totals>
+          <lines total="36" comments="0" code="36" executable="3" executed="3" percent="100.00"/>
+          <methods count="3" tested="3" percent="100.00"/>
+          <functions count="0" tested="0" percent="0"/>
+          <classes count="3" tested="3" percent="100.00"/>
+          <traits count="0" tested="0" percent="0"/>
+        </totals>
+        <file name="Pricing.php" href="Billing/Pricing.php.xml" hash="ceeb99a9bc9445af83c8f793634b669796b6e7bd">
+          <totals>
+            <lines total="12" comments="0" code="12" executable="1" executed="1" percent="100.00"/>
+            <methods count="1" tested="1" percent="100.00"/>
+            <functions count="0" tested="0" percent="0"/>
+            <classes count="1" tested="1" percent="100.00"/>
+            <traits count="0" tested="0" percent="0"/>
+          </totals>
+        </file>
+        <file name="Rounding.php" href="Billing/Rounding.php.xml" hash="c139552a0da763c7041cd6592c5d2f9601f5b522">
+          <totals>
+            <lines total="12" comments="0" code="12" executable="1" executed="1" percent="100.00"/>
+            <methods count="1" tested="1" percent="100.00"/>
+            <functions count="0" tested="0" percent="0"/>
+            <classes count="1" tested="1" percent="100.00"/>
+            <traits count="0" tested="0" percent="0"/>
+          </totals>
+        </file>
+        <file name="Tax.php" href="Billing/Tax.php.xml" hash="87b0054a9505911abdfe1b6056cd22ecd4553329">
+          <totals>
+            <lines total="12" comments="0" code="12" executable="1" executed="1" percent="100.00"/>
+            <methods count="1" tested="1" percent="100.00"/>
+            <functions count="0" tested="0" percent="0"/>
+            <classes count="1" tested="1" percent="100.00"/>
+            <traits count="0" tested="0" percent="0"/>
+          </totals>
+        </file>
+      </directory>
+      <file name="helpers.php" href="helpers.php.xml" hash="78d5812d9d73cb26c9d64a7c1badf710edfb2cb1">
+        <totals>
+          <lines total="13" comments="0" code="13" executable="4" executed="4" percent="100.00"/>
+          <methods count="0" tested="0" percent="0"/>
+          <functions count="1" tested="1" percent="100.00"/>
+          <classes count="0" tested="0" percent="0"/>
+          <traits count="0" tested="0" percent="0"/>
+        </totals>
+      </file>
+    </directory>
+  </project>
+</phpunit>

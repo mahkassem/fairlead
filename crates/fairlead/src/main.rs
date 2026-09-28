@@ -4,6 +4,7 @@
 
 mod bench_cmd;
 mod ci_cmd;
+mod coverage_cmd;
 mod done_cmd;
 mod graph_cmd;
 mod guard_cmd;
@@ -97,6 +98,11 @@ enum Command {
     Hooks {
         #[command(subcommand)]
         action: hooks_cmd::HooksAction,
+    },
+    /// Import a coverage run into the map `graph.coverage` reads.
+    Coverage {
+        #[command(subcommand)]
+        action: coverage_cmd::CoverageAction,
     },
     /// Inspect the import graph.
     Graph {
@@ -320,6 +326,7 @@ fn main() -> ExitCode {
         }
         Some(Command::Config { action, sets }) => run_config(action, sets),
         Some(Command::Graph { action, sets }) => graph_cmd::run(action, sets, &cwd()),
+        Some(Command::Coverage { action }) => coverage_cmd::run(action, &cwd()),
         Some(Command::Guard { action, sets }) => guard_cmd::run(action, sets, &cwd()),
         Some(Command::Hooks { action }) => hooks_cmd::run(action, &cwd()),
         Some(Command::Done { args }) => done_cmd::run(args, &cwd()),

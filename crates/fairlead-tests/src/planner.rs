@@ -133,9 +133,13 @@ pub fn plan(scan: &mut Scan, config: &Config, input: Input) -> Result<Plan, Stri
         return Err(runner_problems(&found.unmatched, &found.ambiguous));
     }
     let ignore = patterns(config.plan.ignore.items())?;
+    // Refreshing the coverage map changes what the plan knows, not the code.
+    let map = config.graph.coverage.as_ref().map(|c| c.map.as_str());
     let ignored = changed
         .iter()
-        .filter(|p| !Tree::is_source(p) && ignore.iter().any(|g| g.is_match(p)))
+        .filter(|p| {
+            Some(p.as_str()) == map || (!Tree::is_source(p) && ignore.iter().any(|g| g.is_match(p)))
+        })
         .filter(|p| {
             scan.graph
                 .id(p)
@@ -184,6 +188,7 @@ pub fn plan(scan: &mut Scan, config: &Config, input: Input) -> Result<Plan, Stri
                 .into(),
         });
     }
+    warnings.extend(coverage_warning(scan, config));
     if trigger.is_none() {
         if let Some((path, warning)) = provider_failed(scan, &cx.changed) {
             warnings.push(warning);
@@ -293,6 +298,31 @@ pub fn is_manifest(cx: &Context, path: &str) -> bool {
 
 /// The walk from every changed path that isn't ignored, with a changed
 /// package manifest standing for every file in its package.
+/// A coverage map that can't be read leaves only the static graph, and an
+/// old one misses what changed since; either is worth saying, not failing.
+fn coverage_warning(scan: &Scan, config: &Config) -> Option<Warning> {
+    let report = scan.coverage.as_ref()?;
+    let max = config.graph.coverage.as_ref()?.max_age_days;
+    if let Some(why) = &report.error {
+        return Some(Warning {
+            code: "coverage-unreadable".into(),
+            path: Some(report.map.clone()),
+            message: format!("the coverage map is left out: {why}"),
+        });
+    }
+    let age = fairlead_core::coverage::days(&fairlead_core::coverage::today())?
+        - fairlead_core::coverage::days(&report.created)?;
+    (age > i64::from(max)).then(|| Warning {
+        code: "coverage-stale".into(),
+        path: Some(report.map.clone()),
+        message: format!(
+            "the coverage map is {age} days old (from {}, commit {}); refresh it, it's allowed {max}",
+            report.created,
+            report.commit.get(..12).unwrap_or(&report.commit)
+        ),
+    })
+}
+
 /// A provider that failed tells nothing about its files, so a change to one
 /// is as uncertain as a run-all path.
 fn provider_failed(scan: &Scan, changed: &BTreeSet<String>) -> Option<(String, Warning)> {

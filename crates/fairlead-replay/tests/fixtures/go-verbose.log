@@ -1,0 +1,42 @@
+# example.com/shop/broken [example.com/shop/broken.test]
+broken/broken_test.go:5:32: undefined: undefinedThing
+FAIL	example.com/shop/broken [build failed]
+=== RUN   TestItem
+--- FAIL: TestItem (0.00s)
+panic: runtime error: index out of range [3] with length 1 [recovered]
+	panic: runtime error: index out of range [3] with length 1
+
+goroutine 17 [running]:
+testing.tRunner.func1.2({0x567de0, 0xc0000b0000})
+	/usr/local/go1.24.7/src/testing/testing.go:1734 +0x21c
+testing.tRunner.func1()
+	/usr/local/go1.24.7/src/testing/testing.go:1737 +0x35e
+panic({0x567de0?, 0xc0000b0000?})
+	/usr/local/go1.24.7/src/runtime/panic.go:792 +0x132
+example.com/shop/cart.Item(...)
+	/home/runner/work/shop/shop/cart/cart.go:3
+example.com/shop/cart.TestItem(0xc000082540?)
+	/home/runner/work/shop/shop/cart/cart_test.go:6 +0x18
+testing.tRunner(0xc000082540, 0x584380)
+	/usr/local/go1.24.7/src/testing/testing.go:1792 +0xf4
+created by testing.(*T).Run in goroutine 1
+	/usr/local/go1.24.7/src/testing/testing.go:1851 +0x413
+FAIL	example.com/shop/cart	0.005s
+=== RUN   TestOK
+    ok_test.go:5: fine
+--- PASS: TestOK (0.00s)
+PASS
+ok  	example.com/shop/ok	0.002s
+=== RUN   TestTotal
+    price_test.go:7: Total = 3, want 4
+--- FAIL: TestTotal (0.00s)
+=== RUN   TestTable
+=== RUN   TestTable/pair
+=== RUN   TestTable/wrong
+    price_test.go:15: got 4
+--- FAIL: TestTable (0.00s)
+    --- PASS: TestTable/pair (0.00s)
+    --- FAIL: TestTable/wrong (0.00s)
+FAIL
+FAIL	example.com/shop/price	0.002s
+FAIL

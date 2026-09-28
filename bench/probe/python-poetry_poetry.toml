@@ -1,0 +1,20 @@
+# python-poetry/poetry's CI: pytest under tests/, one job per OS and Python
+# version, named like "Ubuntu (Python 3.12)".
+
+[tests]
+match = { replace = ["tests/**/test_*.py"] }
+exclude = ["**/fixtures/**"]
+
+[[tests.runners]]
+id = "pytest"
+match = ["tests/**/test_*.py"]
+command = ["pytest", "{files}"]
+
+[replay]
+window_days = 90
+min_failures = 10
+
+[[replay.failures]]
+runner = "pytest"
+extractor = "pytest"
+job = "\\(Python "

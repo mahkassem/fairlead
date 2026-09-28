@@ -147,3 +147,62 @@ fn a_check_watching_a_module_runs_when_the_change_reaches_it() {
     let other = run(&dir, &cfg, vec![modified("packages/b/src/y.ts")]);
     assert!(other.checks.iter().all(|c| c.id != "gen-contract"));
 }
+
+const GO: &[(&str, &str)] = &[
+    ("go.mod", "module example.com/shop\n\ngo 1.24\n"),
+    (
+        "pkg/price/price.go",
+        "package price\n\nfunc Total(xs []int) int { return sum(xs) }\n",
+    ),
+    (
+        "pkg/price/sum.go",
+        "package price\n\nfunc sum(xs []int) (t int) { for _, x := range xs { t += x }; return }\n",
+    ),
+    (
+        "pkg/price/price_test.go",
+        "package price\n\nimport \"testing\"\n\nfunc TestTotal(t *testing.T) {}\n",
+    ),
+    (
+        "cmd/shop/main.go",
+        "package main\n\nimport (\n\t\"fmt\"\n\t\"example.com/shop/pkg/price\"\n)\n\nfunc main() { fmt.Println(price.Total(nil)) }\n",
+    ),
+    (
+        "cmd/shop/main_test.go",
+        "package main\n\nimport \"testing\"\n\nfunc TestMain(t *testing.T) {}\n",
+    ),
+    (
+        "pkg/other/other_test.go",
+        "package other\n\nimport \"testing\"\n\nfunc TestOther(t *testing.T) {}\n",
+    ),
+];
+
+const GO_RUNNER: &str = r#"
+[tests]
+match = ["**/*_test.go"]
+
+[plan]
+run_all = ["go.sum"]
+
+[[tests.runners]]
+id = "go"
+match = ["**/*_test.go"]
+command = ["go", "test", "{packages}"]
+"#;
+
+#[test]
+fn go_test_gets_each_selected_package_and_everything_under_run_all() {
+    let mut files = GO.to_vec();
+    files.push(("go.sum", "x\n"));
+    let dir = repo("inv-go", &files);
+    let plan = run(&dir, &config(GO_RUNNER), vec![modified("pkg/price/sum.go")]);
+    assert_eq!(
+        tests(&plan),
+        ["cmd/shop/main_test.go", "pkg/price/price_test.go"],
+        "through the package's other file and its importer"
+    );
+    let go = plan.invocations.iter().find(|i| i.id == "go").unwrap();
+    assert_eq!(go.argv, ["go", "test", "./cmd/shop", "./pkg/price"]);
+    let plan = run(&dir, &config(GO_RUNNER), vec![modified("go.sum")]);
+    let go = plan.invocations.iter().find(|i| i.id == "go").unwrap();
+    assert_eq!(go.argv, ["go", "test", "./..."]);
+}

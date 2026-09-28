@@ -179,3 +179,113 @@ fn bun_pins_an_unhandled_error_on_the_test_that_follows_it_and_ends_it_at_a_pass
         ]
     );
 }
+
+#[test]
+fn phpunit_names_the_test_file_from_its_frame_or_its_class_through_a_long_message() {
+    let log = fixture("phpunit-laravel.log");
+    let unit = "/home/runner/work/shop/shop/tests/Unit/Billing/PricingTest.php";
+    let expected = [
+        printed(unit, None, Some("test_an_empty_basket_is_priced_at_zero")),
+        printed(unit, None, Some("test_total_adds_the_items")),
+        printed(unit, None, Some("test_each_basket")),
+        printed(
+            "/home/runner/work/shop/shop/tests/Feature/HomeTest.php",
+            None,
+            Some("test_the_home_page_has_a_title"),
+        ),
+    ];
+    assert_eq!(extract(&Extractor::Phpunit, &log), expected);
+    let excerpt = fairlead_replay::dataset::log_excerpt(&log).join("\n");
+    assert_eq!(extract(&Extractor::Phpunit, &excerpt), expected);
+}
+
+#[test]
+fn artisan_test_and_pest_name_the_test_file_even_when_the_error_is_thrown_elsewhere() {
+    let unit = "tests/Unit/Billing/PricingTest.php";
+    let artisan = [
+        printed(unit, None, Some("total adds the items")),
+        printed(unit, None, None),
+        printed(unit, None, Some("each basket")),
+        printed(
+            "tests/Feature/HomeTest.php",
+            None,
+            Some("the home page has a title"),
+        ),
+    ];
+    let cart = "tests/Unit/Cart/CartTest.php";
+    let pest = [
+        printed(cart, None, Some("prices a pair")),
+        printed(cart, None, None),
+        printed(cart, None, Some("adds with a dataset")),
+    ];
+    for (name, expected) in [("artisan-test.log", &artisan[..]), ("pest.log", &pest[..])] {
+        let log = fixture(name);
+        assert_eq!(extract(&Extractor::Pest, &log), expected, "{name}");
+        let excerpt = fairlead_replay::dataset::log_excerpt(&log).join("\n");
+        assert_eq!(
+            extract(&Extractor::Pest, &excerpt),
+            expected,
+            "{name} excerpt"
+        );
+    }
+}
+
+#[test]
+fn go_test_names_each_failed_test_by_its_logged_file_a_panic_frame_or_a_compile_error() {
+    let price = "/example.com/shop/price/price_test.go";
+    let expected = [
+        printed("/example.com/shop/broken/broken_test.go", None, None),
+        printed(
+            "/home/runner/work/shop/shop/cart/cart_test.go",
+            None,
+            Some("TestItem"),
+        ),
+        printed(price, None, Some("TestTotal")),
+        printed(price, None, Some("TestTable")),
+    ];
+    for name in ["go-plain.log", "go-verbose.log"] {
+        let log = fixture(name);
+        assert_eq!(extract(&Extractor::Go, &log), expected, "{name}");
+        let excerpt = fairlead_replay::dataset::log_excerpt(&log).join("\n");
+        assert_eq!(
+            extract(&Extractor::Go, &excerpt),
+            expected,
+            "{name} excerpt"
+        );
+    }
+}
+
+#[test]
+fn pytest_reads_its_summary_verbose_lines_and_collection_errors() {
+    let unit = "tests/unit/test_pricing.py";
+    let broken = printed("tests/api/test_broken.py", None, None);
+    let failed = [
+        printed(unit, None, Some("test_total_adds")),
+        printed(unit, None, Some("test_empty_basket")),
+        printed(unit, None, Some("test_baskets")),
+        printed(unit, None, Some("test_half")),
+    ];
+    let mut full = vec![broken.clone()];
+    full.extend(failed.iter().cloned());
+    let mut verbose = failed.to_vec();
+    verbose.push(broken.clone());
+    for (name, expected) in [
+        ("pytest-full.log", full),
+        ("pytest-v.log", verbose),
+        ("pytest-default.log", vec![broken]),
+    ] {
+        let log = fixture(name);
+        assert_eq!(extract(&Extractor::Pytest, &log), expected, "{name}");
+        let excerpt = fairlead_replay::dataset::log_excerpt(&log).join("\n");
+        assert_eq!(
+            extract(&Extractor::Pytest, &excerpt),
+            expected,
+            "{name} excerpt"
+        );
+    }
+    let xdist = "[gw1] [ 50%] FAILED tests/unit/test_pricing.py::TestRounding::test_half[up] \n";
+    assert_eq!(
+        extract(&Extractor::Pytest, xdist),
+        [printed(unit, None, Some("test_half"))]
+    );
+}

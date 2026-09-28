@@ -1,0 +1,43 @@
+2026-09-28T20:10:00.1234567Z PHPUnit 12.5.36 by Sebastian Bergmann and contributors.
+2026-09-28T20:10:01.1234567Z 
+2026-09-28T20:10:02.1234567Z Runtime:       PHP 8.4.19
+2026-09-28T20:10:03.1234567Z Configuration: /home/runner/work/shop/shop/phpunit.xml
+2026-09-28T20:10:04.1234567Z 
+2026-09-28T20:10:05.1234567Z FE.F..F                                                             7 / 7 (100%)
+2026-09-28T20:10:06.1234567Z 
+2026-09-28T20:10:07.1234567Z Time: 00:00.116, Memory: 40.50 MB
+2026-09-28T20:10:08.1234567Z 
+2026-09-28T20:10:09.1234567Z There was 1 error:
+2026-09-28T20:10:00.1234567Z 
+2026-09-28T20:10:01.1234567Z 1) Tests\Unit\Billing\PricingTest::test_an_empty_basket_is_priced_at_zero
+2026-09-28T20:10:02.1234567Z InvalidArgumentException: No items to price.
+2026-09-28T20:10:03.1234567Z 
+2026-09-28T20:10:04.1234567Z /home/runner/work/shop/shop/app/Services/Pricing.php:10
+2026-09-28T20:10:05.1234567Z /home/runner/work/shop/shop/tests/Unit/Billing/PricingTest.php:18
+2026-09-28T20:10:06.1234567Z 
+2026-09-28T20:10:07.1234567Z --
+2026-09-28T20:10:08.1234567Z 
+2026-09-28T20:10:09.1234567Z There were 3 failures:
+2026-09-28T20:10:00.1234567Z 
+2026-09-28T20:10:01.1234567Z 1) Tests\Unit\Billing\PricingTest::test_total_adds_the_items
+2026-09-28T20:10:02.1234567Z Failed asserting that 30 is identical to 31.
+2026-09-28T20:10:03.1234567Z 
+2026-09-28T20:10:04.1234567Z /home/runner/work/shop/shop/tests/Unit/Billing/PricingTest.php:13
+2026-09-28T20:10:05.1234567Z 
+2026-09-28T20:10:06.1234567Z 2) Tests\Unit\Billing\PricingTest::test_each_basket@wrong with data ([2, 2], 5)
+2026-09-28T20:10:07.1234567Z Failed asserting that 4 is identical to 5.
+2026-09-28T20:10:08.1234567Z 
+2026-09-28T20:10:09.1234567Z /home/runner/work/shop/shop/tests/Unit/Billing/PricingTest.php:24
+2026-09-28T20:10:00.1234567Z 
+2026-09-28T20:10:01.1234567Z 3) Tests\Feature\HomeTest::test_the_home_page_has_a_title
+2026-09-28T20:10:02.1234567Z Failed asserting that '<!DOCTYPE html>\n
+2026-09-28T20:10:03.1234567Z <html lang="en">\n
+2026-09-28T20:10:04.1234567Z ' [ASCII](length: 70403) contains "Nothing like this" [ASCII](length: 17).
+2026-09-28T20:10:05.1234567Z 
+2026-09-28T20:10:06.1234567Z /home/runner/work/shop/shop/vendor/laravel/framework/src/Illuminate/Testing/TestResponseAssert.php:46
+2026-09-28T20:10:07.1234567Z /home/runner/work/shop/shop/vendor/laravel/framework/src/Illuminate/Testing/TestResponse.php:720
+2026-09-28T20:10:08.1234567Z /home/runner/work/shop/shop/tests/Feature/HomeTest.php:11
+2026-09-28T20:10:09.1234567Z 
+2026-09-28T20:10:00.1234567Z ERRORS!
+2026-09-28T20:10:01.1234567Z Tests: 7, Assertions: 6, Errors: 1, Failures: 3.
+2026-09-28T20:10:02.1234567Z 

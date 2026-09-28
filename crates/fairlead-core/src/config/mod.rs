@@ -134,6 +134,24 @@ pub struct Graph {
     /// digest when empty, so configs without them keep their plan ids.
     #[serde(skip_serializing_if = "List::is_empty")]
     pub providers: List<GraphProvider>,
+    /// A coverage map whose edges join the static graph. Off by default,
+    /// and left out of the digest when unset.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub coverage: Option<Coverage>,
+}
+
+/// Where the coverage map is, and how old it may get before the plan warns.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct Coverage {
+    /// The map, relative to the project root, as `fairlead coverage import` writes it.
+    pub map: String,
+    #[serde(default = "default_max_age_days")]
+    pub max_age_days: u32,
+}
+
+fn default_max_age_days() -> u32 {
+    14
 }
 
 /// An external graph provider: `command` runs at the project root, reads the
@@ -176,6 +194,7 @@ impl Default for Graph {
             edges: List::default(),
             barrier: List::default(),
             providers: List::default(),
+            coverage: None,
         }
     }
 }
@@ -341,6 +360,19 @@ impl Default for Plan {
                 "**/vitest.workspace.*",
                 "**/jest.config.*",
                 "**/playwright.config.*",
+                "**/go.mod",
+                "**/go.sum",
+                "go.work",
+                "go.work.sum",
+                "composer.json",
+                "composer.lock",
+                "pyproject.toml",
+                "setup.py",
+                "setup.cfg",
+                "requirements*.txt",
+                "poetry.lock",
+                "uv.lock",
+                "Pipfile.lock",
                 ".github/workflows/**",
             ]),
             ignore: strings(&[
@@ -399,7 +431,8 @@ pub enum Provider {
 pub struct FailureSource {
     /// The runner whose files these failures name.
     pub runner: String,
-    /// A built-in extractor ("vitest", "jest", "bun") or "regex" with `pattern`.
+    /// A built-in extractor ("vitest", "jest", "bun", "phpunit", "pest", "go", "pytest") or
+    /// "regex" with `pattern`.
     pub extractor: String,
     /// CI job names this source reads, as a regex.
     #[serde(default, skip_serializing_if = "Option::is_none")]

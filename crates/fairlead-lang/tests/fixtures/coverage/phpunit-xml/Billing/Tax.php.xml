@@ -1,0 +1,21 @@
+<?xml version="1.0"?>
+<phpunit xmlns="https://schema.phpunit.de/coverage/1.0">
+  <file name="Tax.php" path="/Billing" hash="87b0054a9505911abdfe1b6056cd22ecd4553329">
+    <totals>
+      <lines total="12" comments="0" code="12" executable="1" executed="1" percent="100.00"/>
+      <methods count="1" tested="1" percent="100.00"/>
+      <functions count="0" tested="0" percent="0"/>
+      <classes count="1" tested="1" percent="100.00"/>
+      <traits count="0" tested="0" percent="0"/>
+    </totals>
+    <class name="App\Billing\Tax" start="5" executable="1" executed="1" crap="1">
+      <namespace name="App\Billing"/>
+      <method name="rate" signature="rate(): float" start="7" end="10" crap="1" executable="1" executed="1" coverage="100"/>
+    </class>
+    <coverage>
+      <line nr="9">
+        <covered by="Tests\Unit\TaxTest::test_rate" count="1"/>
+      </line>
+    </coverage>
+    </file>
+</phpunit>

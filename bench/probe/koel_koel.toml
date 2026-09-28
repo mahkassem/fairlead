@@ -1,0 +1,18 @@
+# koel/koel's SQLite backend workflow: `php artisan test --parallel` over
+# tests/, printed by Collision like Pest.
+
+[tests]
+match = { replace = ["tests/**/*Test.php"] }
+
+[[tests.runners]]
+id = "phpunit"
+match = ["tests/**/*Test.php"]
+command = ["php", "artisan", "test", "{files}"]
+
+[replay]
+window_days = 90
+min_failures = 10
+
+[[replay.failures]]
+runner = "phpunit"
+extractor = "pest"

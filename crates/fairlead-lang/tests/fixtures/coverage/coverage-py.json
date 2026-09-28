@@ -1,0 +1,444 @@
+{
+ "meta": {
+  "format": 3,
+  "version": "7.16.2",
+  "timestamp": "2026-09-28T21:17:54.569291",
+  "branch_coverage": false,
+  "show_contexts": true
+ },
+ "files": {
+  "src/shop/__init__.py": {
+   "executed_lines": [],
+   "summary": {
+    "covered_lines": 0,
+    "num_statements": 0,
+    "percent_covered": 100.0,
+    "percent_covered_display": "100",
+    "missing_lines": 0,
+    "excluded_lines": 0,
+    "percent_statements_covered": 100.0,
+    "percent_statements_covered_display": "100"
+   },
+   "missing_lines": [],
+   "excluded_lines": [],
+   "contexts": {
+    "0": [
+     ""
+    ]
+   },
+   "functions": {
+    "": {
+     "executed_lines": [],
+     "summary": {
+      "covered_lines": 0,
+      "num_statements": 0,
+      "percent_covered": 100.0,
+      "percent_covered_display": "100",
+      "missing_lines": 0,
+      "excluded_lines": 0,
+      "percent_statements_covered": 100.0,
+      "percent_statements_covered_display": "100"
+     },
+     "missing_lines": [],
+     "excluded_lines": [],
+     "start_line": 1,
+     "contexts": {
+      "0": [
+       ""
+      ]
+     }
+    }
+   },
+   "classes": {
+    "": {
+     "executed_lines": [],
+     "summary": {
+      "covered_lines": 0,
+      "num_statements": 0,
+      "percent_covered": 100.0,
+      "percent_covered_display": "100",
+      "missing_lines": 0,
+      "excluded_lines": 0,
+      "percent_statements_covered": 100.0,
+      "percent_statements_covered_display": "100"
+     },
+     "missing_lines": [],
+     "excluded_lines": [],
+     "start_line": 1,
+     "contexts": {
+      "0": [
+       ""
+      ]
+     }
+    }
+   }
+  },
+  "src/shop/pricing.py": {
+   "executed_lines": [
+    1,
+    2
+   ],
+   "summary": {
+    "covered_lines": 2,
+    "num_statements": 2,
+    "percent_covered": 100.0,
+    "percent_covered_display": "100",
+    "missing_lines": 0,
+    "excluded_lines": 0,
+    "percent_statements_covered": 100.0,
+    "percent_statements_covered_display": "100"
+   },
+   "missing_lines": [],
+   "excluded_lines": [],
+   "contexts": {
+    "1": [
+     ""
+    ],
+    "2": [
+     "tests/unit/test_pricing.py::test_total|run"
+    ]
+   },
+   "functions": {
+    "total": {
+     "executed_lines": [
+      2
+     ],
+     "summary": {
+      "covered_lines": 1,
+      "num_statements": 1,
+      "percent_covered": 100.0,
+      "percent_covered_display": "100",
+      "missing_lines": 0,
+      "excluded_lines": 0,
+      "percent_statements_covered": 100.0,
+      "percent_statements_covered_display": "100"
+     },
+     "missing_lines": [],
+     "excluded_lines": [],
+     "start_line": 1,
+     "contexts": {
+      "1": [
+       ""
+      ],
+      "2": [
+       "tests/unit/test_pricing.py::test_total|run"
+      ]
+     }
+    },
+    "": {
+     "executed_lines": [
+      1
+     ],
+     "summary": {
+      "covered_lines": 1,
+      "num_statements": 1,
+      "percent_covered": 100.0,
+      "percent_covered_display": "100",
+      "missing_lines": 0,
+      "excluded_lines": 0,
+      "percent_statements_covered": 100.0,
+      "percent_statements_covered_display": "100"
+     },
+     "missing_lines": [],
+     "excluded_lines": [],
+     "start_line": 1,
+     "contexts": {
+      "1": [
+       ""
+      ],
+      "2": [
+       "tests/unit/test_pricing.py::test_total|run"
+      ]
+     }
+    }
+   },
+   "classes": {
+    "": {
+     "executed_lines": [
+      1,
+      2
+     ],
+     "summary": {
+      "covered_lines": 2,
+      "num_statements": 2,
+      "percent_covered": 100.0,
+      "percent_covered_display": "100",
+      "missing_lines": 0,
+      "excluded_lines": 0,
+      "percent_statements_covered": 100.0,
+      "percent_statements_covered_display": "100"
+     },
+     "missing_lines": [],
+     "excluded_lines": [],
+     "start_line": 1,
+     "contexts": {
+      "1": [
+       ""
+      ],
+      "2": [
+       "tests/unit/test_pricing.py::test_total|run"
+      ]
+     }
+    }
+   }
+  },
+  "src/shop/registry.py": {
+   "executed_lines": [
+    1,
+    4,
+    5
+   ],
+   "summary": {
+    "covered_lines": 3,
+    "num_statements": 3,
+    "percent_covered": 100.0,
+    "percent_covered_display": "100",
+    "missing_lines": 0,
+    "excluded_lines": 0,
+    "percent_statements_covered": 100.0,
+    "percent_statements_covered_display": "100"
+   },
+   "missing_lines": [],
+   "excluded_lines": [],
+   "contexts": {
+    "1": [
+     ""
+    ],
+    "4": [
+     ""
+    ],
+    "5": [
+     "tests/unit/test_tax.py::test_rate|run"
+    ]
+   },
+   "functions": {
+    "plugin": {
+     "executed_lines": [
+      5
+     ],
+     "summary": {
+      "covered_lines": 1,
+      "num_statements": 1,
+      "percent_covered": 100.0,
+      "percent_covered_display": "100",
+      "missing_lines": 0,
+      "excluded_lines": 0,
+      "percent_statements_covered": 100.0,
+      "percent_statements_covered_display": "100"
+     },
+     "missing_lines": [],
+     "excluded_lines": [],
+     "start_line": 4,
+     "contexts": {
+      "1": [
+       ""
+      ],
+      "4": [
+       ""
+      ],
+      "5": [
+       "tests/unit/test_tax.py::test_rate|run"
+      ]
+     }
+    },
+    "": {
+     "executed_lines": [
+      1,
+      4
+     ],
+     "summary": {
+      "covered_lines": 2,
+      "num_statements": 2,
+      "percent_covered": 100.0,
+      "percent_covered_display": "100",
+      "missing_lines": 0,
+      "excluded_lines": 0,
+      "percent_statements_covered": 100.0,
+      "percent_statements_covered_display": "100"
+     },
+     "missing_lines": [],
+     "excluded_lines": [],
+     "start_line": 1,
+     "contexts": {
+      "1": [
+       ""
+      ],
+      "4": [
+       ""
+      ],
+      "5": [
+       "tests/unit/test_tax.py::test_rate|run"
+      ]
+     }
+    }
+   },
+   "classes": {
+    "": {
+     "executed_lines": [
+      1,
+      4,
+      5
+     ],
+     "summary": {
+      "covered_lines": 3,
+      "num_statements": 3,
+      "percent_covered": 100.0,
+      "percent_covered_display": "100",
+      "missing_lines": 0,
+      "excluded_lines": 0,
+      "percent_statements_covered": 100.0,
+      "percent_statements_covered_display": "100"
+     },
+     "missing_lines": [],
+     "excluded_lines": [],
+     "start_line": 1,
+     "contexts": {
+      "1": [
+       ""
+      ],
+      "4": [
+       ""
+      ],
+      "5": [
+       "tests/unit/test_tax.py::test_rate|run"
+      ]
+     }
+    }
+   }
+  },
+  "src/shop/tax.py": {
+   "executed_lines": [
+    1,
+    4,
+    5
+   ],
+   "summary": {
+    "covered_lines": 3,
+    "num_statements": 3,
+    "percent_covered": 100.0,
+    "percent_covered_display": "100",
+    "missing_lines": 0,
+    "excluded_lines": 0,
+    "percent_statements_covered": 100.0,
+    "percent_statements_covered_display": "100"
+   },
+   "missing_lines": [],
+   "excluded_lines": [],
+   "contexts": {
+    "1": [
+     "tests/unit/test_tax.py::test_rate|run"
+    ],
+    "4": [
+     "tests/unit/test_tax.py::test_rate|run"
+    ],
+    "5": [
+     "tests/unit/test_tax.py::test_rate|run"
+    ]
+   },
+   "functions": {
+    "rate": {
+     "executed_lines": [
+      5
+     ],
+     "summary": {
+      "covered_lines": 1,
+      "num_statements": 1,
+      "percent_covered": 100.0,
+      "percent_covered_display": "100",
+      "missing_lines": 0,
+      "excluded_lines": 0,
+      "percent_statements_covered": 100.0,
+      "percent_statements_covered_display": "100"
+     },
+     "missing_lines": [],
+     "excluded_lines": [],
+     "start_line": 4,
+     "contexts": {
+      "1": [
+       "tests/unit/test_tax.py::test_rate|run"
+      ],
+      "4": [
+       "tests/unit/test_tax.py::test_rate|run"
+      ],
+      "5": [
+       "tests/unit/test_tax.py::test_rate|run"
+      ]
+     }
+    },
+    "": {
+     "executed_lines": [
+      1,
+      4
+     ],
+     "summary": {
+      "covered_lines": 2,
+      "num_statements": 2,
+      "percent_covered": 100.0,
+      "percent_covered_display": "100",
+      "missing_lines": 0,
+      "excluded_lines": 0,
+      "percent_statements_covered": 100.0,
+      "percent_statements_covered_display": "100"
+     },
+     "missing_lines": [],
+     "excluded_lines": [],
+     "start_line": 1,
+     "contexts": {
+      "1": [
+       "tests/unit/test_tax.py::test_rate|run"
+      ],
+      "4": [
+       "tests/unit/test_tax.py::test_rate|run"
+      ],
+      "5": [
+       "tests/unit/test_tax.py::test_rate|run"
+      ]
+     }
+    }
+   },
+   "classes": {
+    "": {
+     "executed_lines": [
+      1,
+      4,
+      5
+     ],
+     "summary": {
+      "covered_lines": 3,
+      "num_statements": 3,
+      "percent_covered": 100.0,
+      "percent_covered_display": "100",
+      "missing_lines": 0,
+      "excluded_lines": 0,
+      "percent_statements_covered": 100.0,
+      "percent_statements_covered_display": "100"
+     },
+     "missing_lines": [],
+     "excluded_lines": [],
+     "start_line": 1,
+     "contexts": {
+      "1": [
+       "tests/unit/test_tax.py::test_rate|run"
+      ],
+      "4": [
+       "tests/unit/test_tax.py::test_rate|run"
+      ],
+      "5": [
+       "tests/unit/test_tax.py::test_rate|run"
+      ]
+     }
+    }
+   }
+  }
+ },
+ "totals": {
+  "covered_lines": 8,
+  "num_statements": 8,
+  "percent_covered": 100.0,
+  "percent_covered_display": "100",
+  "missing_lines": 0,
+  "excluded_lines": 0,
+  "percent_statements_covered": 100.0,
+  "percent_statements_covered_display": "100"
+ }
+}

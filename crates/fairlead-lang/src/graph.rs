@@ -19,6 +19,8 @@ pub enum EdgeKind {
     Snapshot,
     /// An edge an external `[[graph.providers]]` command printed.
     Provider,
+    /// A test ran this file in the coverage map's run.
+    Coverage,
     /// A `[[graph.edges]]` rule. Last, so an import between the same two
     /// files names itself first.
     Rule,
