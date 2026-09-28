@@ -28,6 +28,10 @@ pub struct Extracted {
     pub literals: Vec<String>,
     /// A dynamic import whose argument isn't a plain string.
     pub unknown_dynamic: bool,
+    /// Names the file declares, in languages that resolve a reference by
+    /// name rather than by path.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub declares: Vec<String>,
 }
 
 const COMMON: &str = r#"
@@ -98,8 +102,11 @@ pub fn fingerprint() -> String {
     hasher.update(COMMON.as_bytes());
     hasher.update(TYPESCRIPT_ONLY.as_bytes());
     hasher.update(format!("{LEXICAL_ABOVE_BYTES}/{MAX_LITERAL_LEN}").as_bytes());
-    for g in [Grammar::TypeScript, Grammar::Tsx, Grammar::JavaScript] {
-        let language = language(g);
+    let languages = [Grammar::TypeScript, Grammar::Tsx, Grammar::JavaScript]
+        .map(language)
+        .into_iter()
+        .chain([crate::php::language()]);
+    for language in languages {
         let shape = format!(
             "/{}/{}/{}",
             language.abi_version(),
@@ -182,6 +189,9 @@ pub fn extract(rel: &str, source: &[u8]) -> Extracted {
     let ext = rel.rsplit_once('.').map_or("", |(_, e)| e);
     if matches!(ext, "vue" | "svelte" | "astro") {
         return component(ext, source);
+    }
+    if ext == "php" {
+        return crate::php::extract(source);
     }
     let Some(g) = grammar(rel) else {
         return Extracted::default();
@@ -401,8 +411,7 @@ fn lexical(source: &[u8]) -> Extracted {
     specs.dedup();
     Extracted {
         specs,
-        literals: Vec::new(),
-        unknown_dynamic: false,
+        ..Extracted::default()
     }
 }
 
