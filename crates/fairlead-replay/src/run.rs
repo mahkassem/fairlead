@@ -344,12 +344,14 @@ pub fn replay(replayer: &Replayer, rows: &[Row], window: &Window) -> Replayed {
         out.runs += 1;
         replay_row(replayer, row, &rows, &mut out);
     }
-    out.inherited = crate::inherited::apply(&mut out.failures, &rows);
     out.quarantine = crate::quarantine::apply(
         &replayer.sources.quarantine,
         &mut out.failures,
         &window.until,
     );
+    // An entry someone declared explains a failure better than an inference,
+    // so only what quarantine leaves can be inherited.
+    out.inherited = crate::inherited::apply(&mut out.failures, &rows);
     out
 }
 
