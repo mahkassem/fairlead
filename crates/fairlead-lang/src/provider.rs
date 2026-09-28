@@ -140,9 +140,11 @@ fn output(
     let writer = std::thread::spawn(move || {
         let _ = stdin.write_all(list.as_bytes());
     });
-    let out = child
-        .wait_with_output()
-        .map_err(|e| format!("couldn't run {program}: {e}"))?;
+    let out = wait(
+        child,
+        std::time::Duration::from_secs(provider.timeout_seconds),
+    )
+    .map_err(|e| format!("{program} {e}"))?;
     let _ = writer.join();
     if !out.status.success() {
         let err = String::from_utf8_lossy(&out.stderr);
@@ -160,6 +162,41 @@ fn output(
     Ok(parsed)
 }
 
+/// The child's output, or an error once it has run for `limit`: a hung
+/// provider must fail the graph, not hang the plan.
+fn wait(
+    mut child: std::process::Child,
+    limit: std::time::Duration,
+) -> Result<std::process::Output, String> {
+    let read = |mut pipe: Box<dyn std::io::Read + Send>| {
+        std::thread::spawn(move || {
+            let mut bytes = Vec::new();
+            let _ = pipe.read_to_end(&mut bytes);
+            bytes
+        })
+    };
+    let stdout = read(Box::new(child.stdout.take().expect("stdout is piped")));
+    let stderr = read(Box::new(child.stderr.take().expect("stderr is piped")));
+    let started = std::time::Instant::now();
+    let status = loop {
+        match child.try_wait() {
+            Ok(Some(status)) => break status,
+            Ok(None) if started.elapsed() >= limit => {
+                let _ = child.kill();
+                let _ = child.wait();
+                return Err(format!("ran past its {} s timeout", limit.as_secs()));
+            }
+            Ok(None) => std::thread::sleep(std::time::Duration::from_millis(10)),
+            Err(e) => return Err(format!("couldn't be waited for: {e}")),
+        }
+    };
+    Ok(std::process::Output {
+        status,
+        stdout: stdout.join().unwrap_or_default(),
+        stderr: stderr.join().unwrap_or_default(),
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -169,6 +206,7 @@ mod tests {
             id: id.into(),
             command: vec!["true".into()],
             files: files.iter().map(|s| s.to_string()).collect(),
+            timeout_seconds: 120,
         }
     }
 

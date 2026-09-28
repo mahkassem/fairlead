@@ -82,6 +82,7 @@ mod tests {
             id: "go".into(),
             command: vec!["go-graph".into()],
             files: vec!["**/*.go".into()],
+            timeout_seconds: 120,
         }]
         .into();
         assert_ne!(config_digest(&with), config_digest(&config));

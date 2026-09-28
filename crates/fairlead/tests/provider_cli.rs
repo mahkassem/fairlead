@@ -96,6 +96,23 @@ fn a_providers_edges_select_the_tests_that_reach_a_change() {
     );
 }
 
+#[cfg(unix)]
+#[test]
+fn a_provider_that_runs_past_its_timeout_fails_instead_of_hanging_the_plan() {
+    let dir = project("slow", "sleep 30");
+    let config = std::fs::read_to_string(dir.join("fairlead.toml")).unwrap();
+    std::fs::write(dir.join("fairlead.toml"), config + "timeout_seconds = 1\n").unwrap();
+    let started = std::time::Instant::now();
+    let plan = plan(&dir);
+    assert!(
+        started.elapsed().as_secs() < 10,
+        "it waited {:?}",
+        started.elapsed()
+    );
+    assert_eq!(plan["all"], true);
+    assert!(plan.to_string().contains("timeout"), "{plan}");
+}
+
 #[test]
 fn a_provider_that_fails_runs_every_test_and_says_why() {
     let dir = project("fail", "echo broken >&2; exit 3");

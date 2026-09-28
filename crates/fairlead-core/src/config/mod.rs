@@ -145,6 +145,13 @@ pub struct GraphProvider {
     pub command: Vec<String>,
     /// The files it claims; the built-in scanner leaves them alone.
     pub files: Vec<String>,
+    /// How long it may run before it counts as failed.
+    #[serde(default = "provider_timeout")]
+    pub timeout_seconds: u64,
+}
+
+fn provider_timeout() -> u64 {
+    120
 }
 
 /// Each file matching `from` depends on every file its `to` globs match.
