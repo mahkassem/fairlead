@@ -14,6 +14,8 @@ use crate::window::Window;
 pub struct Miss {
     pub run_id: u64,
     pub attempt: u32,
+    /// `push` for a failure on the default branch the merge's plan left out.
+    pub event: String,
     pub pr: Option<u64>,
     pub head_sha: String,
     pub target: String,
@@ -117,6 +119,7 @@ fn miss(f: &Failure) -> Miss {
     Miss {
         run_id: f.run_id,
         attempt: f.attempt,
+        event: f.event.clone(),
         pr: f.pr,
         head_sha: f.head_sha.clone(),
         target,
@@ -301,9 +304,15 @@ pub fn text(r: &Report) -> String {
         r.flaky, r.unconfirmed, r.unattributed, r.unavailable, r.errors, r.ignored
     );
     for (event, e) in &r.by_event {
+        // On the default branch a miss is a failure that got past the plan.
+        let (label, missed) = if event == "push" {
+            ("push (after merge)", "escapes")
+        } else {
+            (event.as_str(), "misses")
+        };
         let _ = writeln!(
             out,
-            "  {event}: hits {}  misses {}  unconfirmed {}  recall {}  strict {}",
+            "  {label}: hits {}  {missed} {}  unconfirmed {}  recall {}  strict {}",
             e.hits,
             e.misses,
             e.unconfirmed,
@@ -342,7 +351,8 @@ pub fn text(r: &Report) -> String {
     for m in &r.misses {
         let _ = writeln!(
             out,
-            "\n  miss  run {} attempt {} (PR {})  {}",
+            "\n  {}  run {} attempt {} (PR {})  {}",
+            if m.event == "push" { "escape" } else { "miss" },
             m.run_id,
             m.attempt,
             m.pr.map_or("-".into(), |p| p.to_string()),
