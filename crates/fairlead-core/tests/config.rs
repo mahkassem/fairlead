@@ -362,6 +362,23 @@ to = []
 }
 
 #[test]
+fn a_brace_group_with_punctuation_is_literal_text_not_a_placeholder() {
+    let config: Config = toml::from_str(
+        r#"
+[[graph.edges]]
+from = "test/api/{foo-bar}*.test.ts"
+to = ["src/**"]
+
+[[tests.owners]]
+match = "test/**"
+covers = ["src/{foo-bar}/**"]
+"#,
+    )
+    .unwrap();
+    assert_eq!(validate(&config), []);
+}
+
+#[test]
 fn a_guard_preset_needs_files_valid_globs_and_a_limit() {
     let problems = |text: &str| -> Vec<String> {
         let config: Config = toml::from_str(text).unwrap();

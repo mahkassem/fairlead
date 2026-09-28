@@ -62,7 +62,7 @@ impl Owners {
                 let Some(caps) = cover.captures(path) else {
                     continue;
                 };
-                let claimed = Pattern::new(&fill(&rule.matches, &caps))?;
+                let claimed = fill(&rule.matches, &caps)?;
                 if tests.iter().any(|t| claimed.is_match(t)) {
                     return Ok(true);
                 }
@@ -84,7 +84,7 @@ impl Owners {
                     let Some(caps) = cover.captures(path) else {
                         continue;
                     };
-                    let claimed = Pattern::new(&fill(&rule.matches, &caps))?;
+                    let claimed = fill(&rule.matches, &caps)?;
                     for (t, test) in tests.iter().enumerate() {
                         if claimed.is_match(test) && !out.iter().any(|(seen, _)| *seen == t) {
                             out.push((
@@ -123,5 +123,25 @@ mod tests {
         assert_eq!(claims[0].1.covers, "services/{name}/src/**");
         assert!(owners.covers("services/web/src/y.ts"));
         assert!(!owners.covers("docs/x.md"));
+    }
+
+    #[test]
+    fn a_captured_segment_with_glob_characters_claims_only_its_own_tests() {
+        let owners = Owners::new(&[Owner {
+            matches: "test/{route}/**".into(),
+            covers: vec!["pages/{route}/**".into()],
+            overrides_run_all: true,
+        }])
+        .unwrap();
+        let tests = ["test/[slug]/a.test.ts", "test/s/b.test.ts"];
+        let claims = owners.claims(["pages/[slug]/page.tsx"], &tests).unwrap();
+        let claimed: Vec<usize> = claims.iter().map(|(t, _)| *t).collect();
+        assert_eq!(claimed, [0]);
+        assert!(owners
+            .overrides_run_all("pages/[slug]/page.tsx", &tests[..1])
+            .unwrap());
+        assert!(!owners
+            .overrides_run_all("pages/[slug]/page.tsx", &tests[1..])
+            .unwrap());
     }
 }
