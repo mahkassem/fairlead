@@ -9,6 +9,7 @@ pub mod fetch;
 pub mod git;
 pub mod github;
 pub mod inherited;
+pub mod phpunit;
 pub mod quarantine;
 pub mod report;
 pub mod run;

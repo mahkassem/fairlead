@@ -27,6 +27,9 @@ pub enum Extractor {
     Vitest,
     Jest,
     Bun,
+    Phpunit,
+    /// Pest, and Laravel's `artisan test`, which prints the same way.
+    Pest,
     /// A pattern with a named `file` group, and optionally `project` and `title`.
     Regex(Regex),
 }
@@ -37,6 +40,8 @@ impl Extractor {
             ("vitest", _) => Ok(Extractor::Vitest),
             ("jest", _) => Ok(Extractor::Jest),
             ("bun", _) => Ok(Extractor::Bun),
+            ("phpunit", _) => Ok(Extractor::Phpunit),
+            ("pest", _) => Ok(Extractor::Pest),
             ("regex", Some(p)) => {
                 let re = Regex::new(p).map_err(|e| format!("replay.failures pattern: {e}"))?;
                 if re.capture_names().flatten().all(|n| n != "file") {
@@ -46,7 +51,7 @@ impl Extractor {
             }
             ("regex", None) => Err("replay.failures: extractor \"regex\" needs a pattern".into()),
             (other, _) => Err(format!(
-                "unknown extractor `{other}`; use vitest, jest, bun or regex"
+                "unknown extractor `{other}`; use vitest, jest, bun, phpunit, pest or regex"
             )),
         }
     }
@@ -90,8 +95,11 @@ fn last_segment(title: &str, separator: &str) -> Option<String> {
 
 pub fn extract(extractor: &Extractor, log: &str) -> Vec<Printed> {
     let lines: Vec<String> = log.lines().map(clean).collect();
-    if let Extractor::Bun = extractor {
-        return bun(&lines);
+    match extractor {
+        Extractor::Bun => return bun(&lines),
+        Extractor::Phpunit => return crate::phpunit::phpunit(&lines),
+        Extractor::Pest => return crate::phpunit::pest(&lines),
+        _ => {}
     }
     let mut out: Vec<Printed> = Vec::new();
     for (i, raw) in lines.iter().enumerate() {
@@ -106,7 +114,9 @@ pub fn extract(extractor: &Extractor, log: &str) -> Vec<Printed> {
                 p
             }),
             Extractor::Regex(re) => custom(re, line),
-            Extractor::Bun => unreachable!("handled above"),
+            Extractor::Bun | Extractor::Phpunit | Extractor::Pest => {
+                unreachable!("handled above")
+            }
         };
         if let Some(mut printed) = found {
             printed.project = printed.project.or(package);

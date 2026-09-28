@@ -179,3 +179,53 @@ fn bun_pins_an_unhandled_error_on_the_test_that_follows_it_and_ends_it_at_a_pass
         ]
     );
 }
+
+#[test]
+fn phpunit_names_the_test_file_from_its_frame_or_its_class_through_a_long_message() {
+    let log = fixture("phpunit-laravel.log");
+    let unit = "/home/runner/work/shop/shop/tests/Unit/Billing/PricingTest.php";
+    let expected = [
+        printed(unit, None, Some("test_an_empty_basket_is_priced_at_zero")),
+        printed(unit, None, Some("test_total_adds_the_items")),
+        printed(unit, None, Some("test_each_basket")),
+        printed(
+            "/home/runner/work/shop/shop/tests/Feature/HomeTest.php",
+            None,
+            Some("test_the_home_page_has_a_title"),
+        ),
+    ];
+    assert_eq!(extract(&Extractor::Phpunit, &log), expected);
+    let excerpt = fairlead_replay::dataset::log_excerpt(&log).join("\n");
+    assert_eq!(extract(&Extractor::Phpunit, &excerpt), expected);
+}
+
+#[test]
+fn artisan_test_and_pest_name_the_test_file_even_when_the_error_is_thrown_elsewhere() {
+    let unit = "tests/Unit/Billing/PricingTest.php";
+    let artisan = [
+        printed(unit, None, Some("total adds the items")),
+        printed(unit, None, None),
+        printed(unit, None, Some("each basket")),
+        printed(
+            "tests/Feature/HomeTest.php",
+            None,
+            Some("the home page has a title"),
+        ),
+    ];
+    let cart = "tests/Unit/Cart/CartTest.php";
+    let pest = [
+        printed(cart, None, Some("prices a pair")),
+        printed(cart, None, None),
+        printed(cart, None, Some("adds with a dataset")),
+    ];
+    for (name, expected) in [("artisan-test.log", &artisan[..]), ("pest.log", &pest[..])] {
+        let log = fixture(name);
+        assert_eq!(extract(&Extractor::Pest, &log), expected, "{name}");
+        let excerpt = fairlead_replay::dataset::log_excerpt(&log).join("\n");
+        assert_eq!(
+            extract(&Extractor::Pest, &excerpt),
+            expected,
+            "{name} excerpt"
+        );
+    }
+}
