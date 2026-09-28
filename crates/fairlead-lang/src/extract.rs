@@ -179,9 +179,112 @@ fn unwrap_tag_types(source: &[u8]) -> std::borrow::Cow<'_, [u8]> {
 }
 
 pub fn extract(rel: &str, source: &[u8]) -> Extracted {
+    let ext = rel.rsplit_once('.').map_or("", |(_, e)| e);
+    if matches!(ext, "vue" | "svelte" | "astro") {
+        return component(ext, source);
+    }
     let Some(g) = grammar(rel) else {
         return Extracted::default();
     };
+    extract_as(g, source)
+}
+
+/// A single-file component's references: each `<script>` block, and
+/// Astro's frontmatter, parsed as its `lang` says, and each `<script src>`.
+fn component(ext: &str, source: &[u8]) -> Extracted {
+    let text = String::from_utf8_lossy(source);
+    let default = if ext == "astro" {
+        Grammar::TypeScript
+    } else {
+        Grammar::JavaScript
+    };
+    let mut out = Extracted::default();
+    let mut add = |part: Extracted| {
+        out.specs.extend(part.specs);
+        out.literals.extend(part.literals);
+        out.unknown_dynamic |= part.unknown_dynamic;
+    };
+    if ext == "astro" {
+        if let Some(front) = frontmatter(&text) {
+            add(extract_as(Grammar::TypeScript, front.as_bytes()));
+        }
+    }
+    for (attrs, body) in script_blocks(&text) {
+        if let Some(src) = attr(attrs, "src") {
+            add(Extracted {
+                specs: vec![(src, SpecKind::Import)],
+                ..Extracted::default()
+            });
+        }
+        let g = match attr(attrs, "lang").as_deref() {
+            Some("ts") => Grammar::TypeScript,
+            Some("tsx") => Grammar::Tsx,
+            Some("js" | "jsx") => Grammar::JavaScript,
+            _ => default,
+        };
+        add(extract_as(g, body.as_bytes()));
+    }
+    out.specs.sort();
+    out.specs.dedup();
+    out.literals.sort();
+    out.literals.dedup();
+    out
+}
+
+/// Astro's leading `---` fence.
+fn frontmatter(text: &str) -> Option<&str> {
+    let rest = text.trim_start().strip_prefix("---")?;
+    let end = rest.find("\n---")?;
+    Some(&rest[..end])
+}
+
+/// Each `<script ...>body</script>`, as its attributes and its body.
+fn script_blocks(text: &str) -> Vec<(&str, &str)> {
+    let lower = text.to_ascii_lowercase();
+    let mut out = Vec::new();
+    let mut at = 0;
+    while let Some(open) = lower[at..].find("<script").map(|i| i + at) {
+        let Some(tag_end) = lower[open..].find('>').map(|i| i + open) else {
+            break;
+        };
+        let attrs = &text[open + "<script".len()..tag_end];
+        let Some(close) = lower[tag_end..].find("</script").map(|i| i + tag_end) else {
+            break;
+        };
+        out.push((attrs, &text[tag_end + 1..close]));
+        at = close + "</script".len();
+    }
+    out
+}
+
+/// An attribute's value, quoted or not.
+fn attr(attrs: &str, name: &str) -> Option<String> {
+    let lower = attrs.to_ascii_lowercase();
+    let mut from = 0;
+    while let Some(i) = lower[from..].find(name).map(|i| i + from) {
+        let before = lower[..i].chars().next_back();
+        let rest = lower[i + name.len()..].trim_start();
+        from = i + name.len();
+        if before.is_some_and(|c| !c.is_whitespace()) || !rest.starts_with('=') {
+            continue;
+        }
+        let offset = attrs.len() - rest.len() + 1;
+        let value = attrs[offset..].trim_start();
+        let (quote, value) = match value.chars().next() {
+            Some(q @ ('"' | '\'')) => (Some(q), &value[1..]),
+            _ => (None, value),
+        };
+        let end = match quote {
+            Some(q) => value.find(q),
+            None => value.find(|c: char| c.is_whitespace() || c == '/'),
+        }
+        .unwrap_or(value.len());
+        return Some(value[..end].to_string());
+    }
+    None
+}
+
+fn extract_as(g: Grammar, source: &[u8]) -> Extracted {
     if source.len() > LEXICAL_ABOVE_BYTES {
         return lexical(source);
     }
@@ -306,6 +409,25 @@ fn lexical(source: &[u8]) -> Extracted {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn spec_names(rel: &str, src: &str) -> Vec<String> {
+        extract(rel, src.as_bytes())
+            .specs
+            .into_iter()
+            .map(|(s, _)| s)
+            .collect()
+    }
+
+    #[test]
+    fn every_script_block_of_a_component_is_read_by_its_lang() {
+        let vue = "<script lang=\"ts\">\nimport type { P } from './types';\n</script>\n<script setup>\nimport A from './A.vue'\n</script>";
+        assert_eq!(spec_names("x.vue", vue), ["./A.vue", "./types"]);
+        let svelte = "<SCRIPT lang='ts'>import { s } from './store';</SCRIPT><div/>";
+        assert_eq!(spec_names("x.svelte", svelte), ["./store"]);
+        let astro = "---\nimport L from '../L.astro';\n---\n<script src=\"./c.js\"></script>";
+        assert_eq!(spec_names("x.astro", astro), ["../L.astro", "./c.js"]);
+        assert!(spec_names("x.vue", "<template><p/></template>").is_empty());
+    }
 
     fn specs(rel: &str, src: &str) -> Vec<(String, SpecKind)> {
         extract(rel, src.as_bytes()).specs

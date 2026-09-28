@@ -530,3 +530,53 @@ fn a_deleted_file_is_joined_back_to_everything_that_referred_to_it() {
         "through the package edge"
     );
 }
+
+#[test]
+fn a_test_reaches_a_component_through_other_components_in_each_format() {
+    let dir = repo(
+        "components",
+        &[
+            (
+                "src/Card.vue",
+                "<template><Badge /></template>\n<script setup lang=\"ts\">\nimport Badge from './Badge.vue';\nimport { fmt } from './fmt';\n</script>\n",
+            ),
+            (
+                "src/Badge.vue",
+                "<script>\nexport default { name: 'Badge' }\n</script>\n<template><b/></template>\n",
+            ),
+            ("src/fmt.ts", "export const fmt = (s: string) => s;\n"),
+            (
+                "src/List.svelte",
+                "<script context=\"module\" lang=\"ts\">\nexport const n = 1;\n</script>\n<script lang=\"ts\">\nimport Item from './Item.svelte';\n</script>\n<Item />\n",
+            ),
+            ("src/Item.svelte", "<p>item</p>\n"),
+            (
+                "src/Page.astro",
+                "---\nimport Layout from './Layout.astro';\nimport { fmt } from './fmt';\n---\n<Layout /><script src=\"./client.ts\"></script>\n",
+            ),
+            ("src/Layout.astro", "<html><slot /></html>\n"),
+            ("src/client.ts", "console.log('hi');\n"),
+            (
+                "test/card.test.ts",
+                "import Card from '../src/Card.vue';\nimport List from '../src/List.svelte';\nimport Page from '../src/Page.astro';\n",
+            ),
+        ],
+    );
+    let s = scan(&dir);
+    for leaf in [
+        "src/Badge.vue",
+        "src/fmt.ts",
+        "src/Item.svelte",
+        "src/Layout.astro",
+        "src/client.ts",
+    ] {
+        assert!(depends(&s, "test/card.test.ts", leaf), "{leaf}");
+    }
+    assert_eq!(
+        deps(&s, "src/Card.vue"),
+        [
+            ("src/Badge.vue".to_string(), EdgeKind::Import),
+            ("src/fmt.ts".to_string(), EdgeKind::Import)
+        ]
+    );
+}
