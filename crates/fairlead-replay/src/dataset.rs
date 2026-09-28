@@ -88,6 +88,16 @@ pub fn log_excerpt(log: &str) -> Vec<String> {
         if cleaned.trim_end().ends_with("failed:") {
             keep.insert(i);
         }
+        if let Some(name) = cleaned.trim_start().strip_prefix("--- FAIL: ") {
+            keep.extend(go_run_lines(
+                &lines,
+                i,
+                name.split_whitespace().next().unwrap_or(""),
+            ));
+        }
+        if go_file_line(&cleaned) {
+            keep.insert(i);
+        }
         if php_failure(&cleaned) {
             keep.insert(i);
             frames_until = i + PHP_FRAMES;
@@ -99,6 +109,51 @@ pub fn log_excerpt(log: &str) -> Vec<String> {
         .take(CAP)
         .map(|i| lines[i].trim_end().to_string())
         .collect()
+}
+
+/// Under `go test -v` a test's log lines come before its `--- FAIL`: the
+/// lines back to its `=== RUN` that name a test file, and that line.
+fn go_run_lines(lines: &[&str], at: usize, name: &str) -> Vec<usize> {
+    let top = name.split('/').next().unwrap_or(name);
+    let mut out = Vec::new();
+    for j in (at.saturating_sub(50)..at).rev() {
+        let line = clean(lines[j]);
+        let run = line
+            .strip_prefix("=== RUN")
+            .or_else(|| line.strip_prefix("=== CONT"))
+            .map(str::trim);
+        if run == Some(top) {
+            out.push(j);
+            break;
+        }
+        if run.is_some_and(|r| r.split('/').next() == Some(top)) || is_go_logged(&line) {
+            out.push(j);
+        }
+    }
+    out
+}
+
+fn is_go_logged(line: &str) -> bool {
+    line.starts_with(char::is_whitespace)
+        && line
+            .trim_start()
+            .split_once(':')
+            .is_some_and(|(file, rest)| {
+                file.ends_with("_test.go") && rest.starts_with(|c: char| c.is_ascii_digit())
+            })
+}
+
+/// A panic's frame in a test file, or a compile error in one.
+fn go_file_line(line: &str) -> bool {
+    let t = line.trim();
+    let Some((path, rest)) = t.split_once("_test.go:") else {
+        return false;
+    };
+    !path.contains(' ')
+        && rest.starts_with(|c: char| c.is_ascii_digit())
+        && (rest.contains(" +0x")
+            || rest.chars().all(|c| c.is_ascii_digit())
+            || !line.starts_with(char::is_whitespace))
 }
 
 /// How far after a PHP failure its frames are kept.
