@@ -147,3 +147,24 @@ fn explain_names_the_barrier_that_kept_a_test_out() {
         "{text}"
     );
 }
+
+#[test]
+fn a_captured_segment_with_glob_characters_links_only_its_own_files() {
+    let dir = repo(
+        "edges-bracket-segment",
+        &[
+            ("package.json", r#"{ "private": true }"#),
+            ("app/src/[slug]/page.ts", "export const page = 1;\n"),
+            ("app/src/s/page.ts", "export const page = 1;\n"),
+            ("app/test/[slug]/page.test.ts", "export {};\n"),
+            ("app/test/s/page.test.ts", "export {};\n"),
+        ],
+    );
+    let config = config(&format!(
+        "{VITEST}\n[[graph.edges]]\nfrom = \"app/test/{{route}}/**\"\nto = [\"app/src/{{route}}/**\"]\n"
+    ));
+    let plan = run(&dir, &config, vec![modified("app/src/[slug]/page.ts")]);
+    assert_eq!(tests(&plan), ["app/test/[slug]/page.test.ts"]);
+    let plan = run(&dir, &config, vec![modified("app/src/s/page.ts")]);
+    assert_eq!(tests(&plan), ["app/test/s/page.test.ts"]);
+}
