@@ -184,6 +184,12 @@ pub fn plan(scan: &mut Scan, config: &Config, input: Input) -> Result<Plan, Stri
                 .into(),
         });
     }
+    if trigger.is_none() {
+        if let Some((path, warning)) = provider_failed(scan, &cx.changed) {
+            warnings.push(warning);
+            trigger = Some(path);
+        }
+    }
     let walked = start_walk(&cx);
     let (tests, unreached, all_reason) = match trigger {
         Some(path) => {
@@ -287,6 +293,26 @@ pub fn is_manifest(cx: &Context, path: &str) -> bool {
 
 /// The walk from every changed path that isn't ignored, with a changed
 /// package manifest standing for every file in its package.
+/// A provider that failed tells nothing about its files, so a change to one
+/// is as uncertain as a run-all path.
+fn provider_failed(scan: &Scan, changed: &BTreeSet<String>) -> Option<(String, Warning)> {
+    let path = changed.iter().find(|p| scan.uncertain.contains(*p))?;
+    let why: Vec<String> = scan
+        .providers
+        .iter()
+        .filter_map(|r| r.failed.as_ref().map(|e| format!("{}: {e}", r.id)))
+        .collect();
+    let warning = Warning {
+        code: "provider-failed".into(),
+        path: Some(path.clone()),
+        message: format!(
+            "a graph provider failed, so every test runs ({})",
+            why.join("; ")
+        ),
+    };
+    Some((path.clone(), warning))
+}
+
 pub fn start_walk(cx: &Context) -> Walk {
     let graph = &cx.scan.graph;
     let mut starts: Vec<(u32, Via)> = Vec::new();

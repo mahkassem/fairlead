@@ -242,3 +242,101 @@ fn env_flag_layers_that_environments_file_as_fairlead_env_does() {
         .status
         .success());
 }
+
+#[test]
+fn replay_run_prints_progress_on_stderr_and_the_same_report_with_or_without_it() {
+    let dir = std::env::temp_dir().join(format!("fairlead-cli-progress-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    let repo = dir.join("repo");
+    std::fs::create_dir_all(repo.join("test")).unwrap();
+    let git = |args: &[&str]| {
+        let out = Command::new("git")
+            .args(["-c", "user.name=t", "-c", "user.email=t@example.com"])
+            .args(args)
+            .current_dir(&repo)
+            .output()
+            .unwrap();
+        assert!(
+            out.status.success(),
+            "{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        String::from_utf8_lossy(&out.stdout).trim().to_string()
+    };
+    git(&["init", "-q", "-b", "main"]);
+    std::fs::write(repo.join("src.ts"), "export const a = 1;\n").unwrap();
+    std::fs::write(repo.join("test/a.test.ts"), "import { a } from '../src';\n").unwrap();
+    git(&["add", "-A"]);
+    git(&["commit", "-q", "-m", "base"]);
+    let base = git(&["rev-parse", "HEAD"]);
+    std::fs::write(repo.join("src.ts"), "export const a = 2;\n").unwrap();
+    git(&["commit", "-q", "-am", "change"]);
+    let head = git(&["rev-parse", "HEAD"]);
+    let row = serde_json::json!({
+        "repo": "example/repo", "run_id": 1, "attempt": 1, "event": "pull_request",
+        "workflow": "ci", "pr": 1, "head_sha": head, "base_sha": base,
+        "created_at": "2026-09-10T10:00:00Z", "conclusion": "failure",
+        "jobs": [{ "name": "test", "conclusion": "failure", "log": [" FAIL  test/a.test.ts > a"] }]
+    });
+    let data = dir.join("data.jsonl");
+    std::fs::write(&data, format!("{row}\n")).unwrap();
+    let config = dir.join("bench.toml");
+    std::fs::write(
+        &config,
+        "[graph]\ncache = false\n\n[[tests.runners]]\nid = \"vitest\"\nmatch = [\"**\"]\ncommand = [\"vitest\", \"run\", \"{files}\"]\n\n[[replay.failures]]\nrunner = \"vitest\"\nextractor = \"vitest\"\njob = \"^test$\"\n",
+    )
+    .unwrap();
+    let run = |quiet: bool, json: &std::path::Path| {
+        let mut args = vec![
+            "replay",
+            "run",
+            "--data",
+            data.to_str().unwrap(),
+            "--clone",
+            repo.to_str().unwrap(),
+            "--config",
+            config.to_str().unwrap(),
+            "--json-out",
+            json.to_str().unwrap(),
+        ];
+        if quiet {
+            args.push("--quiet");
+        }
+        let out = fairlead_in(&dir, &args);
+        assert!(
+            out.status.success(),
+            "{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        (
+            out.stdout,
+            String::from_utf8_lossy(&out.stderr).into_owned(),
+        )
+    };
+    let (loud, err) = run(false, &dir.join("loud.json"));
+    let (quiet, quiet_err) = run(true, &dir.join("quiet.json"));
+    assert!(
+        err.contains("1 of 1 runs planned · 1 failures judged · 0 misses"),
+        "{err}"
+    );
+    assert!(!quiet_err.contains("runs planned"), "{quiet_err}");
+    // Planning time is measured, so it differs between any two runs.
+    let untimed = |s: &str| {
+        s.lines()
+            .filter(|l| !l.contains("plan time:") && !l.contains("_seconds"))
+            .collect::<Vec<_>>()
+            .join("\n")
+    };
+    let text = |b: &[u8]| String::from_utf8_lossy(b).into_owned();
+    assert_eq!(
+        untimed(&text(&loud)),
+        untimed(&text(&quiet)),
+        "stdout doesn't change"
+    );
+    let read = |p: &str| std::fs::read_to_string(dir.join(p)).unwrap();
+    assert_eq!(
+        untimed(&read("loud.json")),
+        untimed(&read("quiet.json")),
+        "the JSON report doesn't change"
+    );
+}

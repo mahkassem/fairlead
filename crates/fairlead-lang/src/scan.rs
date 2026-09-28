@@ -10,6 +10,7 @@ use rayon::prelude::*;
 use crate::cache::{self, CacheStats, ParseCache};
 use crate::extract::{extract, Extracted, SpecKind};
 use crate::graph::{EdgeKind, Graph};
+use crate::provider;
 use crate::resolve::{Resolver, Target};
 use crate::rules::{RuleStats, Rules};
 use crate::tree::{normalize, parent, Tree};
@@ -42,6 +43,12 @@ pub struct Scan {
     pub packages: Vec<Package>,
     pub cache: CacheStats,
     pub rules: RuleStats,
+    /// What each provider contributed, the built-in scanner first.
+    pub providers: Vec<provider::Report>,
+    /// Files two external providers both claimed.
+    pub conflicts: Vec<provider::Conflict>,
+    /// Files claimed by a provider that failed: nothing is known about them.
+    pub uncertain: std::collections::HashSet<String>,
 }
 
 pub fn build(root: &Path, config: &Config) -> std::io::Result<Scan> {
@@ -60,7 +67,14 @@ pub fn build(root: &Path, config: &Config) -> std::io::Result<Scan> {
     } else {
         ParseCache::disabled()
     };
-    let sources: Vec<&String> = tree.sources().collect();
+    let externals = config.graph.providers.items();
+    let (owner, conflicts) = if externals.is_empty() {
+        Default::default()
+    } else {
+        provider::claims(&tree.files, externals).map_err(std::io::Error::other)?
+    };
+    let sources: Vec<&String> = tree.sources().filter(|f| !owner.contains_key(*f)).collect();
+    let scanned = sources.len();
     let mut results: Vec<(String, FileResult)> = sources
         .par_iter()
         .map(|file| {
@@ -95,6 +109,7 @@ pub fn build(root: &Path, config: &Config) -> std::io::Result<Scan> {
         }
     }
     parse_cache.save(used);
+    let before = graph.stats().edges;
     for (file, result) in results {
         let from = graph.id(&file).expect("every source is in the tree");
         for (to, kind) in result.edges {
@@ -121,6 +136,14 @@ pub fn build(root: &Path, config: &Config) -> std::io::Result<Scan> {
             graph.tsconfig_fallbacks.push(from);
         }
     }
+    let mut providers = vec![provider::Report {
+        id: provider::BUILTIN.into(),
+        files: scanned,
+        edges: graph.stats().edges - before,
+        ignored: 0,
+        failed: None,
+    }];
+    let uncertain = run_externals(&root, externals, &owner, &mut graph, &mut providers);
     add_snapshot_edges(&tree, &mut graph);
     let rules = Rules::new(&config.graph).map_err(std::io::Error::other)?;
     let rule_stats = rules.apply(&mut graph).map_err(std::io::Error::other)?;
@@ -132,7 +155,39 @@ pub fn build(root: &Path, config: &Config) -> std::io::Result<Scan> {
         packages,
         cache: stats,
         rules: rule_stats,
+        providers,
+        conflicts,
+        uncertain,
     })
+}
+
+/// Runs each external provider on the files it claims; returns the files of
+/// those that failed, about which nothing is known.
+fn run_externals(
+    root: &Path,
+    externals: &[fairlead_core::config::GraphProvider],
+    owner: &HashMap<String, usize>,
+    graph: &mut Graph,
+    reports: &mut Vec<provider::Report>,
+) -> std::collections::HashSet<String> {
+    let mut uncertain = std::collections::HashSet::new();
+    for (i, p) in externals.iter().enumerate() {
+        let mut claimed: Vec<String> = owner
+            .iter()
+            .filter(|(_, &o)| o == i)
+            .map(|(f, _)| f.clone())
+            .collect();
+        claimed.sort();
+        if claimed.is_empty() {
+            continue;
+        }
+        let report = provider::run(root, p, &claimed, graph);
+        if report.failed.is_some() {
+            uncertain.extend(claimed);
+        }
+        reports.push(report);
+    }
+    uncertain
 }
 
 /// The file's extraction, from the cache when its bytes haven't changed.

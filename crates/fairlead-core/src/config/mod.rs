@@ -37,6 +37,10 @@ impl<T> List<T> {
             List::Replace(r) => &r.replace,
         }
     }
+
+    pub fn is_empty(&self) -> bool {
+        self.items().is_empty()
+    }
 }
 
 impl<T> Default for List<T> {
@@ -125,6 +129,30 @@ pub struct Graph {
     pub edges: List<EdgeRule>,
     /// Files the walk reaches but never goes past to their importers.
     pub barrier: List<String>,
+    /// Commands that print a graph for the files they claim, for languages
+    /// and build tools the built-in scanner doesn't read. Left out of the
+    /// digest when empty, so configs without them keep their plan ids.
+    #[serde(skip_serializing_if = "List::is_empty")]
+    pub providers: List<GraphProvider>,
+}
+
+/// An external graph provider: `command` runs at the project root, reads the
+/// files it claims on stdin, one per line, and prints `{"version": 1,
+/// "edges": [{"from": ..., "to": ...}]}` with repo-relative paths.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct GraphProvider {
+    pub id: String,
+    pub command: Vec<String>,
+    /// The files it claims; the built-in scanner leaves them alone.
+    pub files: Vec<String>,
+    /// How long it may run before it counts as failed.
+    #[serde(default = "provider_timeout")]
+    pub timeout_seconds: u64,
+}
+
+fn provider_timeout() -> u64 {
+    120
 }
 
 /// Each file matching `from` depends on every file its `to` globs match.
@@ -147,6 +175,7 @@ impl Default for Graph {
             cache: true,
             edges: List::default(),
             barrier: List::default(),
+            providers: List::default(),
         }
     }
 }

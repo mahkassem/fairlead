@@ -42,6 +42,12 @@ pub enum Outcome {
     Ignored,
     /// A `[[replay.quarantine]]` entry declares the test flaky in this job.
     Quarantined,
+    /// The failure came with the base branch: unrelated pull requests on the
+    /// same base failed it alike, or the base's own push run did.
+    Inherited,
+    /// The job failed alike across unrelated pull requests once its runner
+    /// image changed: the image, not the change, is the likelier cause.
+    Environment,
 }
 
 /// How a hit's target came to be in the plan.
@@ -66,11 +72,14 @@ pub struct Failure {
     pub event: String,
     pub pr: Option<u64>,
     pub head_sha: String,
+    /// The row's recorded base, and when it ran.
+    pub base_sha: Option<String>,
+    pub created_at: String,
     pub job: String,
     pub target: Target,
     pub outcome: Outcome,
     pub hit_by: Option<HitBy>,
-    /// What a quarantined failure would have been.
+    /// What a quarantined or inherited failure would have been.
     pub judged: Option<Outcome>,
     pub detail: String,
     /// The changed paths of the plan it was judged against.
@@ -94,6 +103,8 @@ pub struct Replayed {
     pub plans: Vec<Planned>,
     pub runs: usize,
     pub quarantine: Vec<crate::quarantine::Entry>,
+    pub inherited: Vec<crate::inherited::Group>,
+    pub waves: Vec<crate::waves::Wave>,
 }
 
 /// A `[[replay.failures]]` or `[[replay.checks]]` entry, compiled.
@@ -326,22 +337,65 @@ fn changed_paths(plan: &Plan) -> Vec<String> {
         .collect()
 }
 
+/// Where a replay has got to, after each failed run it planned.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Progress {
+    pub planned: usize,
+    /// Failed runs in the window, the ones there are to plan.
+    pub runs: usize,
+    /// Hits and misses so far.
+    pub judged: usize,
+    pub misses: usize,
+    pub run_id: u64,
+    /// How long this run took to plan and judge.
+    pub seconds: f64,
+}
+
 pub fn replay(replayer: &Replayer, rows: &[Row], window: &Window) -> Replayed {
+    replay_with(replayer, rows, window, &mut |_| {})
+}
+
+/// `replay`, calling `progress` after each failed run is planned and judged.
+pub fn replay_with(
+    replayer: &Replayer,
+    rows: &[Row],
+    window: &Window,
+    progress: &mut dyn FnMut(&Progress),
+) -> Replayed {
     let mut out = Replayed::default();
     let mut rows: Vec<&Row> = rows
         .iter()
         .filter(|r| window.contains(&r.created_at))
         .collect();
     rows.sort_by(|a, b| a.created_at.cmp(&b.created_at));
-    for row in rows.iter().filter(|r| r.jobs.iter().any(Job::failed)) {
+    let failed: Vec<&Row> = rows
+        .iter()
+        .copied()
+        .filter(|r| r.jobs.iter().any(Job::failed))
+        .collect();
+    for row in &failed {
         out.runs += 1;
+        let started = Instant::now();
         replay_row(replayer, row, &rows, &mut out);
+        let count = |o: Outcome| out.failures.iter().filter(|f| f.outcome == o).count();
+        progress(&Progress {
+            planned: out.runs,
+            runs: failed.len(),
+            judged: count(Outcome::Hit) + count(Outcome::Miss),
+            misses: count(Outcome::Miss),
+            run_id: row.run_id,
+            seconds: started.elapsed().as_secs_f64(),
+        });
     }
     out.quarantine = crate::quarantine::apply(
         &replayer.sources.quarantine,
         &mut out.failures,
         &window.until,
     );
+    // An entry someone declared explains a failure better than an inference,
+    // so only what quarantine leaves can be inherited.
+    out.inherited = crate::inherited::apply(&mut out.failures, &rows);
+    out.waves = crate::waves::apply(&mut out.failures, &rows);
     out
 }
 
@@ -360,6 +414,8 @@ fn record(
         event: row.event.clone(),
         pr: row.pr,
         head_sha: row.head_sha.clone(),
+        base_sha: row.base_sha.clone(),
+        created_at: row.created_at.clone(),
         job: job.to_string(),
         target,
         outcome,

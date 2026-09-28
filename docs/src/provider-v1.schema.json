@@ -1,0 +1,41 @@
+{
+  "$defs": {
+    "ProviderEdge": {
+      "properties": {
+        "from": {
+          "type": "string"
+        },
+        "to": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "from",
+        "to"
+      ],
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "edges": {
+      "description": "Dependencies among repo-relative paths: `from` depends on `to`.",
+      "items": {
+        "$ref": "#/$defs/ProviderEdge"
+      },
+      "type": "array"
+    },
+    "version": {
+      "description": "Always 1 for this shape.",
+      "format": "uint32",
+      "minimum": 0,
+      "type": "integer"
+    }
+  },
+  "required": [
+    "version",
+    "edges"
+  ],
+  "title": "ProviderOutput",
+  "type": "object"
+}

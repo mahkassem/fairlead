@@ -84,6 +84,7 @@ pub fn validate(config: &Config) -> Vec<Problem> {
     checks(config, &mut problems);
     replay(config, &mut problems);
     graph_edges(config, &mut problems);
+    graph_providers(config, &mut problems);
     guard(config, &mut problems);
     problems
 }
@@ -352,6 +353,39 @@ fn comment_rules(c: &super::CommentRules, problems: &mut Vec<Problem>) {
 /// A placeholder is read from a side where it is a whole path segment, since
 /// `{area}*` would also swallow `-runs` from `area-runs`; every glob naming
 /// one must name them all, or a leftover `{name}` would match anything.
+fn graph_providers(config: &Config, problems: &mut Vec<Problem>) {
+    let providers = config.graph.providers.items();
+    for id in duplicates(providers.iter().map(|p| p.id.as_str())) {
+        problems.push(problem(
+            "graph.providers",
+            format!("provider id `{id}` is used more than once"),
+        ));
+    }
+    for (i, p) in providers.iter().enumerate() {
+        let key = format!("graph.providers[{i}]");
+        if p.id == "typescript" {
+            problems.push(problem(
+                format!("{key}.id"),
+                "`typescript` is the built-in scanner's id",
+            ));
+        }
+        if p.command.is_empty() {
+            problems.push(problem(format!("{key}.command"), "is empty"));
+        }
+        if p.files.is_empty() {
+            problems.push(problem(
+                format!("{key}.files"),
+                "is empty, so it claims nothing",
+            ));
+        }
+        for (j, glob) in p.files.iter().enumerate() {
+            if let Err(e) = crate::pattern::Pattern::new(glob) {
+                problems.push(problem(format!("{key}.files[{j}]"), e));
+            }
+        }
+    }
+}
+
 fn graph_edges(config: &Config, problems: &mut Vec<Problem>) {
     let whole = |glob: &str, name: &str| glob.split('/').any(|s| s == format!("{{{name}}}"));
     for (i, rule) in config.graph.edges.items().iter().enumerate() {
