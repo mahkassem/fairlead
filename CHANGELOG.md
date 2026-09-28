@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### New
+
+- External graph providers: a `[[graph.providers]]` entry names a command that prints `{"version": 1, "edges": [...]}` for the files it claims, so any language or build tool can feed the plan. The built-in JavaScript and TypeScript scanner runs as the `typescript` provider, unchanged. A provider that fails runs every test for a change to its files, with a `provider-failed` warning, and `graph stats` reports each provider's files and edges. The output schema is committed as `provider-v1.schema.json`. See [Other languages](https://mahkassem.github.io/fairlead/docs/graph.html#other-languages-external-providers).
+
 ## 0.5.0 (2026-09-28)
 
 ### New

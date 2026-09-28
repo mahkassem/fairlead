@@ -17,6 +17,8 @@ pub enum EdgeKind {
     PathLiteral,
     /// `__snapshots__/<test>.snap` to its test.
     Snapshot,
+    /// An edge an external `[[graph.providers]]` command printed.
+    Provider,
     /// A `[[graph.edges]]` rule. Last, so an import between the same two
     /// files names itself first.
     Rule,

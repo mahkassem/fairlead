@@ -94,6 +94,10 @@ fn stats(scan: &Scan, seconds: f64, json: bool, cache_off: &str) -> ExitCode {
             "unknown_dynamic": s.unknown, "tsconfig_fallbacks": s.tsconfig_fallbacks, "seconds": seconds,
             "rules": { "edges": scan.rules.edges, "unmatched": scan.rules.unmatched, "large": scan.rules.large, "barrier": scan.graph.barrier.len() },
             "cache": { "enabled": scan.cache.enabled, "hits": scan.cache.hits, "misses": scan.cache.misses },
+            "providers": scan.providers.iter().map(|p| serde_json::json!({
+                "id": p.id, "files": p.files, "edges": p.edges, "ignored": p.ignored, "failed": p.failed,
+            })).collect::<Vec<_>>(),
+            "conflicts": scan.conflicts.len(),
         });
         println!(
             "{}",
@@ -107,6 +111,32 @@ fn stats(scan: &Scan, seconds: f64, json: bool, cache_off: &str) -> ExitCode {
             .map(|(k, n)| format!("{} {}", format!("{k:?}").to_lowercase(), n))
             .collect();
         println!("edges: {} ({})", s.edges, kinds.join(", "));
+        if scan.providers.len() > 1 {
+            let each: Vec<String> = scan
+                .providers
+                .iter()
+                .map(|p| match &p.failed {
+                    Some(why) => format!("{} failed on {} files: {why}", p.id, p.files),
+                    None => format!("{} {} edges from {} files", p.id, p.edges, p.files),
+                })
+                .collect();
+            println!("providers: {}", each.join("; "));
+            for p in scan.providers.iter().filter(|p| p.ignored > 0) {
+                println!(
+                    "  {} printed {} edges naming a file outside the tree or its claim",
+                    p.id, p.ignored
+                );
+            }
+            if let Some(c) = scan.conflicts.first() {
+                println!(
+                    "  {} files claimed by two providers, such as {} ({} over {})",
+                    scan.conflicts.len(),
+                    c.file,
+                    c.chosen,
+                    c.other
+                );
+            }
+        }
         println!(
             "workspace packages: {}, package edges: {}",
             s.packages, s.package_edges

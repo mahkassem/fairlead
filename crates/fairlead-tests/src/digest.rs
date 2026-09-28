@@ -71,4 +71,19 @@ mod tests {
         config.tests.unreached = fairlead_core::config::Unreached::All;
         assert_ne!(config_digest(&config), before);
     }
+
+    #[test]
+    fn no_providers_keeps_the_digest_a_config_had_before_they_existed() {
+        let config = Config::default();
+        let json = serde_json::to_value(&config).unwrap();
+        assert!(json["graph"].get("providers").is_none(), "{json}");
+        let mut with = config.clone();
+        with.graph.providers = vec![fairlead_core::config::GraphProvider {
+            id: "go".into(),
+            command: vec!["go-graph".into()],
+            files: vec!["**/*.go".into()],
+        }]
+        .into();
+        assert_ne!(config_digest(&with), config_digest(&config));
+    }
 }
