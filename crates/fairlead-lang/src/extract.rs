@@ -193,6 +193,9 @@ pub fn extract(rel: &str, source: &[u8]) -> Extracted {
     if ext == "php" {
         return crate::php::extract(source);
     }
+    if ext == "go" {
+        return crate::golang::extract(source);
+    }
     let Some(g) = grammar(rel) else {
         return Extracted::default();
     };

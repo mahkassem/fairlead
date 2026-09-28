@@ -5,6 +5,7 @@ pub mod cache;
 pub mod deleted;
 pub mod extract;
 pub mod fs;
+pub mod golang;
 pub mod graph;
 pub mod php;
 pub mod provider;

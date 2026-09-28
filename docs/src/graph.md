@@ -61,9 +61,33 @@ command = ["vendor/bin/phpunit", "{files}"]
 
 In a Laravel application every test boots the app, and booting it loads `bootstrap/app.php`, which names every route file, which names every controller, so a change to one controller reaches every test. That's the safe answer, and the one this gives today. Views, routes, bindings and the other links a framework makes at runtime will come from framework packs, which let a feature test reach the controller behind the route it calls without the walk passing through the app's boot.
 
+## Go
+
+`.go` files are scanned as the `go` provider. A Go package is every `.go` file in one directory, so:
+
+- a file that imports a package depends on each of its non-test files;
+- a test file depends on every other `.go` file in its directory, the package's own and its other test files, since they're compiled together;
+- a `//go:embed` pattern depends on the file it names, every file under a directory it names, or the files a glob matches.
+
+Import paths resolve through every `go.mod` in the tree, so a `go.work` workspace's modules are all found. The module whose path is the longest prefix of the import owns it, and a `replace` with a local path (`=> ../lib`) points a module at that directory. An import no module in the tree owns is looked for under the importing module's `vendor/`, and otherwise is the standard library or a dependency, left out. Build constraints aren't read, so a file for another platform still counts, which only ever adds tests.
+
+`go test` takes packages rather than files, so its runner uses `{packages}`, which expands to one `./dir` per directory holding a selected test, or `./...` when everything runs:
+
+```toml
+[tests]
+match = ["**/*_test.go"]
+
+[[tests.runners]]
+id = "go"
+match = ["**/*_test.go"]
+command = ["go", "test", "{packages}"]
+```
+
+A change to any `go.mod`, `go.sum`, `go.work` or `go.work.sum` runs everything by default (`plan.run_all`), as a lockfile does.
+
 ## Other languages: external providers
 
-The built-in scanner reads JavaScript, TypeScript and PHP. For any other language, or a build tool that already knows its own graph, a `[[graph.providers]]` entry names a command that prints the graph for the files it claims:
+The built-in scanners read JavaScript, TypeScript, PHP and Go. For any other language, or a build tool that already knows its own graph, a `[[graph.providers]]` entry names a command that prints the graph for the files it claims:
 
 ```toml
 [[graph.providers]]
@@ -76,9 +100,9 @@ files = ["**/*.go"]
 - **Claims:** a file a provider's `files` match belongs to that provider, and the built-in scanner leaves it alone. When two providers match one file, the one whose pattern has the longer literal part before its first wildcard wins (`src/go/**` over `**/*.go`), the earlier one on a tie, and `graph stats` reports the conflict.
 - **Its edges** count only from files it claims, to files in the tree; the rest are counted as ignored in `graph stats`. They're followed like imports, with their own edge kind, `provider`.
 - **A provider that fails** (it can't start, exits non-zero, runs past `timeout_seconds`, 120 by default, or prints something that isn't a version 1 graph) tells nothing about its files. A change to one of them runs every test, with a `provider-failed` warning naming the provider and why, as other uncertainty does.
-- **`graph stats`** lists each provider with its files and edges, the built-in scanners as `typescript` and `php`.
+- **`graph stats`** lists each provider with its files and edges, the built-in scanners as `typescript`, `php` and `go`.
 
-Build tools that already know their graph plug in the same way, through a command that turns their output into this shape, such as `go list -deps -json` for Go, `cargo metadata` for Rust, or a monorepo tool's project graph.
+Build tools that already know their graph plug in the same way, through a command that turns their output into this shape, such as `cargo metadata` for Rust, or a monorepo tool's project graph.
 
 ## Barriers
 
