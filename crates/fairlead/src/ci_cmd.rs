@@ -42,6 +42,25 @@ pub enum CiAction {
         /// Stop at the first failing invocation instead of running the rest.
         #[arg(long)]
         fail_fast: bool,
+        /// Write each invocation's outcome and time here, for `ci report`.
+        #[arg(long, value_name = "PATH")]
+        results: Option<PathBuf>,
+    },
+    /// Write the run's summary: what the plan selected and why, what ran and
+    /// failed, and the change's receipt when one is given. To
+    /// $GITHUB_STEP_SUMMARY when set, else stdout.
+    Report {
+        #[arg(long, value_name = "PATH")]
+        plan: PathBuf,
+        /// The file `ci run --results` wrote.
+        #[arg(long, value_name = "PATH")]
+        results: Option<PathBuf>,
+        /// A receipt the branch carries, as `fairlead receipt --out` wrote it.
+        #[arg(long, value_name = "PATH")]
+        receipt: Option<PathBuf>,
+        /// Also keep one pull request comment up to date with it, over `ci.comment`.
+        #[arg(long)]
+        comment: bool,
     },
 }
 
@@ -56,7 +75,17 @@ pub fn run(action: CiAction, cwd: &Path) -> ExitCode {
             let out = out.unwrap_or_else(default_out);
             plan(cwd, &changes, head.as_deref(), format, &out)
         }
-        CiAction::Run { plan, fail_fast } => execute(cwd, &plan, fail_fast),
+        CiAction::Run {
+            plan,
+            fail_fast,
+            results,
+        } => execute(cwd, &plan, fail_fast, results.as_deref()),
+        CiAction::Report {
+            plan,
+            results,
+            receipt,
+            comment,
+        } => crate::ci_report::run(cwd, &plan, results.as_deref(), receipt.as_deref(), comment),
     };
     result.unwrap_or_else(|e| {
         eprintln!("{e}");
@@ -166,7 +195,7 @@ fn write_outputs(plan: &Plan, path: &Path) -> Result<(), String> {
         .map_err(|e| format!("could not write $GITHUB_OUTPUT: {e}"))
 }
 
-fn execute(cwd: &Path, plan_path: &Path, fail_fast: bool) -> Result<ExitCode, String> {
+pub fn read_plan(cwd: &Path, plan_path: &Path) -> Result<Plan, String> {
     let text = std::fs::read_to_string(cwd.join(plan_path))
         .map_err(|e| format!("could not read {}: {e}", plan_path.display()))?;
     let version = serde_json::from_str::<serde_json::Value>(&text)
@@ -180,14 +209,27 @@ fn execute(cwd: &Path, plan_path: &Path, fail_fast: bool) -> Result<ExitCode, St
             plan_path.display()
         ));
     }
-    let plan: Plan = serde_json::from_str(&text)
-        .map_err(|e| format!("{} isn't a valid plan: {e}", plan_path.display()))?;
+    serde_json::from_str(&text)
+        .map_err(|e| format!("{} isn't a valid plan: {e}", plan_path.display()))
+}
+
+fn execute(
+    cwd: &Path,
+    plan_path: &Path,
+    fail_fast: bool,
+    results: Option<&Path>,
+) -> Result<ExitCode, String> {
+    let plan = read_plan(cwd, plan_path)?;
+    let started = std::time::Instant::now();
+    let mut ran: Vec<crate::ci_report::Ran> = Vec::new();
     let root = crate::graph_cmd::repo_root(cwd);
     let mut failed = Vec::new();
     for inv in &plan.invocations {
+        let at = std::time::Instant::now();
         let Some((program, args)) = inv.argv.split_first() else {
             eprintln!("fairlead: {} has no argv", inv.id);
             failed.push(inv.id.clone());
+            ran.push(crate::ci_report::Ran::of(inv, false, at));
             if fail_fast {
                 break;
             }
@@ -202,12 +244,16 @@ fn execute(cwd: &Path, plan_path: &Path, fail_fast: bool) -> Result<ExitCode, St
         if let Err(e) = &status {
             eprintln!("fairlead: couldn't start {program}: {e}");
         }
+        ran.push(crate::ci_report::Ran::of(inv, ok, at));
         if !ok {
             failed.push(inv.id.clone());
             if fail_fast {
                 break;
             }
         }
+    }
+    if let Some(path) = results {
+        crate::ci_report::write_results(&cwd.join(path), &plan, ran, started)?;
     }
     if failed.is_empty() {
         println!("fairlead: {} invocations passed", plan.invocations.len());

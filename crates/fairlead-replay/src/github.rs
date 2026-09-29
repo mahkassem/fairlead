@@ -54,15 +54,44 @@ impl Curl {
             .ok();
         Curl {
             token,
-            api: "https://api.github.com".into(),
+            api: std::env::var("GITHUB_API_URL")
+                .unwrap_or_else(|_| "https://api.github.com".into()),
         }
     }
 
     /// Headers, then body, for `url`; the token only for the API host.
     fn request(&self, url: &str, with_token: bool) -> Result<(u16, String, String), String> {
+        self.request_with(url, with_token, None)
+    }
+
+    /// A request with a method and a JSON body, such as a `POST` or `PATCH`.
+    pub fn send(&self, method: &str, path: &str, body: &Value) -> Result<Reply<Value>, String> {
+        let data = (!body.is_null()).then(|| body.to_string());
+        let url = format!("{}{path}", self.api);
+        let (status, head, raw) = self.request_with(&url, true, Some((method, data.as_deref())))?;
+        let value = serde_json::from_str(&raw).unwrap_or(Value::Null);
+        Ok(reply(status, &head, &raw, value))
+    }
+
+    fn request_with(
+        &self,
+        url: &str,
+        with_token: bool,
+        send: Option<(&str, Option<&str>)>,
+    ) -> Result<(u16, String, String), String> {
         let mut config = String::from("silent\nshow-error\ninclude\nsuppress-connect-headers\nheader = \"Accept: application/vnd.github+json\"\nheader = \"X-GitHub-Api-Version: 2022-11-28\"\n");
         if let (true, Some(token)) = (with_token, &self.token) {
             config.push_str(&format!("header = \"Authorization: Bearer {token}\"\n"));
+        }
+        if let Some((method, body)) = send {
+            config.push_str(&format!("request = \"{method}\"\n"));
+            if let Some(body) = body {
+                // curl's config quoting: a backslash and a quote are escaped; JSON has no raw newlines.
+                let quoted = body.replace('\\', "\\\\").replace('"', "\\\"");
+                config.push_str(&format!(
+                    "header = \"Content-Type: application/json\"\ndata-binary = \"{quoted}\"\n"
+                ));
+            }
         }
         config.push_str(&format!("url = \"{url}\"\n"));
         let mut child = Command::new("curl")

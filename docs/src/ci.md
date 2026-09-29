@@ -61,3 +61,29 @@ Nothing is keyed to a runner name or folder layout. `invocations` can feed a job
 Runs each invocation's argv in its working directory (relative to the repository root; a relative `--plan` is from the current directory), in order, without a shell, and exits 1 if any failed or has no argv, after running the rest. `--fail-fast` stops at the first failure. A plan of another version is refused with exit code 2.
 
 Without a shell, Windows finds only `.exe` programs on `PATH`: a runner that starts `npx` or another `.cmd` shim needs the full name, such as `npx.cmd`, in its argv.
+
+`--results PATH` also writes each invocation's id, working directory, argv, outcome and seconds, for `fairlead ci report`.
+
+## `fairlead ci report --plan PATH`
+
+Writes one Markdown summary of the run. It goes to `$GITHUB_STEP_SUMMARY` when GitHub Actions sets it, else stdout. The summary has:
+- the headline: passed, or how many invocations failed, and the time;
+- the plan: how many changed files and what it selected, with a count of each reason a test was picked;
+- changed files no test reaches, and what the plan did about each;
+- with `--results`, a line per invocation with its outcome and time, and a block with the command to run each failed one again;
+- with `--receipt FILE`, the [receipt](receipt.md) a branch carries, as `fairlead receipt --out` wrote it, folded away.
+
+Results from another plan are refused with exit code 2.
+
+```yaml
+      - run: bunx fairlead ci run --plan "$PLAN" --results "$RUNNER_TEMP/results.json"
+      - if: always()
+        run: bunx fairlead ci report --plan "$PLAN" --results "$RUNNER_TEMP/results.json"
+```
+
+`--comment`, or `ci.comment = true`, also keeps one pull request comment up to date with the same report. The comment is found again by a hidden marker at its start, so each run edits it rather than adding another. It needs `GITHUB_TOKEN` with `pull-requests: write`, and it's read from a `pull_request` event's payload. A comment that can't be posted is reported and never fails the step, since the summary already has the report.
+
+```toml
+[ci]
+comment = false   # also keep a pull request comment up to date
+```

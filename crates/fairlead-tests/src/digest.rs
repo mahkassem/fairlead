@@ -14,7 +14,7 @@ fn hex(bytes: &[u8]) -> String {
 
 /// Sections that never change a plan, left out of its digest altogether, so
 /// adding one doesn't change the digest of every plan made before it.
-const NOT_PLANNED: [&str; 3] = ["guard", "hooks", "done"];
+const NOT_PLANNED: [&str; 5] = ["guard", "hooks", "done", "brief", "ci"];
 
 pub fn config_digest(config: &Config) -> String {
     let mut value = serde_json::to_value(config).expect("config serializes");
@@ -70,6 +70,21 @@ mod tests {
         assert_eq!(config_digest(&config), before);
         config.tests.unreached = fairlead_core::config::Unreached::All;
         assert_ne!(config_digest(&config), before);
+    }
+
+    #[test]
+    fn the_default_config_keeps_the_digest_0_5_1_gave_it() {
+        let mut config = Config::default();
+        let released = "sha256:7eff5b583b350526d891c873a741620ab5faab28c4f4dcece469b1a327dc29d3";
+        assert_eq!(config_digest(&config), released);
+        config.brief.nudge = false;
+        config.ci.comment = true;
+        config.done.guard = false;
+        assert_eq!(
+            config_digest(&config),
+            released,
+            "sections that never change a plan"
+        );
     }
 
     #[test]
