@@ -20,6 +20,9 @@ const COMMAND: &str = "command -v fairlead >/dev/null 2>&1 && fairlead guard hoo
 const NPM_BINARY: &str = "node_modules/fairlead/node_modules/.bin_real/fairlead";
 /// How an installed entry is recognised, whatever else is in the command.
 const MARK: &str = "fairlead guard hook";
+const STOP_MARK: &str = "fairlead guard stop";
+/// Seconds; the Stop hook hashes the working tree, which a large one makes slower.
+const STOP_TIMEOUT: u64 = 30;
 const EDIT_TOOLS: &str = "Edit|Write|MultiEdit";
 /// Seconds; the hook keeps to its own much shorter budget.
 const TIMEOUT: u64 = 10;
@@ -104,6 +107,7 @@ pub fn run(action: HooksAction, cwd: &Path) -> ExitCode {
         .join("backups")
         .join(format!("claude-{name}"));
     let bash = !loaded.config.guard.commands.items().is_empty();
+    let stop = loaded.config.done.on_stop != fairlead_core::config::OnStop::Off;
     let backups = git_dir.join("fairlead").join("backups");
     let lefthook = lefthook_file(&root);
     let lefthook_manifest = backups.join(format!(
@@ -122,7 +126,7 @@ pub fn run(action: HooksAction, cwd: &Path) -> ExitCode {
     let mut result = Ok(());
     if claude {
         result = match action {
-            HooksAction::Install { .. } => install(&file, &manifest, bash, runner),
+            HooksAction::Install { .. } => install(&file, &manifest, bash, stop, runner),
             HooksAction::Status { .. } => status(&file, &manifest),
             HooksAction::Uninstall { .. } => uninstall(&file, &manifest),
         };
@@ -206,6 +210,19 @@ pub fn package_runner(root: &Path) -> Option<&'static str> {
 
 /// The write stage's command: the project's own copy where it has one, else
 /// `fairlead` on the PATH. Either way it does nothing where neither runs.
+/// The Stop hook's command. Unlike the write hook's it keeps the exit code
+/// and stderr: exit 2 with a reason is how it sends the agent back.
+fn stop_command(runner: Option<&str>) -> String {
+    match runner {
+        None => "command -v fairlead >/dev/null 2>&1 || exit 0; exec fairlead guard stop".into(),
+        Some(runner) => format!(
+            "cd \"${{CLAUDE_PROJECT_DIR:-.}}\" 2>/dev/null || exit 0; \
+             if [ -x {NPM_BINARY} ]; then exec {NPM_BINARY} guard stop; fi; \
+             exec {runner} fairlead guard stop"
+        ),
+    }
+}
+
 fn claude_command(runner: Option<&str>) -> String {
     match runner {
         None => COMMAND.to_string(),
@@ -373,37 +390,51 @@ fn parse(file: &Path, text: &str) -> Result<Map<String, Value>, String> {
 fn is_ours(hook: &Value) -> bool {
     hook.get("command")
         .and_then(Value::as_str)
-        .is_some_and(|c| c.contains(MARK))
+        .is_some_and(|c| c.contains(MARK) || c.contains(STOP_MARK))
 }
 
 /// The matchers whose groups run the guard.
 fn installed(settings: &Map<String, Value>) -> Vec<String> {
-    let groups = settings
-        .get("hooks")
-        .and_then(|h| h.get("PreToolUse"))
-        .and_then(Value::as_array);
-    groups
-        .into_iter()
-        .flatten()
-        .filter(|g| {
-            g.get("hooks")
-                .and_then(Value::as_array)
-                .is_some_and(|hs| hs.iter().any(is_ours))
-        })
+    let groups = |event: &str| {
+        settings
+            .get("hooks")
+            .and_then(|h| h.get(event))
+            .and_then(Value::as_array)
+            .cloned()
+            .unwrap_or_default()
+    };
+    let ours = |g: &Value| {
+        g.get("hooks")
+            .and_then(Value::as_array)
+            .is_some_and(|hs| hs.iter().any(is_ours))
+    };
+    let mut out: Vec<String> = groups("PreToolUse")
+        .iter()
+        .filter(|g| ours(g))
         .map(|g| {
             g.get("matcher")
                 .and_then(Value::as_str)
                 .unwrap_or("*")
                 .to_string()
         })
-        .collect()
+        .collect();
+    if groups("Stop").iter().any(ours) {
+        out.push("Stop".into());
+    }
+    out
 }
 
 fn pretty(settings: &Map<String, Value>) -> String {
     serde_json::to_string_pretty(settings).expect("settings serialize") + "\n"
 }
 
-fn install(file: &Path, manifest: &Path, bash: bool, runner: Option<&str>) -> Result<(), String> {
+fn install(
+    file: &Path,
+    manifest: &Path,
+    bash: bool,
+    stop: bool,
+    runner: Option<&str>,
+) -> Result<(), String> {
     let original = read(file)?;
     let mut settings = match &original {
         Some(text) => parse(file, text)?,
@@ -430,6 +461,14 @@ fn install(file: &Path, manifest: &Path, bash: bool, runner: Option<&str>) -> Re
     if bash {
         pre.push(json!({ "matcher": "Bash", "hooks": [entry] }));
     }
+    if stop {
+        let groups = hooks.entry("Stop").or_insert_with(|| json!([]));
+        let Some(groups) = groups.as_array_mut() else {
+            return Err(format!("{}: `hooks.Stop` isn't a list", file.display()));
+        };
+        let command = stop_command(runner);
+        groups.push(json!({ "hooks": [{ "type": "command", "command": command, "timeout": STOP_TIMEOUT }] }));
+    }
     let written = pretty(&settings);
     let dir = file.parent().expect("a settings file has a directory");
     let made_dir = !dir.exists();
@@ -451,10 +490,11 @@ fn install(file: &Path, manifest: &Path, bash: bool, runner: Option<&str>) -> Re
             .map_err(|e| format!("{}: {e}", manifest.display()))?;
     }
     std::fs::write(file, &written).map_err(|e| format!("{}: {e}", file.display()))?;
-    let what = if bash {
-        "edits and shell commands"
-    } else {
-        "edits"
+    let what = match (bash, stop) {
+        (true, true) => "edits and shell commands, and stops against `fairlead done`",
+        (true, false) => "edits and shell commands",
+        (false, true) => "edits, and stops against `fairlead done`",
+        (false, false) => "edits",
     };
     println!("hooks: installed in {}, checking {what}", file.display());
     Ok(())
@@ -548,19 +588,22 @@ fn strip(settings: &mut Map<String, Value>) {
     let Some(hooks) = settings.get_mut("hooks").and_then(Value::as_object_mut) else {
         return;
     };
-    if let Some(pre) = hooks.get_mut("PreToolUse").and_then(Value::as_array_mut) {
-        for group in pre.iter_mut() {
+    for event in ["PreToolUse", "Stop"] {
+        let Some(groups) = hooks.get_mut(event).and_then(Value::as_array_mut) else {
+            continue;
+        };
+        for group in groups.iter_mut() {
             if let Some(list) = group.get_mut("hooks").and_then(Value::as_array_mut) {
                 list.retain(|h| !is_ours(h));
             }
         }
-        pre.retain(|g| {
+        groups.retain(|g| {
             g.get("hooks")
                 .and_then(Value::as_array)
                 .is_none_or(|l| !l.is_empty())
         });
-        if pre.is_empty() {
-            hooks.remove("PreToolUse");
+        if groups.is_empty() {
+            hooks.remove(event);
         }
     }
     if hooks.is_empty() {

@@ -4,6 +4,7 @@
 
 ### New
 
+- A Claude Code `Stop` hook, `fairlead guard stop`, installed with the others: while the tree an agent leaves hasn't passed `fairlead done`, it sends the agent back with the reason, once under `done.on_stop = "ask"` (the default) or every time under `"require"`. See [The Stop hook](https://mahkassem.github.io/fairlead/docs/done.html#the-stop-hook).
 - `fairlead done` runs the gate a change passes before it counts as finished (the planned tests and checks, the checks `done.always` names, and the guard) and records the outcome against the tree it checked, so any later edit makes a pass stale. `--check` says whether the working tree as it stands has passed. See [The done gate](https://mahkassem.github.io/fairlead/docs/done.html).
 
 ## 0.5.1 (2026-09-29)

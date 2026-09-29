@@ -132,3 +132,75 @@ fn done_always_must_name_a_check() {
         "{out}"
     );
 }
+
+/// Runs the Stop hook as Claude Code would, returning its exit code and stderr.
+fn stop(dir: &Path, active: bool) -> (i32, String) {
+    use std::io::Write as _;
+    let mut child = Command::new(env!("CARGO_BIN_EXE_fairlead"))
+        .args(["guard", "stop"])
+        .current_dir(dir)
+        .env_clear()
+        .env("PATH", std::env::var_os("PATH").unwrap_or_default())
+        .env("HOME", dir)
+        .stdin(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .unwrap();
+    let input = serde_json::json!({
+        "session_id": "s", "cwd": dir, "hook_event_name": "Stop", "stop_hook_active": active
+    });
+    child
+        .stdin
+        .take()
+        .unwrap()
+        .write_all(input.to_string().as_bytes())
+        .unwrap();
+    let out = child.wait_with_output().unwrap();
+    (
+        out.status.code().unwrap_or(-1),
+        String::from_utf8_lossy(&out.stderr).into_owned(),
+    )
+}
+
+#[test]
+fn the_stop_hook_sends_an_agent_back_until_the_tree_it_leaves_has_passed() {
+    let dir = repo("stop");
+    let (code, err) = stop(&dir, false);
+    assert_eq!(code, 2, "a change with no gate: {err}");
+    assert!(err.contains("Run `fairlead done`"), "{err}");
+    assert_eq!(
+        stop(&dir, true).0,
+        0,
+        "under ask, the second stop goes through"
+    );
+    assert_eq!(done(&dir, &[]).0, 0);
+    assert_eq!(stop(&dir, false).0, 0, "the tree passed");
+    std::fs::write(dir.join("a.ts"), "export const a = 4;\n").unwrap();
+    assert_eq!(
+        stop(&dir, false).0,
+        2,
+        "an edit after the pass makes it stale"
+    );
+}
+
+#[test]
+fn require_keeps_sending_it_back_and_off_or_no_change_never_does() {
+    let dir = repo("require");
+    let config = std::fs::read_to_string(dir.join("fairlead.toml")).unwrap();
+    std::fs::write(
+        dir.join("fairlead.toml"),
+        format!("{config}on_stop = \"require\"\n"),
+    )
+    .unwrap();
+    assert_eq!(stop(&dir, true).0, 2, "require ignores stop_hook_active");
+    std::fs::write(
+        dir.join("fairlead.toml"),
+        format!("{config}on_stop = \"off\"\n"),
+    )
+    .unwrap();
+    assert_eq!(stop(&dir, false).0, 0);
+    std::fs::write(dir.join("fairlead.toml"), &config).unwrap();
+    git(&dir, &["stash", "-q", "--include-untracked"]);
+    let (code, err) = stop(&dir, false);
+    assert_eq!(code, 0, "nothing changed from the base: {err}");
+}

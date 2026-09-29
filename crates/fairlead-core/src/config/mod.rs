@@ -659,6 +659,21 @@ pub struct Done {
     pub always: List<String>,
     /// `fairlead guard check` over the whole tree, as CI runs it.
     pub guard: bool,
+    /// What the Claude Code Stop hook does when the tree an agent leaves
+    /// hasn't passed the gate.
+    pub on_stop: OnStop,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "kebab-case")]
+pub enum OnStop {
+    /// No Stop hook.
+    Off,
+    /// Send the agent back once with what's left; its next stop goes through.
+    #[default]
+    Ask,
+    /// Send it back until the gate passes; Claude Code's own cap ends a loop.
+    Require,
 }
 
 impl Default for Done {
@@ -668,6 +683,7 @@ impl Default for Done {
             checks: DoneTests::Planned,
             always: List::default(),
             guard: true,
+            on_stop: OnStop::Ask,
         }
     }
 }

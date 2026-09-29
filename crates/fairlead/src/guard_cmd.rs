@@ -34,6 +34,9 @@ pub enum GuardAction {
     /// The write stage: read a Claude Code PreToolUse call on stdin and deny
     /// it, or add a note, when it breaks a rule. `fairlead hooks install` runs it.
     Hook,
+    /// The Claude Code Stop hook: send the agent back while the tree it
+    /// leaves hasn't passed `fairlead done`. `fairlead hooks install` runs it.
+    Stop,
     /// Compare another linter's findings, one `file:line rule` per line, with
     /// the check stage's, and fail on any difference.
     Compare {
@@ -69,6 +72,9 @@ fn fail(message: impl std::fmt::Display) -> ExitCode {
 pub fn run(action: GuardAction, sets: Vec<String>, cwd: &Path) -> ExitCode {
     if matches!(action, GuardAction::Hook) {
         return crate::hook_cmd::run();
+    }
+    if matches!(action, GuardAction::Stop) {
+        return crate::done_cmd::stop();
     }
     if let GuardAction::Bench {
         since,

@@ -723,3 +723,29 @@ fn a_package_dependency_gets_hooks_that_run_the_projects_own_copy() {
     assert!(fairlead(&dir, &["hooks", "uninstall"]).0);
     assert_eq!(file(&dir, "lefthook.yml").unwrap(), LEFTHOOK);
 }
+
+#[test]
+fn install_adds_the_stop_hook_unless_done_on_stop_is_off() {
+    let dir = repo("stophook", SIZE, &[]);
+    assert!(fairlead(&dir, &["hooks", "install"]).0);
+    let after: Value = serde_json::from_str(&settings(&dir, "settings.json")).unwrap();
+    let command = after["hooks"]["Stop"][0]["hooks"][0]["command"]
+        .as_str()
+        .unwrap();
+    assert!(
+        command.contains("fairlead guard stop") && !command.contains("|| true"),
+        "{command}"
+    );
+    let (_, out, _) = fairlead(&dir, &["hooks", "status"]);
+    assert!(out.contains("Stop"), "{out}");
+    assert!(fairlead(&dir, &["hooks", "uninstall"]).0);
+    assert!(!dir.join(".claude").exists());
+    let off = repo(
+        "stopoff",
+        &format!("{SIZE}[done]\non_stop = \"off\"\n"),
+        &[],
+    );
+    assert!(fairlead(&off, &["hooks", "install"]).0);
+    let after: Value = serde_json::from_str(&settings(&off, "settings.json")).unwrap();
+    assert!(after["hooks"].get("Stop").is_none(), "{after}");
+}
