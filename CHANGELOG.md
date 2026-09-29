@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### New
+
+- Codex hooks. `fairlead hooks install --codex` writes the guard, the brief nudge and the Stop hook to `.codex/hooks.json`, and the write hook reads Codex's `apply_patch`: each file the patch adds, changes or moves is linted as the patch would leave it, and a patch that edits, moves or deletes a migration that already exists is denied. See [Codex](https://mahkassem.github.io/fairlead/docs/guard.html#codex).
+
 ### Fixed
 
 - `fairlead hooks --help` and `hooks install --help` name every hook install adds: the guard before an edit, the brief nudge after one, the Stop hook and the git hook, where they used to name one Claude Code hook.
