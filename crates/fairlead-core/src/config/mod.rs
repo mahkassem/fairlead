@@ -80,6 +80,7 @@ pub struct Config {
     pub hooks: Hooks,
     pub done: Done,
     pub brief: Brief,
+    pub ci: Ci,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
@@ -687,6 +688,15 @@ impl Default for Done {
             on_stop: OnStop::Ask,
         }
     }
+}
+
+/// What `fairlead ci report` does with its report.
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields, default)]
+pub struct Ci {
+    /// Also keep one pull request comment up to date with the report, which
+    /// needs `pull-requests: write`; the step summary always gets it.
+    pub comment: bool,
 }
 
 /// What `fairlead brief` keeps, and whether an agent that edits without one is told.
