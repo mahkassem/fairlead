@@ -265,3 +265,90 @@ match = ["**/*_test.go"]
         "a workspace picks versions across its modules"
     );
 }
+
+const JVM: &[(&str, &str)] = &[
+    (
+        "core/src/main/java/com/acme/Order.java",
+        "package com.acme;\npublic class Order {}\n",
+    ),
+    (
+        "core/src/main/kotlin/com/acme/Price.kt",
+        "package com.acme\n\ndata class Price(val cents: Long)\n",
+    ),
+    (
+        "core/src/test/java/com/acme/OrderTest.java",
+        "package com.acme;\nclass OrderTest { Order o; }\n",
+    ),
+    (
+        "core/src/test/kotlin/com/acme/PriceTest.kt",
+        "package com.acme\n\nclass PriceTest { val p = Price(1) }\n",
+    ),
+    ("build.gradle", "plugins { id 'java' }\n"),
+];
+
+const JVM_RUNNERS: &str = r#"
+[tests]
+match = ["**/src/test/**"]
+
+[plan]
+run_all = ["build.gradle"]
+
+[[tests.runners]]
+id = "gradle"
+match = ["**/src/test/**"]
+command = ["./gradlew", "test", "--tests={class}"]
+"#;
+
+#[test]
+fn jvm_runners_get_class_names_repeated_or_joined_and_none_when_everything_runs() {
+    let dir = repo("inv-jvm", JVM);
+    let plan = run(
+        &dir,
+        &config(JVM_RUNNERS),
+        vec![
+            modified("core/src/main/java/com/acme/Order.java"),
+            modified("core/src/main/kotlin/com/acme/Price.kt"),
+        ],
+    );
+    let argv = |id: &str| {
+        plan.invocations
+            .iter()
+            .find(|i| i.id == id)
+            .map(|i| i.argv.clone())
+            .unwrap_or_default()
+    };
+    assert_eq!(
+        argv("gradle"),
+        [
+            "./gradlew",
+            "test",
+            "--tests=com.acme.OrderTest",
+            "--tests=com.acme.PriceTest"
+        ]
+    );
+    let maven = JVM_RUNNERS.replace(
+        "id = \"gradle\"\nmatch = [\"**/src/test/**\"]\ncommand = [\"./gradlew\", \"test\", \"--tests={class}\"]",
+        "id = \"maven\"\nmatch = [\"**/src/test/**\"]\ncommand = [\"mvn\", \"test\", \"-Dtest={classes}\"]",
+    );
+    assert!(maven.contains("mvn"));
+    let plan = run(
+        &dir,
+        &config(&maven),
+        vec![
+            modified("core/src/main/java/com/acme/Order.java"),
+            modified("core/src/main/kotlin/com/acme/Price.kt"),
+        ],
+    );
+    assert_eq!(
+        plan.invocations[0].argv,
+        [
+            "mvn",
+            "test",
+            "-Dtest=com.acme.OrderTest,com.acme.PriceTest"
+        ]
+    );
+
+    let plan = run(&dir, &config(JVM_RUNNERS), vec![modified("build.gradle")]);
+    let gradle = plan.invocations.iter().find(|i| i.id == "gradle").unwrap();
+    assert_eq!(gradle.argv, ["./gradlew", "test"]);
+}
