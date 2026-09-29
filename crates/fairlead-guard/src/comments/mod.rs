@@ -189,6 +189,10 @@ fn trailing(tree: &Tree, text: &str) -> Vec<Block> {
 }
 
 impl Preset for Comments {
+    fn table(&self) -> &'static str {
+        "comments"
+    }
+
     fn ratcheted(&self) -> Vec<&'static str> {
         if self.ratchet {
             RULES.to_vec()

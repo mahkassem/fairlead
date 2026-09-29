@@ -111,6 +111,8 @@ fairlead.toml: tests.unreachd: unknown field `unreachd`, expected one of ...
 | `done.always` | `[]` | `[[checks]]` ids `fairlead done` runs for every change |
 | `done.guard` | `true` | Whether `fairlead done` ends with `fairlead guard check` |
 | `done.on_stop` | `"ask"` | What the Claude Code Stop hook does while the tree hasn't passed: `off`, `ask` (send the agent back once) or `require`. See [The done gate](done.md#the-stop-hook) |
+| `brief.per` | `"session"` | Whether a second `fairlead brief` in the same session adds its paths to the first (`session`) or stands alone (`call`). See [The brief](brief.md) |
+| `brief.nudge` | `true` | Whether `fairlead hooks install` adds the `PostToolUse` note after an edit made with no brief |
 | `guard.comments` | off | `files`, `exclude`, `tests`, `migrations`, `block_length`, `density`, `history`, `item_codes`, `agent_phrases`, `block_marker`, and `ratchet` (default `false`). See [Guard rules](guard.md#comments) |
 
 Commands are always argv arrays, never shell strings, and `{files}` expands to one argument per file. `{packages}` expands to one `./dir` per directory holding a selected test, or `./...` when everything runs, for `go test`. In `tests.runners.cwd`, `{module}` is the module's root path and `{module.id}` its id.

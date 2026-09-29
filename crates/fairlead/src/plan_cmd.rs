@@ -25,6 +25,13 @@ pub struct Changes {
     sets: Vec<String>,
 }
 
+impl Changes {
+    /// The changes a caller names itself, as `--base`, `--files` and `--set` would.
+    pub fn new(base: Option<String>, files: Vec<String>, sets: Vec<String>) -> Changes {
+        Changes { base, files, sets }
+    }
+}
+
 pub struct Planned {
     pub plan: Plan,
     pub scan: Scan,

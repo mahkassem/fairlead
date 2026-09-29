@@ -21,6 +21,7 @@ const NPM_BINARY: &str = "node_modules/fairlead/node_modules/.bin_real/fairlead"
 /// How an installed entry is recognised, whatever else is in the command.
 const MARK: &str = "fairlead guard hook";
 const STOP_MARK: &str = "fairlead guard stop";
+const NUDGE_MARK: &str = "fairlead guard nudge";
 /// Seconds; the Stop hook hashes the working tree, which a large one makes slower.
 const STOP_TIMEOUT: u64 = 30;
 const EDIT_TOOLS: &str = "Edit|Write|MultiEdit";
@@ -108,6 +109,7 @@ pub fn run(action: HooksAction, cwd: &Path) -> ExitCode {
         .join(format!("claude-{name}"));
     let bash = !loaded.config.guard.commands.items().is_empty();
     let stop = loaded.config.done.on_stop != fairlead_core::config::OnStop::Off;
+    let nudge = loaded.config.brief.nudge;
     let backups = git_dir.join("fairlead").join("backups");
     let lefthook = lefthook_file(&root);
     let lefthook_manifest = backups.join(format!(
@@ -126,7 +128,9 @@ pub fn run(action: HooksAction, cwd: &Path) -> ExitCode {
     let mut result = Ok(());
     if claude {
         result = match action {
-            HooksAction::Install { .. } => install(&file, &manifest, bash, stop, runner),
+            HooksAction::Install { .. } => {
+                install(&file, &manifest, Stages { bash, stop, nudge }, runner)
+            }
             HooksAction::Status { .. } => status(&file, &manifest),
             HooksAction::Uninstall { .. } => uninstall(&file, &manifest),
         };
@@ -210,15 +214,18 @@ pub fn package_runner(root: &Path) -> Option<&'static str> {
 
 /// The write stage's command: the project's own copy where it has one, else
 /// `fairlead` on the PATH. Either way it does nothing where neither runs.
-/// The Stop hook's command. Unlike the write hook's it keeps the exit code
-/// and stderr: exit 2 with a reason is how it sends the agent back.
-fn stop_command(runner: Option<&str>) -> String {
+/// The Stop and PostToolUse hooks' command, for `fairlead guard <stage>`.
+/// Unlike the write hook's it keeps the exit code and output: the Stop
+/// hook's exit 2 and the PostToolUse note are how they reach the agent.
+fn stage_command(stage: &str, runner: Option<&str>) -> String {
     match runner {
-        None => "command -v fairlead >/dev/null 2>&1 || exit 0; exec fairlead guard stop".into(),
+        None => {
+            format!("command -v fairlead >/dev/null 2>&1 || exit 0; exec fairlead guard {stage}")
+        }
         Some(runner) => format!(
             "cd \"${{CLAUDE_PROJECT_DIR:-.}}\" 2>/dev/null || exit 0; \
-             if [ -x {NPM_BINARY} ]; then exec {NPM_BINARY} guard stop; fi; \
-             exec {runner} fairlead guard stop"
+             if [ -x {NPM_BINARY} ]; then exec {NPM_BINARY} guard {stage}; fi; \
+             exec {runner} fairlead guard {stage}"
         ),
     }
 }
@@ -390,7 +397,7 @@ fn parse(file: &Path, text: &str) -> Result<Map<String, Value>, String> {
 fn is_ours(hook: &Value) -> bool {
     hook.get("command")
         .and_then(Value::as_str)
-        .is_some_and(|c| c.contains(MARK) || c.contains(STOP_MARK))
+        .is_some_and(|c| c.contains(MARK) || c.contains(STOP_MARK) || c.contains(NUDGE_MARK))
 }
 
 /// The matchers whose groups run the guard.
@@ -418,6 +425,9 @@ fn installed(settings: &Map<String, Value>) -> Vec<String> {
                 .to_string()
         })
         .collect();
+    if groups("PostToolUse").iter().any(ours) {
+        out.push("PostToolUse".into());
+    }
     if groups("Stop").iter().any(ours) {
         out.push("Stop".into());
     }
@@ -428,13 +438,20 @@ fn pretty(settings: &Map<String, Value>) -> String {
     serde_json::to_string_pretty(settings).expect("settings serialize") + "\n"
 }
 
+/// Which hooks install writes beside the write stage on edits.
+struct Stages {
+    bash: bool,
+    stop: bool,
+    nudge: bool,
+}
+
 fn install(
     file: &Path,
     manifest: &Path,
-    bash: bool,
-    stop: bool,
+    stages: Stages,
     runner: Option<&str>,
 ) -> Result<(), String> {
+    let Stages { bash, stop, nudge } = stages;
     let original = read(file)?;
     let mut settings = match &original {
         Some(text) => parse(file, text)?,
@@ -466,8 +483,19 @@ fn install(
         let Some(groups) = groups.as_array_mut() else {
             return Err(format!("{}: `hooks.Stop` isn't a list", file.display()));
         };
-        let command = stop_command(runner);
+        let command = stage_command("stop", runner);
         groups.push(json!({ "hooks": [{ "type": "command", "command": command, "timeout": STOP_TIMEOUT }] }));
+    }
+    if nudge {
+        let groups = hooks.entry("PostToolUse").or_insert_with(|| json!([]));
+        let Some(groups) = groups.as_array_mut() else {
+            return Err(format!(
+                "{}: `hooks.PostToolUse` isn't a list",
+                file.display()
+            ));
+        };
+        let command = stage_command("nudge", runner);
+        groups.push(json!({ "matcher": EDIT_TOOLS, "hooks": [{ "type": "command", "command": command, "timeout": TIMEOUT }] }));
     }
     let written = pretty(&settings);
     let dir = file.parent().expect("a settings file has a directory");
@@ -496,7 +524,15 @@ fn install(
         (false, true) => "edits, and stops against `fairlead done`",
         (false, false) => "edits",
     };
-    println!("hooks: installed in {}, checking {what}", file.display());
+    let note = if nudge {
+        "; it notes an edit made with no brief"
+    } else {
+        ""
+    };
+    println!(
+        "hooks: installed in {}, checking {what}{note}",
+        file.display()
+    );
     Ok(())
 }
 
@@ -588,7 +624,7 @@ fn strip(settings: &mut Map<String, Value>) {
     let Some(hooks) = settings.get_mut("hooks").and_then(Value::as_object_mut) else {
         return;
     };
-    for event in ["PreToolUse", "Stop"] {
+    for event in ["PreToolUse", "PostToolUse", "Stop"] {
         let Some(groups) = hooks.get_mut(event).and_then(Value::as_array_mut) else {
             continue;
         };

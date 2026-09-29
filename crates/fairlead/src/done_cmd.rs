@@ -110,7 +110,7 @@ fn gate(args: &DoneArgs, cwd: &Path) -> Result<ExitCode, String> {
 
 /// The planned tests and checks `[done]` asks for, then `done.always`
 /// checks the plan didn't select, then the guard.
-fn steps(planned: &crate::plan_cmd::Planned) -> Result<Vec<Invocation>, String> {
+pub fn steps(planned: &crate::plan_cmd::Planned) -> Result<Vec<Invocation>, String> {
     let done = &planned.config.done;
     let mut out: Vec<Invocation> = planned
         .plan
