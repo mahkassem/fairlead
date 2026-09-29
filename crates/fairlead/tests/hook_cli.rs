@@ -749,3 +749,33 @@ fn install_adds_the_stop_hook_unless_done_on_stop_is_off() {
     let after: Value = serde_json::from_str(&settings(&off, "settings.json")).unwrap();
     assert!(after["hooks"].get("Stop").is_none(), "{after}");
 }
+
+#[test]
+fn install_adds_the_brief_note_after_edits_unless_brief_nudge_is_off() {
+    let dir = repo("nudgehook", SIZE, &[]);
+    let (ok, out, _) = fairlead(&dir, &["hooks", "install"]);
+    assert!(
+        ok && out.contains("notes an edit made with no brief"),
+        "{out}"
+    );
+    let after: Value = serde_json::from_str(&settings(&dir, "settings.json")).unwrap();
+    let group = &after["hooks"]["PostToolUse"][0];
+    assert_eq!(group["matcher"], "Edit|Write|MultiEdit");
+    let command = group["hooks"][0]["command"].as_str().unwrap();
+    assert!(
+        command.contains("fairlead guard nudge") && !command.contains("|| true"),
+        "{command}"
+    );
+    let (_, out, _) = fairlead(&dir, &["hooks", "status"]);
+    assert!(out.contains("PostToolUse"), "{out}");
+    assert!(fairlead(&dir, &["hooks", "uninstall"]).0);
+    assert!(!dir.join(".claude").exists());
+    let off = repo(
+        "nudgehookoff",
+        &format!("{SIZE}[brief]\nnudge = false\n"),
+        &[],
+    );
+    assert!(fairlead(&off, &["hooks", "install"]).0);
+    let after: Value = serde_json::from_str(&settings(&off, "settings.json")).unwrap();
+    assert!(after["hooks"].get("PostToolUse").is_none(), "{after}");
+}

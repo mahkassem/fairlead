@@ -3,6 +3,7 @@
 //! K2.1 `guard`.
 
 mod bench_cmd;
+mod brief_cmd;
 mod ci_cmd;
 mod coverage_cmd;
 mod done_cmd;
@@ -93,6 +94,12 @@ enum Command {
     Done {
         #[command(flatten)]
         args: done_cmd::DoneArgs,
+    },
+    /// Before an edit: what the paths reach, the tests and checks that will
+    /// run, the rules that read them and the done gate, each with its source.
+    Brief {
+        #[command(flatten)]
+        args: brief_cmd::BriefArgs,
     },
     /// Install, check or remove the Claude Code hook that runs the guard.
     Hooks {
@@ -349,6 +356,7 @@ fn main() -> ExitCode {
         Some(Command::Guard { action, sets }) => guard_cmd::run(action, sets, &cwd()),
         Some(Command::Hooks { action }) => hooks_cmd::run(action, &cwd()),
         Some(Command::Done { args }) => done_cmd::run(args, &cwd()),
+        Some(Command::Brief { args }) => brief_cmd::run(args, &cwd()),
         Some(Command::Plan {
             changes,
             json,

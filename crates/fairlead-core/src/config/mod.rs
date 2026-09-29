@@ -79,6 +79,7 @@ pub struct Config {
     pub guard: Guard,
     pub hooks: Hooks,
     pub done: Done,
+    pub brief: Brief,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
@@ -686,6 +687,37 @@ impl Default for Done {
             on_stop: OnStop::Ask,
         }
     }
+}
+
+/// What `fairlead brief` keeps, and whether an agent that edits without one is told.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields, default)]
+pub struct Brief {
+    /// Whether a second brief in the same session adds its paths to the
+    /// first, or stands alone.
+    pub per: BriefPer,
+    /// A one-line note, once per session, after the first edit made with no brief.
+    pub nudge: bool,
+}
+
+impl Default for Brief {
+    fn default() -> Self {
+        Brief {
+            per: BriefPer::Session,
+            nudge: true,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "kebab-case")]
+pub enum BriefPer {
+    /// One brief per session: a later brief adds its paths, so a change that
+    /// grows is still one brief.
+    #[default]
+    Session,
+    /// Each brief stands alone; the newest is the one that counts.
+    Call,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, JsonSchema)]

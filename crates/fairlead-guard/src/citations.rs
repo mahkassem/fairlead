@@ -45,6 +45,10 @@ impl Citations {
 }
 
 impl Preset for Citations {
+    fn table(&self) -> &'static str {
+        "citations"
+    }
+
     fn ratcheted(&self) -> Vec<&'static str> {
         Vec::new()
     }

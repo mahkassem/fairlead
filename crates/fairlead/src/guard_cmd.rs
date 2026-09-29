@@ -37,6 +37,9 @@ pub enum GuardAction {
     /// The Claude Code Stop hook: send the agent back while the tree it
     /// leaves hasn't passed `fairlead done`. `fairlead hooks install` runs it.
     Stop,
+    /// The Claude Code PostToolUse hook: once per session, after an edit made
+    /// with no brief, a note saying how to get one. `fairlead hooks install` runs it.
+    Nudge,
     /// Compare another linter's findings, one `file:line rule` per line, with
     /// the check stage's, and fail on any difference.
     Compare {
@@ -75,6 +78,9 @@ pub fn run(action: GuardAction, sets: Vec<String>, cwd: &Path) -> ExitCode {
     }
     if matches!(action, GuardAction::Stop) {
         return crate::done_cmd::stop();
+    }
+    if matches!(action, GuardAction::Nudge) {
+        return crate::brief_cmd::nudge();
     }
     if let GuardAction::Bench {
         since,

@@ -28,6 +28,10 @@ impl Size {
 }
 
 impl Preset for Size {
+    fn table(&self) -> &'static str {
+        "size"
+    }
+
     fn ratcheted(&self) -> Vec<&'static str> {
         if self.ratchet {
             vec!["file-length", "function-length"]

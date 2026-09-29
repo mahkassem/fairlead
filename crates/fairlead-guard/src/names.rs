@@ -70,6 +70,10 @@ fn titles<'a>(root: Node<'_>, text: &'a str, calls: &HashSet<String>) -> Vec<(u3
 }
 
 impl Preset for Names {
+    fn table(&self) -> &'static str {
+        "test_names"
+    }
+
     fn ratcheted(&self) -> Vec<&'static str> {
         Vec::new()
     }

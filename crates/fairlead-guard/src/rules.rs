@@ -43,6 +43,8 @@ impl<'a> Source<'a> {
 
 /// A family of rules configured together, such as `[guard.comments]`.
 pub trait Preset: Send + Sync {
+    /// Its `[guard.*]` table, as the config names it.
+    fn table(&self) -> &'static str;
     /// The rule ids it reports that count against the baseline.
     fn ratcheted(&self) -> Vec<&'static str>;
     fn applies(&self, path: &str) -> bool;
@@ -136,6 +138,24 @@ impl Guard {
     pub fn reads(&self, path: &str) -> bool {
         !self.exclude.iter().any(|p| p.is_match(path))
             && self.presets.iter().any(|r| r.applies(path))
+    }
+
+    /// The `[guard.*]` tables whose rules read this path, in config order;
+    /// the commit and check stages' migrations included.
+    pub fn tables_for(&self, path: &str) -> Vec<&'static str> {
+        let mut out: Vec<&'static str> = Vec::new();
+        if !self.exclude.iter().any(|p| p.is_match(path)) {
+            out.extend(
+                self.presets
+                    .iter()
+                    .filter(|r| r.applies(path))
+                    .map(|r| r.table()),
+            );
+        }
+        if self.migrations.as_ref().is_some_and(|m| m.covers(path)) {
+            out.push("migrations");
+        }
+        out
     }
 
     pub fn ratcheted(&self) -> BTreeSet<&'static str> {

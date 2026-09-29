@@ -139,7 +139,7 @@ impl EventLog {
 }
 
 /// RFC 3339 in UTC with milliseconds.
-fn timestamp(at: SystemTime) -> String {
+pub fn timestamp(at: SystemTime) -> String {
     let since = at.duration_since(UNIX_EPOCH).unwrap_or_default();
     let secs = since.as_secs();
     let (days, rest) = (secs / 86_400, secs % 86_400);
