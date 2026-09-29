@@ -132,6 +132,30 @@ fn explicit_files_plan_without_git() {
 }
 
 #[test]
+fn a_repository_the_config_finds_no_tests_in_is_told_to_run_init() {
+    let dir = std::env::temp_dir().join(format!("fairlead-plan-cli-none-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    git(&dir, &["init", "-q", "-b", "main"]);
+    write(&dir, "main.go", "package main\n");
+    write(&dir, "main_test.go", "package main\n");
+    let out = fairlead_in(&dir, &["plan", "--files", "main.go"]);
+    let text = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        text.contains("0 tests, 0 checks (everything, and there's nothing to run)"),
+        "{text}"
+    );
+    assert!(
+        text.contains("[no-tests]") && text.contains("fairlead init"),
+        "{text}"
+    );
+
+    let project = project("has-tests");
+    let out = fairlead_in(&project, &["plan", "--files", "src/a.ts"]);
+    assert!(!String::from_utf8_lossy(&out.stdout).contains("no-tests"));
+}
+
+#[test]
 fn plan_schema_prints_the_committed_schema() {
     let dir = project("schema");
     let out = fairlead_in(&dir, &["plan", "--schema"]);
