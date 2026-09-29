@@ -180,19 +180,27 @@ external rule can run at: when the hook runs, the file isn't written yet.
 ## The write hook
 
 ```bash
-fairlead hooks install         # the Claude Code hook, and the git hook if lefthook is set up
+fairlead hooks install         # the Claude Code hooks, and the git hook if lefthook is set up
 fairlead hooks install --git   # only the git hook, making lefthook.yml if there's none
 fairlead hooks status          # where each is, and whether uninstall can restore the file exactly
 fairlead hooks uninstall       # take them out again
 fairlead doctor                # the hooks, the binary on the PATH, and what the event log recorded
 ```
 
-The hook goes where `hooks.claude` says: `"shared"` (the default) is the
+`hooks install` adds three Claude Code hooks:
+
+| Hook | Runs | Does |
+|---|---|---|
+| `PreToolUse` | `fairlead guard hook` | The write stage below: denies an edit that breaks a rule, or adds a note |
+| `PostToolUse` | `fairlead guard nudge` | Once per session, after an edit made with no brief, says how to get one ([The brief](brief.md#the-note-after-an-edit)); off with `brief.nudge = false` |
+| `Stop` | `fairlead guard stop` | Sends the agent back while the tree it leaves hasn't passed `fairlead done` ([The Stop hook](done.md#the-stop-hook)); off with `done.on_stop = "off"` |
+
+The hooks go where `hooks.claude` says: `"shared"` (the default) is the
 committed `.claude/settings.json`, so everyone who clones the repository and
 every agent session is guarded; `"local"` is `.claude/settings.local.json`,
-for you alone. `--shared` and `--local` choose for one run. It runs on
-`Edit`, `Write` and `MultiEdit`, and on `Bash` too when there are
-`[[guard.commands]]`. Where `fairlead` isn't installed the hook does nothing,
+for you alone. `--shared` and `--local` choose for one run. The write hook
+runs on `Edit`, `Write` and `MultiEdit`, and on `Bash` too when there are
+`[[guard.commands]]`. Where `fairlead` isn't installed the hooks do nothing,
 so a teammate without it can still work.
 
 When `package.json` lists Fairlead as a dependency, install writes hooks that

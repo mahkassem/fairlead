@@ -19,6 +19,7 @@ install-updater = false
 # Publish the npm package through .github/workflows/publish-npm.yml, which
 # runs in the approval-gated `release` environment with npm trusted publishing
 publish-jobs = ["./publish-npm"]
+plan-jobs = ["./docs-check"]
 # Attest every build artifact with GitHub's build provenance
 github-attestations = true
 # Plan (don't build) on pull requests
