@@ -80,6 +80,7 @@ jobs:
           persist-credentials: false
       - run: python3 -m unittest discover -s scripts -p "test_*.py"
       - run: python3 scripts/leak_check.py
+      - run: python3 scripts/docs_check.py
 
   docs:
     runs-on: ubuntu-24.04

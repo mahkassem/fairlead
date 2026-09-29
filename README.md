@@ -35,55 +35,61 @@ of trying things like a stranger.
   the code, per module, where the agent meets them before it acts. A lesson is
   kept short, reviewed on a date, and turned into a check when it can be, so
   the memory stays true instead of growing into noise.
-  *Today:* owner rules record which tests guard which code, and a quarantined
-  test applies only while the evidence holds and until its date.
+  *Since 0.2.0:* owner rules record which tests guard which code, and a
+  quarantined test applies only while the evidence holds and until its date.
 - **Set up once, never start cold.** The agent's first job is to learn
   the repository: its modules, test runners, rules, and the commands that prove
   a change is right. That goes into one checked config, so every session starts
   where the last one left off.
-  *Today:* `fairlead config check` validates every layer, and `show --origin`
-  says where each value came from.
+  *Since 0.1.1:* `fairlead config check` validates every layer, and
+  `show --origin` says where each value came from.
 - **The right tool, not the nearest one.** The agent asks what applies to the
   files in front of it and gets the rule, the command and the next step for
   exactly those files.
-  *Today:* `fairlead plan` names the tests and checks a change can reach, and
-  `test --explain` says why each one is in or out.
+  *Since 0.2.0:* `fairlead plan` names the tests and checks a change can
+  reach, and `test --explain` says why each one is in or out.
 - **Plans the change, not just the tests.** Before an edit, the agent sees
   what it's about to touch, everything that depends on it, the rules and
   lessons recorded there, and what has to pass before it's done. Afterwards,
   what actually changed is checked against that brief.
-  *Coming in K3* ([#45](https://github.com/mahkassem/fairlead/issues/45)).
+  *Since 0.6.0:* `fairlead brief <paths>` answers that before the first edit,
+  `fairlead done` is the gate a change passes before it's finished,
+  `fairlead receipt` compares what changed with the brief, and `fairlead next`
+  names the one step left.
 - **The right skills for the code in front of it.** A frontend change
   shouldn't come with database advice. Fairlead picks the skills that apply to
   what a change reaches, just as it picks tests, and checks the agent used them.
   *Coming in K4* ([#43](https://github.com/mahkassem/fairlead/issues/43)).
 - **Measured, not guessed.** Good and bad are numbers: whether the plan would
   have caught real CI failures, rework, escaped defects, tokens and cost.
-  *Today:* `fairlead replay` re-plans real failures from a repository's CI
-  history, and the [benchmarks](https://mahkassem.github.io/fairlead/docs/benchmarks.html)
-  measure that recall every week.
+  *Since 0.2.0:* `fairlead replay` re-plans real failures from a repository's
+  CI history, and the [benchmarks](https://mahkassem.github.io/fairlead/docs/benchmarks.html)
+  measure that recall every week. *Since 0.6.0:* `ci run --judge` names each
+  failing test on the default branch that the merged change's plan left out.
 - **Fast because it remembers.** No rereading the codebase to rediscover what
   was learned last week. The graph, the plan and the lessons are already there.
-  *Today:* the import graph is built without installing dependencies and
-  cached between runs.
+  *Since 0.2.0:* the import graph is built without installing dependencies
+  and cached between runs.
 - **It learns where it's blind.** When a change reaches no test, Fairlead says
   so and points at the rule that's missing, so the team's knowledge grows
   exactly where it was thin.
-  *Today:* `fairlead plan` lists every file no test depends on, and replay
-  suggests the owner rule or check path that would have caught a miss.
+  *Since 0.3.0:* `fairlead plan` lists every file no test depends on, and
+  replay suggests the owner rule or check path that would have caught a miss.
 - **Stopped before the mistake, not after.** Your rules run as the agent
   works, catching a wrong move in seconds instead of minutes later in CI.
-  *Coming in K2.*
+  *Since 0.4.0:* `[guard.*]` rules run in a Claude Code hook before each edit
+  and in a git commit hook, and `fairlead guard check` runs them on the tree.
 
 ## Works with
 
-- **Any test runner.** Vitest, Jest, Playwright, `node --test`, Bun: a runner is
-  one command in your config, so Fairlead never needs a plugin for your stack.
+- **Any test runner.** Vitest, Jest, Playwright, `node --test`, Bun, pytest,
+  `go test`, PHPUnit and Pest: a runner is one command in your config, so
+  Fairlead never needs a plugin for your stack.
 - **Monorepos, precisely.** pnpm, npm, yarn and bun workspaces. A pnpm lockfile
   change runs only the packages whose dependencies actually changed.
-- **No install needed to read your code.** The JavaScript and TypeScript import
-  graph comes from source alone, with tsconfig paths resolved and parsed files
-  cached, so a plan takes a fraction of a second.
+- **No install needed to read your code.** The import graph comes from source
+  alone, with tsconfig paths, `go.mod` and composer's autoload resolved and
+  parsed files cached, so a plan takes a fraction of a second.
 - **Your CI, not a new one.** A GitHub Action and `ci plan --format github` for
   Actions, and a JSON plan with a published schema for any other CI.
 - **Proven on real projects.** Recall is replayed from the CI history of Effect,
@@ -93,16 +99,30 @@ of trying things like a stranger.
 - **One binary, everywhere.** Linux, macOS and Windows, installed with a shell
   script, PowerShell or npm.
 
-*It reads JavaScript and TypeScript today. More languages, framework packs and
-folders of several repositories are on the way
-([#47](https://github.com/mahkassem/fairlead/issues/47)); Vue, Svelte and Astro
-files fall back to broader test selection until then.*
+*It reads JavaScript and TypeScript since 0.2.0, and Python, Go, PHP and Vue,
+Svelte and Astro components since 0.5.0. An external provider feeds the graph
+for any other language, and a coverage map adds what imports can't show.
+Framework packs and folders of several repositories are on the way
+([#47](https://github.com/mahkassem/fairlead/issues/47)).*
 
-## What it does today
+## What it does
 
-The test plan (`plan`, `test --explain`), plans in CI (`ci plan`, `ci run` and
-the GitHub Action), `replay`, the import graph (`graph`), and the config
-commands. The [quick start](#quick-start) shows them, and the
+This README documents Fairlead 0.6.0. Each command, by what it's for:
+
+- **The test plan:** `plan`, `test --explain`, the import graph (`graph`) and
+  coverage maps (`coverage import`).
+- **Plans in CI:** `ci plan`, `ci run` (with `--results` and `--judge`),
+  `ci report` and the GitHub Action.
+- **Rules as the agent works:** `guard check`, the hooks `hooks install` adds,
+  and `doctor`.
+- **The change loop:** `brief` before an edit, `done` before it's finished,
+  then `receipt` and `next`.
+- **Measuring:** `replay` and the benchmarks.
+- **Getting started:** `init` writes a first config from what the repository
+  shows.
+- **The config:** `config check`, `show` and `schema`.
+
+The [quick start](#quick-start) shows the first few, and the
 [book](https://mahkassem.github.io/fairlead/docs/) covers each one.
 
 ## Status
@@ -144,13 +164,22 @@ fairlead config check                        # validate fairlead.toml
 fairlead plan --base main                    # the tests and checks this branch can affect
 fairlead test --explain src/a.test.ts        # why that test is in the plan, or isn't
 fairlead graph why src/a.test.ts src/util.ts # how one file depends on another
+fairlead brief src/util.ts                   # before an edit: what it reaches and what must pass
+fairlead done                                # the gate a change passes before it's finished
 ```
 
 ## Documentation
 
 The site is [mahkassem.github.io/fairlead](https://mahkassem.github.io/fairlead/), and [the book](https://mahkassem.github.io/fairlead/docs/) covers
-install, configuration, the import graph, the test plan, plans in CI, replay
-and the benchmarks. Its source is in `docs/`.
+install, configuration, the import graph, the test plan, plans in CI, guard
+rules and hooks, the brief, the done gate, the receipt, replay and the
+benchmarks. Its source is in `docs/`.
+
+The README, the site and the book describe the latest release, and each says
+which one. For an earlier release, read them at its tag, such as
+[`v0.5.1`](https://github.com/mahkassem/fairlead/tree/v0.5.1). A release
+can't be cut while any of them lags it: `scripts/docs_check.py` runs before the
+release builds.
 
 ## Brand
 

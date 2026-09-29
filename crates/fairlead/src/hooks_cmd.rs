@@ -30,17 +30,18 @@ const TIMEOUT: u64 = 10;
 
 #[derive(Subcommand)]
 pub enum HooksAction {
-    /// Add the Claude Code hook.
+    /// Add the Claude Code hooks (the guard before an edit, the brief nudge
+    /// after one, the Stop hook) and the git hook when lefthook is set up.
     Install {
         #[command(flatten)]
         target: Target,
     },
-    /// Say where the hook is and whether uninstall can restore the file exactly.
+    /// Say where the hooks are and whether uninstall can restore each file exactly.
     Status {
         #[command(flatten)]
         target: Target,
     },
-    /// Remove the hook, restoring the file byte for byte when nobody changed it since.
+    /// Remove the hooks, restoring each file byte for byte when nobody changed it since.
     Uninstall {
         #[command(flatten)]
         target: Target,
@@ -49,7 +50,7 @@ pub enum HooksAction {
 
 #[derive(clap::Args)]
 pub struct Target {
-    /// Only the Claude Code hook.
+    /// Only the Claude Code hooks.
     #[arg(long, conflicts_with = "git")]
     claude: bool,
     /// Only the git pre-commit hook, through lefthook; install makes a

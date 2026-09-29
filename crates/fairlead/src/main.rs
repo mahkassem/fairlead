@@ -122,7 +122,7 @@ enum Command {
         #[command(flatten)]
         args: receipt_cmd::NextArgs,
     },
-    /// Install, check or remove the Claude Code hook that runs the guard.
+    /// Install, check or remove the Claude Code and git hooks that run the guard, the brief nudge and the Stop hook.
     Hooks {
         #[command(subcommand)]
         action: hooks_cmd::HooksAction,
