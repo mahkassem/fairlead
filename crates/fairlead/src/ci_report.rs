@@ -24,6 +24,9 @@ pub struct Results {
     pub passed: bool,
     pub seconds: f64,
     pub invocations: Vec<Ran>,
+    /// Each failing test judged against the merge's plan, by `ci run --judge`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub judged: Vec<crate::ci_judge::Verdict>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -57,6 +60,7 @@ pub fn write_results(
     path: &Path,
     plan: &Plan,
     ran: Vec<Ran>,
+    judged: &[crate::ci_judge::Verdict],
     started: Instant,
 ) -> Result<(), String> {
     let results = Results {
@@ -65,6 +69,7 @@ pub fn write_results(
         passed: ran.iter().all(|r| r.passed) && ran.len() == plan.invocations.len(),
         seconds: tenths(started.elapsed().as_secs_f64()),
         invocations: ran,
+        judged: judged.to_vec(),
     };
     let text = serde_json::to_string_pretty(&results).expect("results serialize") + "\n";
     std::fs::write(path, text).map_err(|e| format!("could not write {}: {e}", path.display()))
@@ -118,15 +123,20 @@ pub fn run(
         }
         None => print!("{body}"),
     }
-    let configured = fairlead_core::config::load(cwd, &LoadOptions::from_process(Vec::new()))
-        .map(|l| l.config.ci.comment)
-        .unwrap_or(false);
-    if comment || configured {
+    let ci = fairlead_core::config::load(cwd, &LoadOptions::from_process(Vec::new()))
+        .map(|l| l.config.ci)
+        .unwrap_or_default();
+    if comment || ci.comment {
         // A comment that can't be posted never fails the run; the summary has the report.
         match post(&body) {
             Ok(done) => println!("fairlead: {done}"),
             Err(e) => eprintln!("fairlead: the pull request comment wasn't posted: {e}"),
         }
+    }
+    let escaped = results.map_or(0, |r| r.judged.iter().filter(|v| v.fix.is_some()).count());
+    if escaped > 0 && ci.escapes == fairlead_core::config::Escapes::Fail {
+        eprintln!("fairlead: {escaped} failing test(s) escaped the merge's plan, and ci.escapes is \"fail\"");
+        return Ok(ExitCode::FAILURE);
     }
     Ok(ExitCode::SUCCESS)
 }
@@ -217,6 +227,31 @@ pub fn markdown(plan: &Plan, results: Option<&Results>, receipt: Option<&str>) -
                 out.push_str(&format!("(cd {} && {})\n", dir(&i.cwd), i.argv.join(" ")));
             }
             out.push_str("```\n\n");
+        }
+        let escaped: Vec<&crate::ci_judge::Verdict> =
+            r.judged.iter().filter(|v| v.fix.is_some()).collect();
+        if !escaped.is_empty() {
+            out.push_str(&format!(
+                "**{} escape{}**: failing tests the merge's plan left out.\n\n| Test | Rule that would have caught it |\n|---|---|\n",
+                escaped.len(),
+                if escaped.len() == 1 { "" } else { "s" }
+            ));
+            for v in &escaped {
+                out.push_str(&format!(
+                    "| `{}` | `{}` |\n",
+                    v.test,
+                    v.fix.as_deref().unwrap_or_default()
+                ));
+            }
+            out.push('\n');
+        }
+        let planned = r.judged.len() - escaped.len();
+        if planned > 0 {
+            out.push_str(&format!(
+                "{planned} failing test{} the merge's plan selected, so {} should have failed on the pull request too.\n\n",
+                if planned == 1 { "" } else { "s" },
+                if planned == 1 { "it" } else { "they" }
+            ));
         }
     }
     if let Some(text) = receipt {

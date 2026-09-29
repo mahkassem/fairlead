@@ -98,7 +98,7 @@ fn quantile(mut values: Vec<f64>, q: f64) -> Option<f64> {
     Some(values[index])
 }
 
-fn dir_glob(path: &str) -> String {
+pub fn dir_glob(path: &str) -> String {
     match path.rsplit_once('/') {
         Some((dir, _)) => format!("{dir}/**"),
         None => "**".into(),

@@ -64,6 +64,32 @@ Without a shell, Windows finds only `.exe` programs on `PATH`: a runner that sta
 
 `--results PATH` also writes each invocation's id, working directory, argv, outcome and seconds, for `fairlead ci report`.
 
+### Escapes: `--judge PATH`
+
+Once pull requests run only the plan, the default branch's push run, which still runs everything, is where a missed test shows. `--judge` takes the plan the merged change got, made again against the push's first parent, and judges each failing test file against it:
+
+- **planned**: the merge's plan selected it, so it should have failed on the pull request too;
+- **escaped**: the plan left it out. The line names the `[[tests.owners]]` rule that would have caught it, the same rule [`replay report`](replay.md) suggests for a miss, and in GitHub Actions it's also a warning annotation on the test file.
+
+A failing test file is read from the runner's output through that runner's `[[replay.failures]]` extractor and matched to a file in the tree, as `replay` does. A runner with no such entry is named and not judged. Output is still echoed as the runner prints it. With `--results`, the verdicts go in the results file and `ci report` lists the escapes.
+
+```yaml
+on: push   # the default branch
+steps:
+  - uses: actions/checkout@v7
+    with:
+      fetch-depth: 2
+      persist-credentials: false
+  - run: |
+      bunx fairlead ci plan --base HEAD^ --out "$RUNNER_TEMP/merge.json"
+      bunx fairlead ci plan --base HEAD^ --set 'plan.run_all=["**"]' --out "$RUNNER_TEMP/all.json"
+  - run: bunx fairlead ci run --plan "$RUNNER_TEMP/all.json" --judge "$RUNNER_TEMP/merge.json" --results "$RUNNER_TEMP/results.json"
+  - if: always()
+    run: bunx fairlead ci report --plan "$RUNNER_TEMP/all.json" --results "$RUNNER_TEMP/results.json"
+```
+
+The run's exit code is its tests' either way. `ci.escapes = "fail"` also makes `ci report` exit 1 when there's an escape, so the escape can be its own required check; the default, `"report"`, only reports it.
+
 ## `fairlead ci report --plan PATH`
 
 Writes one Markdown summary of the run. It goes to `$GITHUB_STEP_SUMMARY` when GitHub Actions sets it, else stdout. The summary has:
@@ -85,5 +111,6 @@ Results from another plan are refused with exit code 2.
 
 ```toml
 [ci]
-comment = false   # also keep a pull request comment up to date
+comment = false    # also keep a pull request comment up to date
+escapes = "report" # or "fail": `ci report` exits 1 on an escape `ci run --judge` found
 ```

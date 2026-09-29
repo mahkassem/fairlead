@@ -7,6 +7,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, ExitCode};
 
 use clap::{Subcommand, ValueEnum};
+use fairlead_core::config::LoadOptions;
 use fairlead_core::plan::{Plan, VERSION};
 
 use crate::plan_cmd::{make, Changes};
@@ -45,6 +46,11 @@ pub enum CiAction {
         /// Write each invocation's outcome and time here, for `ci report`.
         #[arg(long, value_name = "PATH")]
         results: Option<PathBuf>,
+        /// The plan the merged pull request ran. Each failing test file is
+        /// judged against it: planned, or an escape with the owner rule
+        /// that would have caught it.
+        #[arg(long, value_name = "PATH")]
+        judge: Option<PathBuf>,
     },
     /// Write the run's summary: what the plan selected and why, what ran and
     /// failed, and the change's receipt when one is given. To
@@ -79,7 +85,8 @@ pub fn run(action: CiAction, cwd: &Path) -> ExitCode {
             plan,
             fail_fast,
             results,
-        } => execute(cwd, &plan, fail_fast, results.as_deref()),
+            judge,
+        } => execute(cwd, &plan, fail_fast, results.as_deref(), judge.as_deref()),
         CiAction::Report {
             plan,
             results,
@@ -218,11 +225,26 @@ fn execute(
     plan_path: &Path,
     fail_fast: bool,
     results: Option<&Path>,
+    judge: Option<&Path>,
 ) -> Result<ExitCode, String> {
     let plan = read_plan(cwd, plan_path)?;
+    let root = crate::graph_cmd::repo_root(cwd);
+    let merge = judge.map(|p| read_plan(cwd, p)).transpose()?;
+    let config = match &merge {
+        Some(_) => Some(
+            fairlead_core::config::load(cwd, &LoadOptions::from_process(Vec::new()))
+                .map_err(|e| e.to_string())?
+                .config,
+        ),
+        None => None,
+    };
+    let judge = match (&merge, &config) {
+        (Some(m), Some(c)) => Some(crate::ci_judge::Judge::new(&root, c, m)),
+        _ => None,
+    };
     let started = std::time::Instant::now();
     let mut ran: Vec<crate::ci_report::Ran> = Vec::new();
-    let root = crate::graph_cmd::repo_root(cwd);
+    let mut judged: Vec<crate::ci_judge::Verdict> = Vec::new();
     let mut failed = Vec::new();
     for inv in &plan.invocations {
         let at = std::time::Instant::now();
@@ -236,24 +258,34 @@ fn execute(
             continue;
         };
         println!("fairlead: ({}) {}", inv.cwd, inv.argv.join(" "));
-        let status = Command::new(program)
-            .args(args)
-            .current_dir(root.join(&inv.cwd))
-            .status();
-        let ok = matches!(&status, Ok(s) if s.success());
-        if let Err(e) = &status {
+        let mut cmd = Command::new(program);
+        cmd.args(args).current_dir(root.join(&inv.cwd));
+        let outcome = if judge.is_some() {
+            captured(&mut cmd)
+        } else {
+            cmd.status().map(|s| (s, String::new()))
+        };
+        let ok = matches!(&outcome, Ok((s, _)) if s.success());
+        if let Err(e) = &outcome {
             eprintln!("fairlead: couldn't start {program}: {e}");
         }
         ran.push(crate::ci_report::Ran::of(inv, ok, at));
         if !ok {
+            if let (Some(j), Ok((_, log))) = (&judge, &outcome) {
+                match j.judge(inv, log) {
+                    Ok(v) => judged.extend(v),
+                    Err(e) => eprintln!("fairlead: {e}"),
+                }
+            }
             failed.push(inv.id.clone());
             if fail_fast {
                 break;
             }
         }
     }
+    crate::ci_judge::print(&judged);
     if let Some(path) = results {
-        crate::ci_report::write_results(&cwd.join(path), &plan, ran, started)?;
+        crate::ci_report::write_results(&cwd.join(path), &plan, ran, &judged, started)?;
     }
     if failed.is_empty() {
         println!("fairlead: {} invocations passed", plan.invocations.len());
@@ -262,6 +294,39 @@ fn execute(
         eprintln!("fairlead: failed: {}", failed.join(", "));
         Ok(ExitCode::FAILURE)
     }
+}
+
+/// Runs a command with its output echoed as it comes and kept, so a failing
+/// runner's report can be read for the tests it names.
+fn captured(cmd: &mut Command) -> std::io::Result<(std::process::ExitStatus, String)> {
+    use std::io::{Read, Write};
+    use std::process::Stdio;
+    let mut child = cmd.stdout(Stdio::piped()).stderr(Stdio::piped()).spawn()?;
+    let log = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+    let pump = |mut from: Box<dyn Read + Send>, err: bool| {
+        let log = log.clone();
+        std::thread::spawn(move || {
+            let mut buf = [0u8; 8192];
+            while let Ok(n) = from.read(&mut buf) {
+                if n == 0 {
+                    break;
+                }
+                let _ = if err {
+                    std::io::stderr().write_all(&buf[..n])
+                } else {
+                    std::io::stdout().write_all(&buf[..n])
+                };
+                log.lock().expect("log lock").extend_from_slice(&buf[..n]);
+            }
+        })
+    };
+    let out = pump(Box::new(child.stdout.take().expect("piped stdout")), false);
+    let err = pump(Box::new(child.stderr.take().expect("piped stderr")), true);
+    let status = child.wait()?;
+    let _ = out.join();
+    let _ = err.join();
+    let text = String::from_utf8_lossy(&log.lock().expect("log lock")).into_owned();
+    Ok((status, text))
 }
 
 #[cfg(test)]

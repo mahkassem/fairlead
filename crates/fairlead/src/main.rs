@@ -5,6 +5,7 @@
 mod bench_cmd;
 mod brief_cmd;
 mod ci_cmd;
+mod ci_judge;
 mod ci_report;
 mod coverage_cmd;
 mod done_cmd;
