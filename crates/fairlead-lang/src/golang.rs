@@ -215,18 +215,33 @@ impl Modules {
             .unwrap_or_default()
     }
 
-    /// The `go.mod` and `go.sum` of the module `file` belongs to.
+    /// The `go.mod` and `go.sum` of the module `file` belongs to. Under a
+    /// `go.work`, versions are chosen across every module it spans, so a
+    /// file depends on all of their manifests.
     pub fn manifests(&self, tree: &Tree, file: &str) -> Vec<String> {
-        let Some(root) = self
-            .roots
+        let under = |dir: &str, path: &str| dir.is_empty() || path.starts_with(&format!("{dir}/"));
+        let workspace = tree
+            .files
             .iter()
-            .find(|r| r.is_empty() || file.starts_with(&format!("{r}/")))
-        else {
-            return Vec::new();
+            .filter(|f| *f == "go.work" || f.ends_with("/go.work"))
+            .map(|f| parent(f))
+            .filter(|dir| under(dir, file))
+            .min_by_key(|dir| dir.len());
+        let roots: Vec<&String> = match workspace {
+            Some(dir) => self.roots.iter().filter(|r| under(dir, r)).collect(),
+            None => self
+                .roots
+                .iter()
+                .find(|r| under(r, file))
+                .into_iter()
+                .collect(),
         };
-        ["go.mod", "go.sum"]
+        roots
             .into_iter()
-            .map(|name| normalize(root, name).unwrap_or_else(|| name.to_string()))
+            .flat_map(|root| {
+                ["go.mod", "go.sum"]
+                    .map(|name| normalize(root, name).unwrap_or_else(|| name.to_string()))
+            })
             .filter(|path| tree.contains(path))
             .collect()
     }

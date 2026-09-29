@@ -249,4 +249,19 @@ match = ["**/*_test.go"]
     let plan = run(&dir, &config(cfg), vec![modified("lib/go.sum")]);
     assert!(!plan.all);
     assert_eq!(tests(&plan), ["app/main_test.go", "lib/money/add_test.go"]);
+    std::fs::write(
+        dir.join("go.work"),
+        "go 1.24\n\nuse (\n\t./app\n\t./lib\n\t./tools\n)\n",
+    )
+    .unwrap();
+    let plan = run(&dir, &config(cfg), vec![modified("lib/go.sum")]);
+    assert_eq!(
+        tests(&plan),
+        [
+            "app/main_test.go",
+            "lib/money/add_test.go",
+            "tools/gen/gen_test.go"
+        ],
+        "a workspace picks versions across its modules"
+    );
 }
