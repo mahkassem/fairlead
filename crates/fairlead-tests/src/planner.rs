@@ -2,7 +2,7 @@
 //! deleted files, package manifests, the reverse walk, tests, unreached
 //! files, checks, then the invocations that run them.
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, HashSet};
 
 use fairlead_core::config::{Config, LockfileMode, TestClass, Unresolved};
 use fairlead_core::plan::{Change, Plan, Reason, Status, Warning, VERSION};
@@ -141,16 +141,11 @@ pub fn plan(scan: &mut Scan, config: &Config, input: Input) -> Result<Plan, Stri
         .filter(|p| {
             Some(p.as_str()) == map || (!is_test(p) && ignore.iter().any(|g| g.is_match(p)))
         })
-        .filter(|p| {
-            scan.graph
-                .id(p)
-                .is_none_or(|id| scan.graph.importers(id).is_empty())
-        })
         .cloned()
         .collect();
     let owners = Owners::new(config.tests.owners.items())?;
     let lockfile = lockfile_scope(scan, config, &changed, &input.base_files);
-    let cx = Context {
+    let mut cx = Context {
         scan,
         config,
         modules,
@@ -161,6 +156,19 @@ pub fn plan(scan: &mut Scan, config: &Config, input: Input) -> Result<Plan, Stri
         ignored,
         lockfile,
     };
+    // An ignored path still selects the tests it reaches; it's only kept from
+    // widening the plan when it reaches none.
+    let test_ids: HashSet<u32> = cx
+        .tests
+        .iter()
+        .filter_map(|t| scan.graph.id(&t.path))
+        .collect();
+    cx.ignored = cx
+        .ignored
+        .iter()
+        .filter(|p| !crate::select::reaches_a_test(&cx, p, &test_ids))
+        .cloned()
+        .collect();
     let run_all = patterns(config.plan.run_all.items())?;
     // Only tests a claim selects count: `demand` never runs on a claim.
     let test_paths: Vec<&str> = cx

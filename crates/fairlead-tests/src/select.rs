@@ -120,7 +120,7 @@ fn package_has_files(cx: &Context, manifest: &str) -> bool {
 }
 
 /// Whether any test is in `path`'s reverse closure.
-fn reaches_a_test(cx: &Context, path: &str, tests: &HashSet<u32>) -> bool {
+pub(crate) fn reaches_a_test(cx: &Context, path: &str, tests: &HashSet<u32>) -> bool {
     let graph = &cx.scan.graph;
     let Some(id) = graph.id(path) else {
         return false;

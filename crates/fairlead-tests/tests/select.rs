@@ -412,6 +412,26 @@ fn an_ignored_source_nothing_imports_selects_nothing_but_imports_and_tests_still
 }
 
 #[test]
+fn an_ignored_source_other_files_import_is_ignored_when_it_reaches_no_test() {
+    let mut files = WORKSPACE.to_vec();
+    files.push((
+        "tools/dev/serve.ts",
+        "import { fake } from './fake';\nexport const s = fake;\n",
+    ));
+    files.push(("tools/dev/fake.ts", "export const fake = 1;\n"));
+    let dir = repo("ignore-imported", &files);
+    let cfg = config(&format!("{VITEST}\n[plan]\nignore = [\"tools/**\"]\n"));
+    let plan = run(&dir, &cfg, vec![modified("tools/dev/fake.ts")]);
+    assert_eq!(
+        plan.ignored,
+        ["tools/dev/fake.ts"],
+        "its importer reaches no test either"
+    );
+    assert!(!plan.all);
+    assert!(plan.tests.is_empty());
+}
+
+#[test]
 fn an_owner_rule_that_names_no_test_leaves_a_path_to_the_unreached_policy() {
     let dir = repo("idle-owner", WORKSPACE);
     let cfg = config(&format!(

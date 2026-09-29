@@ -323,9 +323,9 @@ pub enum CheckFiles {
 pub struct Plan {
     /// A changed path matching any of these selects everything.
     pub run_all: List<String>,
-    /// A changed path matching these that nothing imports or references
-    /// selects nothing, a source file included; one that files depend on is
-    /// still reached through their edges, and a test file always runs.
+    /// A changed path matching these that reaches no test selects nothing,
+    /// instead of falling to `tests.unreached`; one that reaches tests still
+    /// selects them, and a changed test file always runs.
     pub ignore: List<String>,
     /// `all`: a changed lockfile selects everything. `scope`: a changed pnpm
     /// lockfile selects only the workspace packages whose resolved
