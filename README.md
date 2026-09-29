@@ -107,12 +107,13 @@ commands. The [quick start](#quick-start) shows them, and the
 
 ## Status
 
-Pre-alpha. The latest release, v0.5.0, adds replay of default-branch pushes
-(escapes), an inherited outcome for failures that came with the base branch,
-and progress while a replay runs, and fixes hooks for projects that install
-Fairlead as a package dependency. v0.4.0 added guard rules and check, write and
-commit hooks, guard compare and benchmark commands, and layered config
-environments.
+Pre-alpha. The latest release, v0.6.0, adds the change loop for agents:
+`fairlead brief` before an edit, `fairlead done` and a Claude Code Stop hook
+that holds an agent to it, `fairlead receipt` and `fairlead next` after it,
+and in CI `fairlead ci report` and `ci run --judge`, which names each failing
+test the merged change's plan left out. v0.5.0 added replay of default-branch
+pushes (escapes) and an inherited outcome for failures that came with the base
+branch.
 Recall on real CI failures, with every miss and its cause, is in the
 [changelog](CHANGELOG.md) and on the
 [benchmarks page](https://mahkassem.github.io/fairlead/docs/benchmarks.html).
