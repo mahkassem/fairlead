@@ -24,6 +24,7 @@
 - Replay no longer bloats a blobless clone: checking whether a recorded commit is present made git lazily fetch it without negotiation, resending the whole history's trees each time, and a bench clone grew to 13 GiB. Commit lookups now set `GIT_NO_LAZY_FETCH` (git 2.44 or later), and missing commits come through the one negotiated fetch.
 - `plan.ignore` applies to source files too: a changed source nothing imports, matching it, selects nothing instead of falling to `tests.unreached`. An imported source still reaches its tests and a changed test file always runs. This changes the defaults' behaviour for an unimported source under `docs/**`, which used to widen to every test ([#124](https://github.com/mahkassem/fairlead/issues/124)).
 - An owner rule whose `match` names no test file no longer counts as covering a changed path, so the path falls to `tests.unreached` instead of silently selecting nothing, and `config check` warns about such a rule. A rule written only to make paths select nothing should become a `plan.ignore` entry ([#124](https://github.com/mahkassem/fairlead/issues/124)).
+- A file over 256 KB, scanned for imports rather than parsed, no longer reads prose such as a doc comment's `from "My booking"` as an import. The unresolved "import" used to tie the file, and every test importing it, to changes at the repository root ([#125](https://github.com/mahkassem/fairlead/issues/125)).
 
 ## 0.5.0 (2026-09-28)
 

@@ -394,20 +394,28 @@ pub fn looks_like_path(text: &str) -> bool {
 }
 
 /// Import, export, `import()` and `require()` strings found without parsing.
+/// Comments aren't told apart from code, so prose such as `from "My
+/// booking"` in a doc comment is kept out by the keyword having to start a
+/// word and the specifier having no whitespace, which no module name has.
 fn lexical(source: &[u8]) -> Extracted {
     let text = String::from_utf8_lossy(source);
     let mut specs = Vec::new();
     for key in ["from ", "import(", "require(", "import "] {
-        let mut rest: &str = &text;
-        while let Some(at) = rest.find(key) {
-            rest = &rest[at + key.len()..];
-            let trimmed = rest.trim_start();
+        let mut offset = 0;
+        while let Some(at) = text[offset..].find(key) {
+            let start = offset + at;
+            offset = start + key.len();
+            let starts_word = text[..start]
+                .chars()
+                .next_back()
+                .is_none_or(|c| !(c.is_alphanumeric() || c == '_' || c == '$'));
+            let trimmed = text[offset..].trim_start();
             let Some(quote) = trimmed.chars().next().filter(|c| matches!(c, '"' | '\'')) else {
                 continue;
             };
             if let Some(end) = trimmed[1..].find(quote) {
                 let spec = &trimmed[1..1 + end];
-                if !spec.is_empty() && !spec.contains('\n') {
+                if starts_word && !spec.is_empty() && !spec.contains(char::is_whitespace) {
                     specs.push((spec.to_string(), SpecKind::Import));
                 }
             }
@@ -527,13 +535,17 @@ import j = require("./j");
     fn large_files_are_scanned_lexically() {
         let mut src = String::from("import { a } from \"./a\";\nconst x = require('./b');\n");
         src.push_str(&"// filler\n".repeat(LEXICAL_ABOVE_BYTES / 10 + 1));
+        src.push_str("/** @description A proposed pickup, from \"My booking\". */\n");
+        src.push_str("const y = reimport('./not'); const z = module.require('./c');\n");
         let got = specs("big.ts", &src);
         assert_eq!(
             got,
             vec![
                 ("./a".to_string(), SpecKind::Import),
-                ("./b".to_string(), SpecKind::Import)
-            ]
+                ("./b".to_string(), SpecKind::Import),
+                ("./c".to_string(), SpecKind::Import)
+            ],
+            "prose in a comment and a longer word ending in a keyword aren't imports"
         );
     }
 }
