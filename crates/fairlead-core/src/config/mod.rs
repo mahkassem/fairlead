@@ -690,13 +690,25 @@ impl Default for Done {
     }
 }
 
-/// What `fairlead ci report` does with its report.
+/// What `fairlead ci` does beyond running the plan.
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields, default)]
 pub struct Ci {
     /// Also keep one pull request comment up to date with the report, which
     /// needs `pull-requests: write`; the step summary always gets it.
     pub comment: bool,
+    /// What a failing test the merge's plan left out does, once `ci run --judge` finds it.
+    pub escapes: Escapes,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "kebab-case")]
+pub enum Escapes {
+    /// An annotation and a line in the output.
+    #[default]
+    Report,
+    /// Also a non-zero exit from `ci report`, so the escape itself can be a required check.
+    Fail,
 }
 
 /// What `fairlead brief` keeps, and whether an agent that edits without one is told.
