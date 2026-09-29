@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### New
+
+- `fairlead done` runs the gate a change passes before it counts as finished (the planned tests and checks, the checks `done.always` names, and the guard) and records the outcome against the tree it checked, so any later edit makes a pass stale. `--check` says whether the working tree as it stands has passed. See [The done gate](https://mahkassem.github.io/fairlead/docs/done.html).
+
 ## 0.5.1 (2026-09-29)
 
 ### Fixed

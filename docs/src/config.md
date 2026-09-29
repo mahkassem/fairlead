@@ -106,6 +106,10 @@ fairlead.toml: tests.unreachd: unknown field `unreachd`, expected one of ...
 | `guard.commands` | `[]` | `match`, `reason`: commands an agent may not run. See [Guard rules](guard.md#commands) |
 | `guard.external` | `[]` | `id`, `command`, `stages` (default `["check"]`, or `commit`), `ratchet`. See [Guard rules](guard.md#external-rules) |
 | `hooks.claude` | `"shared"` | Where `fairlead hooks install` puts the Claude Code hook: `shared`, `.claude/settings.json`; `local`, `.claude/settings.local.json` |
+| `done.tests` | `"planned"` | What `fairlead done` runs of the plan's test invocations: `planned` or `none`. See [The done gate](done.md) |
+| `done.checks` | `"planned"` | The same for the `[[checks]]` the plan selects |
+| `done.always` | `[]` | `[[checks]]` ids `fairlead done` runs for every change |
+| `done.guard` | `true` | Whether `fairlead done` ends with `fairlead guard check` |
 | `guard.comments` | off | `files`, `exclude`, `tests`, `migrations`, `block_length`, `density`, `history`, `item_codes`, `agent_phrases`, `block_marker`, and `ratchet` (default `false`). See [Guard rules](guard.md#comments) |
 
 Commands are always argv arrays, never shell strings, and `{files}` expands to one argument per file. `{packages}` expands to one `./dir` per directory holding a selected test, or `./...` when everything runs, for `go test`. In `tests.runners.cwd`, `{module}` is the module's root path and `{module.id}` its id.
