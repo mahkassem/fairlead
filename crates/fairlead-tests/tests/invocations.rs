@@ -206,3 +206,62 @@ fn go_test_gets_each_selected_package_and_everything_under_run_all() {
     let go = plan.invocations.iter().find(|i| i.id == "go").unwrap();
     assert_eq!(go.argv, ["go", "test", "./..."]);
 }
+
+#[test]
+fn a_go_module_manifest_selects_that_module_and_its_importers_not_everything() {
+    let dir = repo(
+        "inv-go-modules",
+        &[
+            (
+                "app/go.mod",
+                "module example.com/app\n\nreplace example.com/lib => ../lib\n",
+            ),
+            (
+                "app/main.go",
+                "package main\n\nimport \"example.com/lib/money\"\n\nvar _ = money.Add\n",
+            ),
+            (
+                "app/main_test.go",
+                "package main\n\nimport \"testing\"\n\nfunc TestApp(t *testing.T) {}\n",
+            ),
+            ("lib/go.mod", "module example.com/lib\n"),
+            ("lib/go.sum", "example.com/dep v1.0.0 h1:x=\n"),
+            (
+                "lib/money/add.go",
+                "package money\n\nfunc Add(a, b int) int { return a + b }\n",
+            ),
+            (
+                "lib/money/add_test.go",
+                "package money\n\nimport \"testing\"\n\nfunc TestAdd(t *testing.T) {}\n",
+            ),
+            ("tools/go.mod", "module example.com/tools\n"),
+            ("tools/gen/gen.go", "package gen\n"),
+            (
+                "tools/gen/gen_test.go",
+                "package gen\n\nimport \"testing\"\n\nfunc TestGen(t *testing.T) {}\n",
+            ),
+        ],
+    );
+    let cfg = r#"
+[tests]
+match = ["**/*_test.go"]
+"#;
+    let plan = run(&dir, &config(cfg), vec![modified("lib/go.sum")]);
+    assert!(!plan.all);
+    assert_eq!(tests(&plan), ["app/main_test.go", "lib/money/add_test.go"]);
+    std::fs::write(
+        dir.join("go.work"),
+        "go 1.24\n\nuse (\n\t./app\n\t./lib\n\t./tools\n)\n",
+    )
+    .unwrap();
+    let plan = run(&dir, &config(cfg), vec![modified("lib/go.sum")]);
+    assert_eq!(
+        tests(&plan),
+        [
+            "app/main_test.go",
+            "lib/money/add_test.go",
+            "tools/gen/gen_test.go"
+        ],
+        "a workspace picks versions across its modules"
+    );
+}

@@ -305,3 +305,76 @@ fn ci_run_refuses_a_plan_of_another_version() {
     assert_eq!(out.status.code(), Some(2));
     assert!(String::from_utf8_lossy(&out.stderr).contains("plan version"));
 }
+
+#[test]
+fn nested_and_escaped_globs_plan_and_a_broken_one_fails_config_check() {
+    let dir = project("globs");
+    let runner = "[[tests.runners]]\nid = \"vitest\"\nmatch = [\"**\"]\ncommand = [\"vitest\", \"{files}\"]\n";
+    write(&dir, "package.json", "{}\n");
+    write(
+        &dir,
+        "fairlead.toml",
+        &format!("{runner}\n[plan]\nrun_all = {{ replace = [] }}\n\n[[tests.owners]]\nmatch = \"{{test/**/*.test.{{ts,tsx}},e2e/**/*.test.ts}}\"\ncovers = [\"package.json\"]\n\n[[tests.owners]]\nmatch = \"test/a.test.ts\"\ncovers = [\"app/**/\\\\[...slug\\\\]/**\"]\n"),
+    );
+    let out = fairlead_in(&dir, &["config", "check"]);
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let out = fairlead_in(&dir, &["plan", "--files", "package.json", "--json"]);
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let plan: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+    assert_eq!(plan["tests"].as_array().unwrap().len(), 2);
+    let out = fairlead_in(&dir, &["plan", "--files", "src/a.ts", "--json"]);
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    write(
+        &dir,
+        "fairlead.toml",
+        &format!("{runner}\n[[tests.owners]]\nmatch = \"test/a.test.ts\"\ncovers = [\"{{src,{{lib}}\"]\n"),
+    );
+    let out = fairlead_in(&dir, &["config", "check"]);
+    assert!(!out.status.success());
+    assert!(String::from_utf8_lossy(&out.stderr).contains("tests.owners[0].covers[0]"));
+}
+
+#[test]
+fn an_empty_list_over_inherited_items_is_a_warning() {
+    let dir = project("empty-append");
+    write(
+        &dir,
+        "fairlead.toml",
+        "[[tests.runners]]\nid = \"vitest\"\nmatch = [\"**\"]\ncommand = [\"vitest\"]\n\n[plan]\nrun_all = []\n",
+    );
+    let out = fairlead_in(&dir, &["config", "check"]);
+    assert!(out.status.success());
+    let err = String::from_utf8_lossy(&out.stderr);
+    assert!(err.contains("warning: plan.run_all:"), "{err}");
+    assert!(err.contains("{ replace = [] }"), "{err}");
+}
+
+#[test]
+fn config_check_warns_about_an_owner_rule_that_names_no_test() {
+    let dir = project("idle-owner");
+    write(
+        &dir,
+        "fairlead.toml",
+        "[[tests.runners]]\nid = \"vitest\"\nmatch = [\"**\"]\ncommand = [\"vitest\"]\n\n[[tests.owners]]\nmatch = \"e2e/**/*.spec.ts\"\ncovers = [\"src/**\"]\n\n[[tests.owners]]\nmatch = \"test/a.test.ts\"\ncovers = [\"src/a.ts\"]\n",
+    );
+    let out = fairlead_in(&dir, &["config", "check"]);
+    assert!(out.status.success());
+    let err = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        err.contains("warning: tests.owners[0]: `e2e/**/*.spec.ts` matches no test file"),
+        "{err}"
+    );
+    assert!(!err.contains("tests.owners[1]"), "{err}");
+}

@@ -31,7 +31,8 @@ pub enum Extractor {
     /// `go test`, plain or `-v`, and gotestsum.
     Go,
     Pytest,
-    /// Pest, and Laravel's `artisan test`, which prints the same way.
+    /// Pest, and Laravel's `artisan test`, which prints the same way, or
+    /// PHPUnit's way under `--parallel`: both are read.
     Pest,
     /// A pattern with a named `file` group, and optionally `project` and `title`.
     Regex(Regex),
@@ -103,7 +104,15 @@ pub fn extract(extractor: &Extractor, log: &str) -> Vec<Printed> {
     match extractor {
         Extractor::Bun => return bun(&lines),
         Extractor::Phpunit => return crate::phpunit::phpunit(&lines),
-        Extractor::Pest => return crate::phpunit::pest(&lines),
+        Extractor::Pest => {
+            let mut out = crate::phpunit::pest(&lines);
+            for p in crate::phpunit::phpunit(&lines) {
+                if !out.contains(&p) {
+                    out.push(p);
+                }
+            }
+            return out;
+        }
         Extractor::Go => return crate::gotest::gotest(&lines),
         _ => {}
     }

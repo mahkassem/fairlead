@@ -120,7 +120,7 @@ fn package_has_files(cx: &Context, manifest: &str) -> bool {
 }
 
 /// Whether any test is in `path`'s reverse closure.
-fn reaches_a_test(cx: &Context, path: &str, tests: &HashSet<u32>) -> bool {
+pub(crate) fn reaches_a_test(cx: &Context, path: &str, tests: &HashSet<u32>) -> bool {
     let graph = &cx.scan.graph;
     let Some(id) = graph.id(path) else {
         return false;
@@ -147,6 +147,12 @@ fn unreached(
             || (crate::planner::is_manifest(cx, p) && package_has_files(cx, p))
             || (cx.lockfile.is_some() && p == crate::planner::LOCKFILE)
     };
+    let claimable: Vec<&str> = cx
+        .tests
+        .iter()
+        .filter(|t| matches!(t.class, TestClass::Unit | TestClass::Own))
+        .map(|t| t.path.as_str())
+        .collect();
     let mut out = Vec::new();
     let mut all_reason = None;
     for path in &cx.changed {
@@ -165,7 +171,12 @@ fn unreached(
             .filter(|t| module.is_some() && t.module == module && runs_by_default(cx, t))
             .collect();
         let policy = cx.config.tests.unreached;
-        let selected = if cx.owners.covers(path) {
+        // A rule whose `match` names no test here claims the path for nothing.
+        let owned = cx
+            .owners
+            .claims([path.as_str()], &claimable)
+            .is_ok_and(|c| !c.is_empty());
+        let selected = if owned {
             "owner"
         } else if policy == Unreached::Warn {
             "none"

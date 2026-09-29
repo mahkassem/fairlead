@@ -7,8 +7,27 @@ use std::io::Write as _;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
+/// In a blobless clone, looking up a missing commit makes git fetch it
+/// with no negotiation, which sends the whole history's trees again; asked
+/// about thousands of commits, a clone grows by gigabytes. Commit lookups
+/// refuse that, and a missing commit is fetched by `fetch_missing`.
+pub(crate) const NO_LAZY_FETCH: (&str, &str) = ("GIT_NO_LAZY_FETCH", "1");
+
 fn git(dir: &Path, args: &[&str]) -> Result<String, String> {
-    let out = Command::new("git")
+    run(dir, args, true)
+}
+
+/// A lookup of commits and trees only, which never fetches.
+fn git_local(dir: &Path, args: &[&str]) -> Result<String, String> {
+    run(dir, args, false)
+}
+
+fn run(dir: &Path, args: &[&str], lazy: bool) -> Result<String, String> {
+    let mut command = Command::new("git");
+    if !lazy {
+        command.env(NO_LAZY_FETCH.0, NO_LAZY_FETCH.1);
+    }
+    let out = command
         .arg("-C")
         .arg(dir)
         .args(args)
@@ -25,11 +44,11 @@ fn git(dir: &Path, args: &[&str]) -> Result<String, String> {
 }
 
 pub fn has_commit(clone: &Path, sha: &str) -> bool {
-    git(clone, &["cat-file", "-e", &format!("{sha}^{{commit}}")]).is_ok()
+    git_local(clone, &["cat-file", "-e", &format!("{sha}^{{commit}}")]).is_ok()
 }
 
 pub fn merge_base(clone: &Path, a: &str, b: &str) -> Option<String> {
-    git(clone, &["merge-base", "--end-of-options", a, b])
+    git_local(clone, &["merge-base", "--end-of-options", a, b])
         .ok()
         .filter(|s| !s.is_empty())
 }
@@ -88,7 +107,7 @@ pub fn fetch_missing(clone: &Path, shas: &[String]) -> usize {
 
 /// The first-parent commit of `rev` made before `before` (an ISO time).
 pub fn first_parent_before(clone: &Path, rev: &str, before: &str) -> Option<String> {
-    git(
+    git_local(
         clone,
         &[
             "rev-list",
@@ -105,13 +124,13 @@ pub fn first_parent_before(clone: &Path, rev: &str, before: &str) -> Option<Stri
 
 /// A commit's first parent: for a merge, the branch before it.
 pub fn first_parent(clone: &Path, sha: &str) -> Option<String> {
-    git(clone, &["rev-parse", "--verify", "-q", &format!("{sha}^1")])
+    git_local(clone, &["rev-parse", "--verify", "-q", &format!("{sha}^1")])
         .ok()
         .filter(|s| !s.is_empty())
 }
 
 pub fn tree_of(clone: &Path, sha: &str) -> Option<String> {
-    git(clone, &["rev-parse", &format!("{sha}^{{tree}}")]).ok()
+    git_local(clone, &["rev-parse", &format!("{sha}^{{tree}}")]).ok()
 }
 
 /// A detached worktree of `clone` at `path`, created on first use.

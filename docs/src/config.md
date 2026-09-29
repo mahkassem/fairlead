@@ -45,6 +45,12 @@ Lists append across layers, so your `plan.run_all` adds to the built-in one. To 
 match = { replace = ["test/**/*.ts"] }
 ```
 
+So `run_all = []` appends nothing and the built-in list stays; `config check` warns about an empty list written over one that already has items. `{ replace = [] }` clears it.
+
+## Globs
+
+`*` matches within a path segment and `**` across segments. `{a,b}` is an alternation, and alternations nest: `{src/**/*.test.{ts,tsx},tests/**}`. A brace group of just a name, like `{name}`, captures that segment instead, where the key supports captures. `[abc]` is a character class. A backslash makes the next character literal, so a path with brackets is `app/**/\[...slug\]/**` (in TOML's double-quoted strings the backslash itself is doubled: `"app/**/\\[...slug\\]/**"`). `config check` compiles every glob, so one that can't compile fails there, not at plan time.
+
 ## Errors
 
 Unknown keys are errors, so a typo can't silently switch something off. Every error names the file or layer it came from, and the key:
@@ -77,7 +83,7 @@ fairlead.toml: tests.unreachd: unknown field `unreachd`, expected one of ...
 | `checks` | `[]` | Steps that aren't tests: `id`, `command`, `paths`, `modules`, `files` |
 | `plan.run_all` | lockfiles, root manifests, tsconfig, runner and CI config | A changed path matching one selects everything |
 | `plan.lockfile` | `"all"` | `all`: a changed lockfile selects everything; `scope` (opt-in): a changed root `pnpm-lock.yaml` selects the workspace packages whose resolved dependencies changed |
-| `plan.ignore` | root Markdown, the changesets tool's folder (`.changeset/**`), `docs/**`, READMEs, changelogs, licences | A changed path matching one selects nothing unless a file references it |
+| `plan.ignore` | root Markdown, the changesets tool's folder (`.changeset/**`), `docs/**`, READMEs, changelogs, licences | A changed path matching one that reaches no test selects nothing, instead of falling to `tests.unreached`; one that reaches tests still selects them, and a changed test file always runs |
 | `replay.provider` | `"github"` | Where CI history comes from |
 | `replay.window_days` | `90` | How far back replay looks |
 | `replay.min_failures` | `30` | Failures needed before a replay result counts |

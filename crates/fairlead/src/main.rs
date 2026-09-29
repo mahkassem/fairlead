@@ -197,18 +197,37 @@ fn doctor_report(dir: &Path, opts: &LoadOptions) -> String {
 }
 
 /// Test files that don't map to exactly one runner, which only the tree can say.
-fn runner_problems(loaded: &Loaded) -> Vec<String> {
+fn check_tree(loaded: &Loaded) -> fairlead_lang::tree::Tree {
     let root = if loaded.files.is_empty() {
         graph_cmd::repo_root(&cwd())
     } else {
         loaded.root.clone()
     };
-    let tree = fairlead_lang::tree::Tree::scan(&root);
+    fairlead_lang::tree::Tree::scan(&root)
+}
+
+fn runner_problems(loaded: &Loaded) -> Vec<String> {
+    let tree = check_tree(loaded);
     fairlead_tests::testfiles::runner_problems(&tree, &loaded.config).unwrap_or_else(|e| vec![e])
 }
 
+fn owner_warnings(loaded: &Loaded) -> Vec<String> {
+    if loaded.config.tests.owners.is_empty() || !loaded.problems.is_empty() {
+        return Vec::new();
+    }
+    fairlead_tests::testfiles::idle_owners(&check_tree(loaded), &loaded.config).unwrap_or_default()
+}
+
 fn check(loaded: &Loaded) -> ExitCode {
-    let runners = if loaded.problems.is_empty() {
+    for w in &loaded.warnings {
+        eprintln!("warning: {}: {}", w.key, w.message);
+    }
+    for line in owner_warnings(loaded) {
+        eprintln!("warning: {line}");
+    }
+    let mut problems = loaded.problems.clone();
+    problems.extend(fairlead_core::config::plan_globs(&loaded.config));
+    let runners = if problems.is_empty() {
         runner_problems(loaded)
     } else {
         Vec::new()
@@ -223,7 +242,7 @@ fn check(loaded: &Loaded) -> ExitCode {
         );
         return ExitCode::FAILURE;
     }
-    if loaded.problems.is_empty() {
+    if problems.is_empty() {
         let files: Vec<String> = loaded
             .files
             .iter()
@@ -237,10 +256,10 @@ fn check(loaded: &Loaded) -> ExitCode {
         println!("config ok: {source}");
         return ExitCode::SUCCESS;
     }
-    for p in &loaded.problems {
+    for p in &problems {
         eprintln!("{}: {}", p.key, p.message);
     }
-    eprintln!("config has {} problem(s)", loaded.problems.len());
+    eprintln!("config has {} problem(s)", problems.len());
     ExitCode::FAILURE
 }
 

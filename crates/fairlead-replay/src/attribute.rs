@@ -67,7 +67,9 @@ pub fn attribute(
     repo: &Repo,
     read: impl Fn(&str) -> Option<String>,
 ) -> Attribution {
-    let path = printed.path.trim_start_matches("./");
+    // A Windows runner prints `tests\unit\a.py`; no repository path has a backslash.
+    let normalized = printed.path.replace('\\', "/");
+    let path = normalized.trim_start_matches("./");
     let has = |p: &str| repo.files.iter().any(|f| f == p);
     if has(path) {
         return Attribution::File(path.to_string());
@@ -211,6 +213,33 @@ mod tests {
             at("/example.com/shop/Billing/PricingTest.php"),
             want,
             "an import path below a module's folder, by its unique suffix"
+        );
+    }
+
+    #[test]
+    fn a_windows_runners_backslashes_match_the_repository_path() {
+        let files = files();
+        let repo = Repo {
+            files: &files,
+            packages: &[],
+        };
+        let want = Attribution::File("tests/Unit/Billing/PricingTest.php".into());
+        assert_eq!(
+            attribute(
+                &printed("tests\\Unit\\Billing\\PricingTest.php", None, None),
+                &repo,
+                |_| None
+            ),
+            want
+        );
+        assert_eq!(
+            attribute(
+                &printed("Unit\\Billing\\PricingTest.php", None, None),
+                &repo,
+                |_| None
+            ),
+            want,
+            "and by suffix"
         );
     }
 }

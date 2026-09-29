@@ -674,6 +674,7 @@ fn go_imports_reach_every_file_of_a_package_across_replaced_modules_embeds_and_v
             ("app/static/site.js", "\n"),
             ("app/vendor/github.com/vend/thing/thing.go", "package thing\n\nvar X = 1\n"),
             ("lib/go.mod", "module example.com/lib\n"),
+            ("lib/go.sum", "example.com/dep v1.0.0 h1:x=\n"),
             ("lib/money/add.go", "package money\n\nfunc Add(a, b int) int { return round(a + b) }\n"),
             ("lib/money/round.go", "package money\n\nfunc round(x int) int { return x }\n"),
             ("lib/money/add_test.go", "package money_test\n\nimport \"example.com/lib/money\"\n\nvar _ = money.Add\n"),
@@ -685,21 +686,28 @@ fn go_imports_reach_every_file_of_a_package_across_replaced_modules_embeds_and_v
     assert_eq!(
         paths("app/server.go"),
         [
+            "app/go.mod",
             "app/static/site.css",
             "app/templates/home.html",
             "app/vendor/github.com/vend/thing/thing.go",
             "lib/money/add.go",
             "lib/money/round.go",
         ],
-        "a package from another module, embedded files, and the module's vendor/"
+        "its module's go.mod, a package from another module, embedded files, and the module's vendor/"
     );
     assert_eq!(
         paths("app/server_test.go"),
-        ["app/helpers_test.go", "app/server.go"],
+        ["app/go.mod", "app/helpers_test.go", "app/server.go"],
         "a test is compiled with every file of its directory"
     );
     assert!(depends(&s, "lib/money/add_test.go", "lib/money/round.go"));
     assert!(depends(&s, "app/server_test.go", "lib/money/round.go"));
+    assert_eq!(paths("lib/money/add.go"), ["lib/go.mod", "lib/go.sum"],);
+    assert!(
+        depends(&s, "app/server_test.go", "lib/go.sum"),
+        "a version bump in a module reaches the tests of modules importing it"
+    );
+    assert!(!depends(&s, "lib/money/add_test.go", "app/go.mod"));
     let go = s.providers.iter().find(|p| p.id == "go").unwrap();
     assert_eq!(go.files, 7);
 }

@@ -8,7 +8,7 @@ pub use load::{
     find_config, load, load_file, ConfigError, LoadOptions, Loaded, ENV_NAME, LOCAL_NAMES,
     PROJECT_NAMES,
 };
-pub use validate::{validate, Problem, GUARD_RULES};
+pub use validate::{plan_globs, validate, Problem, GUARD_RULES};
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -324,8 +324,9 @@ pub enum CheckFiles {
 pub struct Plan {
     /// A changed path matching any of these selects everything.
     pub run_all: List<String>,
-    /// A changed path matching these selects nothing by itself; files that
-    /// reference it are still reached through their edges.
+    /// A changed path matching these that reaches no test selects nothing,
+    /// instead of falling to `tests.unreached`; one that reaches tests still
+    /// selects them, and a changed test file always runs.
     pub ignore: List<String>,
     /// `all`: a changed lockfile selects everything. `scope`: a changed pnpm
     /// lockfile selects only the workspace packages whose resolved
@@ -360,8 +361,6 @@ impl Default for Plan {
                 "**/vitest.workspace.*",
                 "**/jest.config.*",
                 "**/playwright.config.*",
-                "**/go.mod",
-                "**/go.sum",
                 "go.work",
                 "go.work.sum",
                 "composer.json",

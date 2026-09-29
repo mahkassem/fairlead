@@ -77,7 +77,8 @@ pub fn gotest(lines: &[String]) -> Vec<Printed> {
         &STATUS,
         r"^\s*(?:=== (?P<run>RUN|CONT|PAUSE|NAME)|--- (?P<end>FAIL|PASS|SKIP):)\s+(?P<name>\S+)",
     );
-    let logged = re(&LOGGED, r"^\s+(?P<file>[^\s:]+_test\.go):\d+: ");
+    // testify prints `x_test.go:12:` alone, and its message on the lines below.
+    let logged = re(&LOGGED, r"^\s+(?P<file>[^\s:]+_test\.go):\d+:(?:\s|$)");
     let frame = re(
         &FRAME,
         r"^\s+(?P<path>(?:[A-Za-z]:)?[/\\]\S+_test\.go):\d+(?:\s+\+0x[0-9a-f]+)?\s*$",
@@ -193,6 +194,21 @@ mod tests {
                 title: Some("TestSpan".into()),
             }],
             "the subtest's file stands for its parent"
+        );
+    }
+
+    #[test]
+    fn a_testify_failure_names_its_file_on_a_line_of_its_own() {
+        let log = lines(
+            "--- FAIL: TestParallelCallbacksShutdownStopsWorkers (0.00s)\n    parallel_callbacks_test.go:248:\n        \tError Trace:\t/home/runner/work/otel/otel/sdk/metric/parallel_callbacks_test.go:248\n        \tError:      \tShould be true\nFAIL\nFAIL\tgo.opentelemetry.io/otel/sdk/metric\t0.998s\n",
+        );
+        assert_eq!(
+            gotest(&log),
+            [Printed {
+                path: "/go.opentelemetry.io/otel/sdk/metric/parallel_callbacks_test.go".into(),
+                project: None,
+                title: Some("TestParallelCallbacksShutdownStopsWorkers".into()),
+            }]
         );
     }
 }
