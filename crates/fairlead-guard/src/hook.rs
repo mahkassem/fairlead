@@ -1,10 +1,11 @@
-//! The write stage's two ends: what a Claude Code PreToolUse call asks for,
+//! The write stage's two ends: what a Claude Code or Codex PreToolUse call asks for,
 //! read from its JSON, and the answer written back. Everything between is
 //! the same engine the other stages use.
 
 use serde_json::{json, Value};
 
 use crate::edit::{self, Rebuilt, Replace};
+use crate::patch::{self, FilePatch};
 
 /// What the call would do, as far as the guard is concerned.
 #[derive(Debug, PartialEq, Eq)]
@@ -21,6 +22,10 @@ pub enum Request {
     },
     Bash {
         command: String,
+    },
+    /// A Codex `apply_patch`, which can touch several files at once.
+    Patch {
+        files: Vec<FilePatch>,
     },
     /// A call the guard reads but can't rebuild, with why.
     Unknown {
@@ -45,8 +50,9 @@ fn replace(edit: &Value) -> Option<(String, String, bool)> {
     ))
 }
 
-/// Reads the documented shapes: a whole `content` or `file_text`, or
-/// `old_string`/`new_string` edits. Any other shape is unknown, never guessed.
+/// Reads the documented shapes: a whole `content` or `file_text`,
+/// `old_string`/`new_string` edits, or a Codex patch in `command`. Any other
+/// shape is unknown, never guessed.
 pub fn request(call: &Value) -> Request {
     let tool = string(call, "tool_name").unwrap_or_default();
     let input = call.get("tool_input").unwrap_or(&Value::Null);
@@ -55,10 +61,20 @@ pub fn request(call: &Value) -> Request {
         why,
     };
     if tool == "Bash" {
+        if let Some(files) = string(input, "command").and_then(shell_patch) {
+            return Request::Patch { files };
+        }
         return match string(input, "command") {
             Some(command) => Request::Bash {
                 command: command.to_string(),
             },
+            None => unknown("no command"),
+        };
+    }
+    if tool == "apply_patch" {
+        return match string(input, "command").map(patch::parse) {
+            Some(Ok(files)) => Request::Patch { files },
+            Some(Err(why)) => unknown(why),
             None => unknown("no command"),
         };
     }
@@ -82,6 +98,19 @@ pub fn request(call: &Value) -> Request {
         Some(edits) if !edits.is_empty() => Request::Edit { path, edits },
         _ => unknown("an edit shape the guard doesn't know"),
     }
+}
+
+/// A patch typed into the shell as `apply_patch <<'EOF'`, which Codex
+/// applies as it would its own tool's.
+fn shell_patch(command: &str) -> Option<Vec<FilePatch>> {
+    let rest = command.trim_start();
+    let rest = rest
+        .strip_prefix("apply_patch")
+        .or_else(|| rest.strip_prefix("applypatch"))?;
+    let start = rest.find("*** Begin Patch")?;
+    let end = rest.rfind("*** End Patch")? + "*** End Patch".len();
+    rest[..start].trim().starts_with("<<").then_some(())?;
+    patch::parse(rest.get(start..end)?).ok()
 }
 
 /// The file's text after the edits, applied to its current text.
@@ -197,6 +226,39 @@ mod tests {
             Request::Ignored
         );
         assert_eq!(request(&json!({})), Request::Ignored);
+    }
+
+    #[test]
+    fn a_codex_patch_carries_its_files_and_a_broken_one_is_unknown() {
+        let patch = "*** Begin Patch\n*** Add File: a.ts\n+x\n*** End Patch";
+        let Request::Patch { files } = request(&call("apply_patch", json!({"command": patch})))
+        else {
+            panic!("not a patch")
+        };
+        assert_eq!(files[0].path, "a.ts");
+        assert!(matches!(
+            request(&call("apply_patch", json!({"command": "not a patch"}))),
+            Request::Unknown { .. }
+        ));
+        assert!(matches!(
+            request(&call("apply_patch", json!({}))),
+            Request::Unknown { .. }
+        ));
+    }
+
+    #[test]
+    fn a_patch_typed_into_the_shell_is_a_patch_and_other_commands_stay_commands() {
+        let typed =
+            "apply_patch <<'EOF'\n*** Begin Patch\n*** Add File: a.ts\n+x\n*** End Patch\nEOF\n";
+        assert!(matches!(
+            request(&call("Bash", json!({"command": typed}))),
+            Request::Patch { .. }
+        ));
+        let echo = "echo '*** Begin Patch' > notes.txt";
+        assert!(matches!(
+            request(&call("Bash", json!({"command": echo}))),
+            Request::Bash { .. }
+        ));
     }
 
     #[test]
