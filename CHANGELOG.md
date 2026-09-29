@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.5.0 (2026-09-29)
 
 ### New
 
@@ -14,6 +14,9 @@
 - Replay recognises a failure wave after a runner image changes: `replay fetch` records each failed job's image and version, and failures of one test in one job across three or more unrelated pull requests, within 7 days of a new image version and never before it, get the outcome `environment`, listed by wave and kept out of adjusted recall. See [Runner image waves](https://mahkassem.github.io/fairlead/docs/replay.html#runner-image-waves).
 - External graph providers: a `[[graph.providers]]` entry names a command that prints `{"version": 1, "edges": [...]}` for the files it claims, so any language or build tool can feed the plan. The built-in JavaScript and TypeScript scanner runs as the `typescript` provider, unchanged. A provider that fails runs every test for a change to its files, with a `provider-failed` warning, and `graph stats` reports each provider's files and edges. The output schema is committed as `provider-v1.schema.json`. See [Other languages](https://mahkassem.github.io/fairlead/docs/graph.html#other-languages-external-providers).
 - A Go module's `go.mod` and `go.sum` are graph dependencies of its files (edge kind `manifest`) instead of `plan.run_all` defaults, so a dependency bump in one module of a multi-module repository selects that module and its importers, not everything. Under a `go.work`, which picks versions across its modules, a file depends on every one of their manifests. `go.work` itself still runs everything; add `**/go.mod` to `plan.run_all` to keep the old behaviour.
+- Replay recognises failures a pull request inherited from its base branch: when the base's own push run failed the same test in the same job, or three or more unrelated pull requests on one base did. They get their own outcome, `inherited`, listed by group and kept out of adjusted recall, hits and misses alike. See [Inherited failures](https://mahkassem.github.io/fairlead/docs/replay.html#inherited-failures).
+- `fairlead replay run` prints progress on stderr: every 25 planned runs and at least once a minute, with the failures judged, the misses so far and an estimate of the time left, and a line for any run slower than 10 seconds. `--quiet` turns it off; the report doesn't change.
+- `fairlead replay fetch --event push` also records the default branch's push runs, and `replay run` plans each against its first parent, the diff the merged pull request's plan saw. A failing test that plan left out is reported as an escape, on its own `push (after merge)` line, so a repository whose pull requests run only the plan can still measure what got past it. See [`replay fetch`](https://mahkassem.github.io/fairlead/docs/replay.html#replay-fetch).
 
 ### Fixed
 
@@ -27,17 +30,6 @@
 - `plan.ignore` applies to source files too: a changed source nothing imports, matching it, selects nothing instead of falling to `tests.unreached`. An imported source still reaches its tests and a changed test file always runs. This changes the defaults' behaviour for an unimported source under `docs/**`, which used to widen to every test ([#124](https://github.com/mahkassem/fairlead/issues/124)).
 - An owner rule whose `match` names no test file no longer counts as covering a changed path, so the path falls to `tests.unreached` instead of silently selecting nothing, and `config check` warns about such a rule. A rule written only to make paths select nothing should become a `plan.ignore` entry ([#124](https://github.com/mahkassem/fairlead/issues/124)).
 - A file over 256 KB, scanned for imports rather than parsed, no longer reads prose such as a doc comment's `from "My booking"` as an import. The unresolved "import" used to tie the file, and every test importing it, to changes at the repository root ([#125](https://github.com/mahkassem/fairlead/issues/125)).
-
-## 0.5.0 (2026-09-28)
-
-### New
-
-- Replay recognises failures a pull request inherited from its base branch: when the base's own push run failed the same test in the same job, or three or more unrelated pull requests on one base did. They get their own outcome, `inherited`, listed by group and kept out of adjusted recall, hits and misses alike. See [Inherited failures](https://mahkassem.github.io/fairlead/docs/replay.html#inherited-failures).
-- `fairlead replay run` prints progress on stderr: every 25 planned runs and at least once a minute, with the failures judged, the misses so far and an estimate of the time left, and a line for any run slower than 10 seconds. `--quiet` turns it off; the report doesn't change.
-- `fairlead replay fetch --event push` also records the default branch's push runs, and `replay run` plans each against its first parent, the diff the merged pull request's plan saw. A failing test that plan left out is reported as an escape, on its own `push (after merge)` line, so a repository whose pull requests run only the plan can still measure what got past it. See [`replay fetch`](https://mahkassem.github.io/fairlead/docs/replay.html#replay-fetch).
-
-### Fixed
-
 - `fairlead hooks install` in a repository that lists Fairlead as a package dependency writes hooks that run the project's own copy: the Claude Code hook calls the binary the npm package unpacked, falling back to the lockfile's package runner (`bun x`, `pnpm exec`, `yarn` or `npx --no-install`), and the lefthook entry runs through that runner. Before, both called `fairlead` by name, which a dev-dependency install doesn't put on the PATH, so the write hook silently let every edit through. `hooks status`, `doctor` and `uninstall` recognise a commit-stage entry run through a package runner or by path.
 - Replay's `bun` extractor counts a test file that failed to load (an import or syntax error, which bun reports as an unhandled error under the file's header with no `(fail)` line) as that file's failure, instead of finding nothing. Datasets fetched before this keep no such lines, so re-fetch to see them.
 - A captured segment containing glob characters, such as `[slug]`, now selects only its own files in owner rules and rule edges; the captured value used to be read as glob syntax. `{foo-bar}` and other brace groups whose name isn't letters, digits and `_` are no longer taken for placeholders by config validation, matching how patterns read them.
