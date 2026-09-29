@@ -184,7 +184,7 @@ Workspace packages, from `workspaces` in the root `package.json` or `packages` i
 - A workspace import that still lands on a missing or git-ignored file becomes an edge to every file of that package, which is always safe.
 - A tsconfig that `extends` something that can't be read (a shared config published as a package, before install) is skipped for that file, and counted in `graph stats`.
 
-Files larger than 256 KB, almost always generated, are scanned for import strings instead of parsed.
+Files larger than 256 KB, almost always generated, are scanned for import strings instead of parsed. The scan can't tell a comment from code, so it takes `from`, `import` and `require` only where they start a word, and only a specifier without whitespace, which no module name has: a doc comment reading `from "My booking"` isn't an import.
 
 ## Speed
 
