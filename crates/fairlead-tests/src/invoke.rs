@@ -3,6 +3,10 @@
 //! file and `{packages}` to one per directory holding them, as `go test`
 //! takes packages (`./dir`, or `./...` for everything); a per-module runner gets
 //! one invocation per module, with files relative to its working directory.
+//! JVM runners take class names: an argument holding `{class}` is repeated
+//! once per class, as Gradle's `--tests={class}`, and `{classes}` joins them
+//! with commas, as Surefire's `-Dtest={classes}`; either is dropped when
+//! everything runs.
 
 use std::collections::BTreeMap;
 
@@ -33,6 +37,17 @@ fn expand(
             argv.extend(files.iter().cloned());
             continue;
         }
+        if arg.contains("{class}") || arg.contains("{classes}") {
+            if !all {
+                let classes: Vec<String> = files.iter().map(|f| class_name(f)).collect();
+                if arg.contains("{class}") {
+                    argv.extend(classes.iter().map(|c| arg.replace("{class}", c)));
+                } else {
+                    argv.push(arg.replace("{classes}", &classes.join(",")));
+                }
+            }
+            continue;
+        }
         if arg == "{packages}" && all {
             argv.push("./...".to_string());
             continue;
@@ -57,6 +72,22 @@ fn expand(
         argv.push(arg);
     }
     argv
+}
+
+/// A JVM test file's class, by the source-set layout Maven and Gradle
+/// share (`src/test/java/com/acme/FooTest.java` is `com.acme.FooTest`), or
+/// its file name outside it.
+fn class_name(file: &str) -> String {
+    let stem = file.rsplit_once('.').map_or(file, |(s, _)| s);
+    let mut parts = stem.split('/').collect::<Vec<_>>();
+    let root = parts
+        .windows(3)
+        .rposition(|w| w[0] == "src" && matches!(w[2], "java" | "kotlin" | "groovy" | "scala"));
+    match root {
+        Some(i) => parts.drain(..i + 3),
+        None => parts.drain(..parts.len() - 1),
+    };
+    parts.join(".")
 }
 
 fn runner_invocations(

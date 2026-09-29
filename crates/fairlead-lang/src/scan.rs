@@ -11,6 +11,7 @@ use crate::cache::{self, CacheStats, ParseCache};
 use crate::extract::{extract, Extracted, SpecKind};
 use crate::golang;
 use crate::graph::{EdgeKind, Graph};
+use crate::jvm;
 use crate::php;
 use crate::provider;
 use crate::python;
@@ -127,6 +128,11 @@ pub fn build(root: &Path, config: &Config) -> std::io::Result<Scan> {
                 .map(|(f, r)| (f.as_str(), r.declares.as_slice())),
         ),
         modules: golang::Modules::new(&tree),
+        index: jvm::Index::new(
+            results
+                .iter()
+                .map(|(f, r)| (f.as_str(), r.declares.as_slice())),
+        ),
         roots: python::Roots::new(&tree),
     };
     let edges = add_results(&tree, &named, &mut graph, results);
@@ -136,7 +142,7 @@ pub fn build(root: &Path, config: &Config) -> std::io::Result<Scan> {
         .as_ref()
         .map(|c| crate::coverage::apply(&root, c, &mut graph));
     let mut providers = Vec::new();
-    for id in [provider::BUILTIN, php::ID, golang::ID, python::ID] {
+    for id in [provider::BUILTIN, php::ID, golang::ID, python::ID, jvm::ID] {
         let files = sources.iter().filter(|f| language(f) == id).count();
         if files > 0 || id == provider::BUILTIN {
             providers.push(provider::Report {
@@ -176,6 +182,8 @@ fn language(file: &str) -> &'static str {
         golang::ID
     } else if file.ends_with(".py") {
         python::ID
+    } else if jvm::is_jvm(file) {
+        jvm::ID
     } else {
         provider::BUILTIN
     }
@@ -187,6 +195,7 @@ struct Named {
     autoload: php::Autoload,
     modules: golang::Modules,
     roots: python::Roots,
+    index: jvm::Index,
 }
 
 impl Named {
@@ -210,6 +219,7 @@ impl Named {
             }
             golang::ID => (self.modules.package(file, name), Vec::new()),
             python::ID => (self.roots.resolve(tree, file, name), Vec::new()),
+            jvm::ID => (self.index.resolve(name, kind), Vec::new()),
             _ => Default::default(),
         }
     }

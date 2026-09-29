@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### New
+
+- Java and Kotlin in the graph. `.java` and `.kt` files are read by a lexer of their own, and a reference resolves through an index of every file's package and top-level declarations, so an import, a wildcard import, a static import and a class of the same package with no import all count, across the modules of a Maven or Gradle build. Runner commands take `{class}`, repeated once per selected test class (Gradle's `--tests={class}`), and `{classes}`, joined with commas (Surefire's `-Dtest={classes}`). On gson and moshi, a change to each of 40 sampled classes selected every test file that names the class. See [Java and Kotlin](https://mahkassem.github.io/fairlead/docs/graph.html#java-and-kotlin).
+
 ### Fixed
 
 - `fairlead hooks --help` and `hooks install --help` name every hook install adds: the guard before an edit, the brief nudge after one, the Stop hook and the git hook, where they used to name one Claude Code hook.
