@@ -83,12 +83,45 @@ pub fn validate(config: &Config) -> Vec<Problem> {
             }
         }
     }
+    plan_globs(config, &mut problems);
     checks(config, &mut problems);
     replay(config, &mut problems);
     graph_edges(config, &mut problems);
     graph_providers(config, &mut problems);
     guard(config, &mut problems);
     problems
+}
+
+/// The globs `fairlead plan` compiles, which would otherwise fail only once
+/// a change reached them.
+fn plan_globs(config: &Config, problems: &mut Vec<Problem>) {
+    let tests = &config.tests;
+    globs("tests.match", tests.matches.items(), problems);
+    globs("tests.exclude", tests.exclude.items(), problems);
+    for (i, runner) in tests.runners.items().iter().enumerate() {
+        globs(
+            &format!("tests.runners[{i}].match"),
+            &runner.matches,
+            problems,
+        );
+        globs(
+            &format!("tests.runners[{i}].exclude"),
+            &runner.exclude,
+            problems,
+        );
+    }
+    for (i, owner) in tests.owners.items().iter().enumerate() {
+        if let Err(e) = crate::pattern::Pattern::new(&owner.matches) {
+            problems.push(problem(format!("tests.owners[{i}].match"), e));
+        }
+        globs(
+            &format!("tests.owners[{i}].covers"),
+            &owner.covers,
+            problems,
+        );
+    }
+    globs("plan.run_all", config.plan.run_all.items(), problems);
+    globs("plan.ignore", config.plan.ignore.items(), problems);
 }
 
 fn globs(key: &str, globs: &[String], problems: &mut Vec<Problem>) {

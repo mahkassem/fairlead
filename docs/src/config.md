@@ -45,6 +45,12 @@ Lists append across layers, so your `plan.run_all` adds to the built-in one. To 
 match = { replace = ["test/**/*.ts"] }
 ```
 
+So `run_all = []` appends nothing and the built-in list stays; `config check` warns about an empty list written over one that already has items. `{ replace = [] }` clears it.
+
+## Globs
+
+`*` matches within a path segment and `**` across segments. `{a,b}` is an alternation, and alternations nest: `{src/**/*.test.{ts,tsx},tests/**}`. A brace group of just a name, like `{name}`, captures that segment instead, where the key supports captures. `[abc]` is a character class. A backslash makes the next character literal, so a path with brackets is `app/**/\[...slug\]/**` (in TOML's double-quoted strings the backslash itself is doubled: `"app/**/\\[...slug\\]/**"`). `config check` compiles every glob, so one that can't compile fails there, not at plan time.
+
 ## Errors
 
 Unknown keys are errors, so a typo can't silently switch something off. Every error names the file or layer it came from, and the key:

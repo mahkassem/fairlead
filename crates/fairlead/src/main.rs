@@ -201,6 +201,9 @@ fn runner_problems(loaded: &Loaded) -> Vec<String> {
 }
 
 fn check(loaded: &Loaded) -> ExitCode {
+    for w in &loaded.warnings {
+        eprintln!("warning: {}: {}", w.key, w.message);
+    }
     let runners = if loaded.problems.is_empty() {
         runner_problems(loaded)
     } else {

@@ -21,6 +21,8 @@
 - Replay attributes a failing test file a Windows runner printed with backslashes, such as pytest's `FAILED tests\unit\test_a.py::test_x`; it used to match no file and count as unattributed.
 - Replay's `go` extractor reads the file testify names on a line of its own (`x_test.go:12:`), so a testify failure is attributed to its test file instead of its package.
 - `replay fetch` retries a 5xx from GitHub up to three times, after 5, 10 and 15 seconds; one transient 500 used to stop the whole fetch.
+- Globs take nested alternations (`{src/**/*.test.{ts,tsx},tests/**}`) and backslash escapes (`\[...slug\]`); both used to fail at plan time. `config check` now compiles every glob the planner compiles (test matches, runners, owners, `plan.run_all`, `plan.ignore`), so a bad one fails there instead of the first time a change reaches it.
+- `config check` warns when a layer writes `[]` over a list that already has items: lists append, so it changes nothing, and `{ replace = [] }` is what clears one.
 
 ## 0.5.0 (2026-09-28)
 

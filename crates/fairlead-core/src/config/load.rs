@@ -57,6 +57,8 @@ pub struct Loaded {
     pub root: PathBuf,
     /// Semantic problems that don't stop loading.
     pub problems: Vec<Problem>,
+    /// Settings that are valid but can't be what the author meant.
+    pub warnings: Vec<Problem>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -215,7 +217,9 @@ fn load_from(
     let mut merged = serde_json::to_value(Config::default()).expect("defaults serialize");
     let mut origins = BTreeMap::new();
     record(&merged, "", "default", &mut origins);
+    let mut warnings = Vec::new();
     for (label, value) in layers {
+        empty_appends(&merged, &value, &label, "", &mut warnings);
         merge(&mut merged, value, &label, "", &mut origins);
     }
     let config = typed("merged config", merged.clone())?;
@@ -227,6 +231,7 @@ fn load_from(
         files,
         root,
         problems,
+        warnings,
     })
 }
 
@@ -345,6 +350,35 @@ fn replacement(value: &Value) -> Option<&Vec<Value>> {
     match value {
         Value::Object(map) if map.len() == 1 => map.get("replace").and_then(Value::as_array),
         _ => None,
+    }
+}
+
+/// Lists append across layers, so `[]` over a list that already has items
+/// changes nothing, though it reads as "clear it".
+fn empty_appends(base: &Value, over: &Value, label: &str, path: &str, out: &mut Vec<Problem>) {
+    if replacement(over).is_some() {
+        return;
+    }
+    match (base, over) {
+        (Value::Object(base_map), Value::Object(over_map)) => {
+            for (key, value) in over_map {
+                if let Some(inherited) = base_map.get(key) {
+                    empty_appends(inherited, value, label, &join(path, key), out);
+                }
+            }
+        }
+        (Value::Array(inherited), Value::Array(items))
+            if items.is_empty() && !inherited.is_empty() =>
+        {
+            out.push(Problem {
+                key: path.to_string(),
+                message: format!(
+                    "`[]` in {label} appends nothing, so the {} inherited item(s) stay; `{{ replace = [] }}` clears the list",
+                    inherited.len()
+                ),
+            });
+        }
+        _ => {}
     }
 }
 
