@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.1 (2026-09-29)
+
+### Fixed
+
+- A changed path matching `plan.ignore` is ignored when it reaches no test, even if other files import it, such as a fake that only unit tests use or a dev tool's modules. In 0.5.0 an imported path was never ignored and fell to `tests.unreached`, so in a layer planning end-to-end specs it could run all of them. An ignored path that reaches tests still selects them.
+
 ## 0.5.0 (2026-09-29)
 
 ### New
