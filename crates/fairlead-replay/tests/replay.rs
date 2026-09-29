@@ -525,6 +525,72 @@ fn a_commit_the_remote_lost_doesnt_keep_the_rest_of_its_batch_out() {
     assert!(fairlead_replay::git::has_commit(&clone, &later));
 }
 
+/// `GIT_NO_LAZY_FETCH` arrived in git 2.44; older git lazily fetches anyway.
+fn git_ignores_no_lazy_fetch() -> bool {
+    let version = git(std::env::temp_dir().as_path(), &["version"]);
+    let mut parts = version
+        .trim_start_matches("git version ")
+        .split('.')
+        .map(|p| p.parse::<u32>().unwrap_or(0));
+    (parts.next().unwrap_or(0), parts.next().unwrap_or(0)) < (2, 44)
+}
+
+#[test]
+fn looking_up_a_missing_commit_in_a_blobless_clone_fetches_nothing() {
+    if git_ignores_no_lazy_fetch() {
+        eprintln!("skipped: this git lazily fetches whatever it's told");
+        return;
+    }
+    let origin =
+        std::env::temp_dir().join(format!("fairlead-replay-lazy-o-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&origin);
+    std::fs::create_dir_all(&origin).unwrap();
+    git(&origin, &["init", "-q", "-b", "main"]);
+    for n in 0..5 {
+        write(
+            &origin,
+            &format!("src/f{n}.ts"),
+            &format!("export const n = {n};\n"),
+        );
+        commit(&origin, &format!("c{n}"));
+    }
+    git(&origin, &["config", "uploadpack.allowFilter", "true"]);
+    git(
+        &origin,
+        &["config", "uploadpack.allowAnySHA1InWant", "true"],
+    );
+    let clone = std::env::temp_dir().join(format!("fairlead-replay-lazy-c-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&clone);
+    let url = format!("file://{}", origin.display());
+    git(
+        std::env::temp_dir().as_path(),
+        &[
+            "clone",
+            "-q",
+            "--filter=blob:none",
+            "--no-checkout",
+            &url,
+            clone.to_str().unwrap(),
+        ],
+    );
+    git(&origin, &["checkout", "-q", "-b", "later"]);
+    write(&origin, "src/late.ts", "export const late = 1;\n");
+    let later = commit(&origin, "late");
+    let packs = || {
+        std::fs::read_dir(clone.join(".git/objects/pack"))
+            .unwrap()
+            .count()
+    };
+    let before = packs();
+    assert!(!fairlead_replay::git::has_commit(&clone, &later));
+    assert_eq!(packs(), before, "the lookup fetched nothing");
+    assert_eq!(
+        fairlead_replay::git::fetch_missing(&clone, std::slice::from_ref(&later)),
+        0
+    );
+    assert!(fairlead_replay::git::has_commit(&clone, &later));
+}
+
 #[test]
 fn a_row_without_a_base_is_planned_from_the_default_branch() {
     let origin =

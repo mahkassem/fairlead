@@ -252,6 +252,15 @@ fn add_results(
                     .map(|f| (f, EdgeKind::Import)),
             );
         }
+        if language(&file) == golang::ID {
+            reached.extend(
+                named
+                    .modules
+                    .manifests(tree, &file)
+                    .into_iter()
+                    .map(|f| (f, EdgeKind::Manifest)),
+            );
+        }
         if golang::is_test(&file) {
             reached.extend(
                 named

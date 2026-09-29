@@ -88,8 +88,8 @@ jobs:
           path: |
             clone
             clone-fairlead-replay
-          key: bench-clone-${{ matrix.slug }}-${{ github.run_id }}
-          restore-keys: bench-clone-${{ matrix.slug }}-
+          key: bench-clone-v2-${{ matrix.slug }}-${{ github.run_id }}
+          restore-keys: bench-clone-v2-${{ matrix.slug }}-
       - name: Clone the repository, full history without blobs
         shell: bash
         run: |
@@ -143,8 +143,12 @@ jobs:
         run: |
           [ -d clone/.git ] || exit 0
           git -C clone worktree prune
-          git -C clone gc --auto --quiet
+          # In the foreground: a detached gc may still be writing when the cache is saved.
+          git -C clone gc --quiet
           echo "Cache: $(du -sh clone clone-fairlead-replay 2>/dev/null | awk '{print $2 " " $1}' | paste -sd ', ')." >> "$GITHUB_STEP_SUMMARY"
+          # The summary isn't readable through the API; the log is.
+          du -sh clone/.git/objects/pack clone/.git/objects clone/.git/worktrees clone clone-fairlead-replay 2>/dev/null || true
+          git -C clone count-objects -vH
       - name: Save the clone and its parse cache
         if: ${{ !cancelled() }}
         uses: actions/cache/save@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
@@ -152,7 +156,7 @@ jobs:
           path: |
             clone
             clone-fairlead-replay
-          key: bench-clone-${{ matrix.slug }}-${{ github.run_id }}
+          key: bench-clone-v2-${{ matrix.slug }}-${{ github.run_id }}
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         if: ${{ !cancelled() }}
         with:

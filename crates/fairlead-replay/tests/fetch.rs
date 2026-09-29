@@ -374,6 +374,22 @@ fn a_limit_that_persists_stops_after_three_waits_and_a_plain_refusal_at_once() {
 }
 
 #[test]
+fn a_server_error_is_retried_briefly_and_one_that_persists_stops_the_fetch() {
+    let http = api();
+    http.answer_once("/repos/o/r/commits/aaa/pulls", Reply::new(500, Value::Null));
+    let (_, stop) = fetch(&http, &opts(None), &BTreeSet::new());
+    assert_eq!(stop, Stop::Complete);
+    assert_eq!(*http.paused.lock().unwrap(), [5]);
+    let http = api();
+    for _ in 0..4 {
+        http.answer_once("/repos/o/r/commits/aaa/pulls", Reply::new(502, Value::Null));
+    }
+    let (_, stop) = fetch(&http, &opts(None), &BTreeSet::new());
+    assert!(matches!(stop, Stop::Error(e) if e.contains("502")));
+    assert_eq!(*http.paused.lock().unwrap(), [5, 10, 15]);
+}
+
+#[test]
 fn each_lookup_is_one_request() {
     let http = api();
     let _ = fetch(&http, &opts(None), &BTreeSet::new());

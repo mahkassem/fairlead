@@ -90,7 +90,8 @@ pub fn phpunit(lines: &[String]) -> Vec<Printed> {
             Printed {
                 path: test_path(&c["class"], frames),
                 project: None,
-                title: Some(c["method"].to_string()),
+                // Pest's compiled method names aren't in the test's source.
+                title: Some(c["method"].to_string()).filter(|m| !m.starts_with("__pest_evaluable")),
             },
         );
     }

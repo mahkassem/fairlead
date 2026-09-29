@@ -379,14 +379,70 @@ command = ["jest", "{files}"]
 }
 
 #[test]
-fn an_ignored_location_never_swallows_a_source_file() {
+fn an_ignored_source_nothing_imports_selects_nothing_but_imports_and_tests_still_count() {
     let mut files = WORKSPACE.to_vec();
     files.push(("docs/site.config.ts", "export default {};\n"));
     let dir = repo("ignore-source", &files);
     let plan = run(&dir, &config(VITEST), vec![modified("docs/site.config.ts")]);
-    assert!(plan.ignored.is_empty());
-    assert_eq!(plan.unreached[0].path, "docs/site.config.ts");
-    assert!(plan.all, "an unreached root file widens to everything");
+    assert_eq!(plan.ignored, ["docs/site.config.ts"]);
+    assert!(plan.unreached.is_empty());
+    assert!(
+        !plan.all,
+        "nothing depends on it, so there's nothing to widen for"
+    );
+    let cfg = config(&format!(
+        "{VITEST}\n[plan]\nignore = [\"packages/core/**\"]\n"
+    ));
+    let imported = run(&dir, &cfg, vec![modified("packages/core/src/money.ts")]);
+    assert!(imported.ignored.is_empty(), "files import it");
+    assert_eq!(
+        tests(&imported),
+        [
+            "packages/billing/test/invoice.test.ts",
+            "packages/core/test/money.test.ts"
+        ]
+    );
+    let test = run(
+        &dir,
+        &cfg,
+        vec![modified("packages/core/test/money.test.ts")],
+    );
+    assert!(test.ignored.is_empty(), "a changed test always runs");
+    assert_eq!(tests(&test), ["packages/core/test/money.test.ts"]);
+}
+
+#[test]
+fn an_ignored_source_other_files_import_is_ignored_when_it_reaches_no_test() {
+    let mut files = WORKSPACE.to_vec();
+    files.push((
+        "tools/dev/serve.ts",
+        "import { fake } from './fake';\nexport const s = fake;\n",
+    ));
+    files.push(("tools/dev/fake.ts", "export const fake = 1;\n"));
+    let dir = repo("ignore-imported", &files);
+    let cfg = config(&format!("{VITEST}\n[plan]\nignore = [\"tools/**\"]\n"));
+    let plan = run(&dir, &cfg, vec![modified("tools/dev/fake.ts")]);
+    assert_eq!(
+        plan.ignored,
+        ["tools/dev/fake.ts"],
+        "its importer reaches no test either"
+    );
+    assert!(!plan.all);
+    assert!(plan.tests.is_empty());
+}
+
+#[test]
+fn an_owner_rule_that_names_no_test_leaves_a_path_to_the_unreached_policy() {
+    let dir = repo("idle-owner", WORKSPACE);
+    let cfg = config(&format!(
+        "{VITEST}\n[[tests.owners]]\nmatch = \"e2e/**/*.spec.ts\"\ncovers = [\"packages/docs/**\"]\n"
+    ));
+    let plan = run(&dir, &cfg, vec![modified("packages/docs/src/site.ts")]);
+    assert_eq!(plan.unreached[0].selected, "all");
+    assert!(
+        plan.all,
+        "a rule that selects nothing doesn't silence the miss"
+    );
 }
 
 #[test]

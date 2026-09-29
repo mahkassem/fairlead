@@ -54,8 +54,10 @@ pub enum Stop {
 /// Retries after GitHub's secondary rate limit, which refuses bursts with a
 /// 403 or 429 however much of the hourly budget is left. An exhausted
 /// hourly budget (`X-RateLimit-Remaining: 0`) resets up to an hour later, so
-/// it stops the fetch instead.
+/// it stops the fetch instead. A 5xx is GitHub failing, usually for a
+/// moment, so it's retried after a short wait too.
 const RETRIES: u32 = 3;
+const SERVER_ERROR_WAIT: u64 = 5;
 
 fn with_retry<T>(
     http: &dyn Http,
@@ -65,6 +67,16 @@ fn with_retry<T>(
     let mut attempt = 0;
     loop {
         let reply = call()?;
+        if matches!(reply.status, 500 | 502 | 503 | 504) && attempt < RETRIES {
+            attempt += 1;
+            let wait = SERVER_ERROR_WAIT * u64::from(attempt);
+            eprintln!(
+                "fetch: GitHub answered {} for {what}; retrying in {wait} s",
+                reply.status
+            );
+            http.pause(wait);
+            continue;
+        }
         if !matches!(reply.status, 403 | 429) {
             return Ok(reply);
         }
@@ -113,7 +125,9 @@ fn str_of<'v>(v: &'v Value, key: &str) -> &'v str {
 }
 
 fn git(clone: &Path, args: &[&str]) -> Option<String> {
+    let (key, value) = crate::git::NO_LAZY_FETCH;
     let out = Command::new("git")
+        .env(key, value)
         .arg("-C")
         .arg(clone)
         .args(args)

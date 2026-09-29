@@ -83,7 +83,7 @@ match = ["**/*_test.go"]
 command = ["go", "test", "{packages}"]
 ```
 
-A change to any `go.mod`, `go.sum`, `go.work` or `go.work.sum` runs everything by default (`plan.run_all`), as a lockfile does.
+Each Go file depends on its module's `go.mod` and `go.sum` (edge kind `manifest`), since they pick the versions of everything it imports. A dependency bump in one module therefore selects that module's tests and the tests of every module importing it, not the whole repository. Under a `go.work`, which picks versions across every module it spans, a file depends on all of those modules' manifests instead. A change to `go.work` or `go.work.sum`, which spans the workspace, runs everything by default (`plan.run_all`), as a lockfile does. To have a `go.mod` change run everything anyway, add `**/go.mod` to `plan.run_all`.
 
 ## Python
 
@@ -170,6 +170,8 @@ In a typical server, every area imports a shared module for its routes or its au
 barrier = ["apps/api/src/{http,db,auth}/**"]
 ```
 
+The same fan-out happens on the test side: end-to-end specs often import one shared module, such as a strings or fixtures index, only to build their expected values, and then any change under it plans every spec. A barrier on that index fixes it.
+
 The walk reaches a barrier file, but doesn't go on to the files that import it. That includes a changed barrier file, which reaches nothing and is left to `tests.unreached`, unless `plan.run_all` or an owner rule covers it. So list a barrier's paths in `plan.run_all` when a change to them should run everything. `graph why` still shows a chain through a barrier and says the plan stops there, and `test --explain` names the barrier that kept a test out.
 
 A rule edge is a claim the imports can't check. Replay measures it: a failure in a test the rule doesn't reach shows up as a miss.
@@ -184,7 +186,7 @@ Workspace packages, from `workspaces` in the root `package.json` or `packages` i
 - A workspace import that still lands on a missing or git-ignored file becomes an edge to every file of that package, which is always safe.
 - A tsconfig that `extends` something that can't be read (a shared config published as a package, before install) is skipped for that file, and counted in `graph stats`.
 
-Files larger than 256 KB, almost always generated, are scanned for import strings instead of parsed.
+Files larger than 256 KB, almost always generated, are scanned for import strings instead of parsed. The scan can't tell a comment from code, so it takes `from`, `import` and `require` only where they start a word, and only a specifier without whitespace, which no module name has: a doc comment reading `from "My booking"` isn't an import.
 
 ## Speed
 

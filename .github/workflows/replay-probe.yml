@@ -71,6 +71,8 @@ jobs:
         shell: bash
         run: git clone --quiet --filter=blob:none --no-checkout "https://github.com/$REPO" clone
       - name: Record runs
+        # A fetch that stops early keeps its rows, and they're still worth replaying.
+        continue-on-error: true
         shell: bash
         env:
           GITHUB_TOKEN: ${{ secrets.BENCH_READ_TOKEN || github.token }}
@@ -82,6 +84,7 @@ jobs:
       - name: Replay
         shell: bash
         run: |
+          if [ ! -s out/data.jsonl ]; then echo "no recorded runs"; exit 1; fi
           ./target/release/fairlead replay run --data out/data.jsonl --clone clone \
             --config "$CONFIG" --fetch-missing --json-out out/report.json | tee out/report.txt
           {
@@ -92,6 +95,19 @@ jobs:
             tr -d '~' < out/report.txt
             echo '~~~'
           } >> "$GITHUB_STEP_SUMMARY"
+      # A failure the extractor attributes to no file shows up only as a
+      # count; the lines the dataset kept for it say why.
+      - name: What the failed jobs printed
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: |
+          [ -s out/data.jsonl ] || exit 0
+          # Another repository's log lines, so none may run as a workflow command.
+          token="$(openssl rand -hex 16)"
+          echo "::stop-commands::$token"
+          jq -r 'select(.conclusion == "failure") | .jobs[] | select(.conclusion == "failure")
+            | "=== \(.name)", ((.log // [])[:40][] | "    " + .)' out/data.jsonl | head -4000
+          echo "::$token::"
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         if: ${{ !cancelled() }}
         with:
