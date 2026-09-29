@@ -13,6 +13,7 @@ mod guard_cmd;
 mod hook_cmd;
 mod hooks_cmd;
 mod plan_cmd;
+mod receipt_cmd;
 mod replay_cmd;
 
 use std::path::{Path, PathBuf};
@@ -101,6 +102,18 @@ enum Command {
     Brief {
         #[command(flatten)]
         args: brief_cmd::BriefArgs,
+    },
+    /// After a change: what changed against the session's brief, the tests
+    /// files outside it add, and the done gate for the tree as it is.
+    Receipt {
+        #[command(flatten)]
+        args: receipt_cmd::ReceiptArgs,
+    },
+    /// The one step the change loop is waiting for: a brief, the done gate,
+    /// a fix, the receipt, or nothing.
+    Next {
+        #[command(flatten)]
+        args: receipt_cmd::NextArgs,
     },
     /// Install, check or remove the Claude Code hook that runs the guard.
     Hooks {
@@ -358,6 +371,8 @@ fn main() -> ExitCode {
         Some(Command::Hooks { action }) => hooks_cmd::run(action, &cwd()),
         Some(Command::Done { args }) => done_cmd::run(args, &cwd()),
         Some(Command::Brief { args }) => brief_cmd::run(args, &cwd()),
+        Some(Command::Receipt { args }) => receipt_cmd::run(args, &cwd()),
+        Some(Command::Next { args }) => receipt_cmd::run_next(args, &cwd()),
         Some(Command::Plan {
             changes,
             json,
