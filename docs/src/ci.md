@@ -114,3 +114,37 @@ Results from another plan are refused with exit code 2.
 comment = false    # also keep a pull request comment up to date
 escapes = "report" # or "fail": `ci report` exits 1 on an escape `ci run --judge` found
 ```
+
+## GitLab CI
+
+`ci plan`, `ci run` and `ci report` read nothing GitHub sets, so a merge request pipeline runs them as they are. GitLab gives the merge base as `CI_MERGE_REQUEST_DIFF_BASE_SHA` and clones 20 commits by default, which can leave the merge base out: `GIT_DEPTH: "0"` fetches the history `--base` needs.
+
+```yaml
+fairlead:
+  image: node:22
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+  variables:
+    GIT_DEPTH: "0"
+    PLAN: /tmp/fairlead-plan.json
+    RESULTS: /tmp/fairlead-results.json
+  before_script:
+    # Pin a release in your own pipeline: releases/download/vX.Y.Z/ in place of releases/latest/download/.
+    - curl -fsSL https://github.com/mahkassem/fairlead/releases/latest/download/fairlead-installer.sh | sh
+    - export PATH="$HOME/.cargo/bin:$PATH"
+    - npm ci
+  script:
+    - fairlead ci plan --base "$CI_MERGE_REQUEST_DIFF_BASE_SHA" --head "$CI_COMMIT_SHA" --out "$PLAN"
+    - fairlead ci run --plan "$PLAN" --results "$RESULTS"
+  after_script:
+    - export PATH="$HOME/.cargo/bin:$PATH"
+    - fairlead ci report --plan "$PLAN" --results "$RESULTS" > fairlead-report.md
+  artifacts:
+    when: always
+    expose_as: fairlead report
+    paths: [fairlead-report.md]
+```
+
+The plan and results stay outside the checkout, where they'd count as changes; the report is written there last, because GitLab keeps artifacts only from inside it. Without `$GITHUB_STEP_SUMMARY` the report goes to stdout, so it's saved to a file and shown on the merge request through `expose_as`. `--comment` and the `::warning` annotations of `ci run --judge` are GitHub's; on GitLab the escapes are in the report.
+
+A project that installs Fairlead from npm can drop the installer and run `npx fairlead` instead, as on GitHub.
