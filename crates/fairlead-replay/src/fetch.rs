@@ -125,7 +125,9 @@ fn str_of<'v>(v: &'v Value, key: &str) -> &'v str {
 }
 
 fn git(clone: &Path, args: &[&str]) -> Option<String> {
+    let (key, value) = crate::git::NO_LAZY_FETCH;
     let out = Command::new("git")
+        .env(key, value)
         .arg("-C")
         .arg(clone)
         .args(args)

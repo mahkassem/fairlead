@@ -21,6 +21,7 @@
 - Replay attributes a failing test file a Windows runner printed with backslashes, such as pytest's `FAILED tests\unit\test_a.py::test_x`; it used to match no file and count as unattributed.
 - Replay's `go` extractor reads the file testify names on a line of its own (`x_test.go:12:`), so a testify failure is attributed to its test file instead of its package.
 - `replay fetch` retries a 5xx from GitHub up to three times, after 5, 10 and 15 seconds; one transient 500 used to stop the whole fetch.
+- Replay no longer bloats a blobless clone: checking whether a recorded commit is present made git lazily fetch it without negotiation, resending the whole history's trees each time, and a bench clone grew to 13 GiB. Commit lookups now set `GIT_NO_LAZY_FETCH` (git 2.44 or later), and missing commits come through the one negotiated fetch.
 
 ## 0.5.0 (2026-09-28)
 
