@@ -55,6 +55,29 @@ pub fn runner_problems(tree: &Tree, config: &Config) -> Result<Vec<String>, Stri
     Ok(out)
 }
 
+/// Owner rules whose `match` names no test file: they claim the paths they
+/// cover and select nothing for them, which reads as a plan that's fine.
+pub fn idle_owners(tree: &Tree, config: &Config) -> Result<Vec<String>, String> {
+    let owners = config.tests.owners.items();
+    if owners.is_empty() {
+        return Ok(Vec::new());
+    }
+    let found = discover(tree, config, &Modules::default())?;
+    let mut out = Vec::new();
+    for (i, owner) in owners.iter().enumerate() {
+        let Ok(matches) = Pattern::new(&owner.matches) else {
+            continue;
+        };
+        if !found.tests.iter().any(|t| matches.is_match(&t.path)) {
+            out.push(format!(
+                "tests.owners[{i}]: `{}` matches no test file here, so the paths it covers fall to `tests.unreached`",
+                owner.matches
+            ));
+        }
+    }
+    Ok(out)
+}
+
 pub fn discover(tree: &Tree, config: &Config, modules: &Modules) -> Result<Discovered, String> {
     let include = compile(config.tests.matches.items())?;
     let exclude = compile(config.tests.exclude.items())?;

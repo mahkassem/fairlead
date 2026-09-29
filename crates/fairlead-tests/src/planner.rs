@@ -7,7 +7,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use fairlead_core::config::{Config, LockfileMode, TestClass, Unresolved};
 use fairlead_core::plan::{Change, Plan, Reason, Status, Warning, VERSION};
 use fairlead_lang::deleted::attach_deleted;
-use fairlead_lang::tree::{parent, Tree};
+use fairlead_lang::tree::parent;
 use fairlead_lang::Scan;
 
 use crate::checks::checks;
@@ -135,10 +135,11 @@ pub fn plan(scan: &mut Scan, config: &Config, input: Input) -> Result<Plan, Stri
     let ignore = patterns(config.plan.ignore.items())?;
     // Refreshing the coverage map changes what the plan knows, not the code.
     let map = config.graph.coverage.as_ref().map(|c| c.map.as_str());
+    let is_test = |p: &str| found.tests.iter().any(|t| t.path == p);
     let ignored = changed
         .iter()
         .filter(|p| {
-            Some(p.as_str()) == map || (!Tree::is_source(p) && ignore.iter().any(|g| g.is_match(p)))
+            Some(p.as_str()) == map || (!is_test(p) && ignore.iter().any(|g| g.is_match(p)))
         })
         .filter(|p| {
             scan.graph

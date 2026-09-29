@@ -305,3 +305,21 @@ fn ci_run_refuses_a_plan_of_another_version() {
     assert_eq!(out.status.code(), Some(2));
     assert!(String::from_utf8_lossy(&out.stderr).contains("plan version"));
 }
+
+#[test]
+fn config_check_warns_about_an_owner_rule_that_names_no_test() {
+    let dir = project("idle-owner");
+    write(
+        &dir,
+        "fairlead.toml",
+        "[[tests.runners]]\nid = \"vitest\"\nmatch = [\"**\"]\ncommand = [\"vitest\"]\n\n[[tests.owners]]\nmatch = \"e2e/**/*.spec.ts\"\ncovers = [\"src/**\"]\n\n[[tests.owners]]\nmatch = \"test/a.test.ts\"\ncovers = [\"src/a.ts\"]\n",
+    );
+    let out = fairlead_in(&dir, &["config", "check"]);
+    assert!(out.status.success());
+    let err = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        err.contains("warning: tests.owners[0]: `e2e/**/*.spec.ts` matches no test file"),
+        "{err}"
+    );
+    assert!(!err.contains("tests.owners[1]"), "{err}");
+}

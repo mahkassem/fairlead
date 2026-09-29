@@ -22,6 +22,8 @@
 - Replay's `go` extractor reads the file testify names on a line of its own (`x_test.go:12:`), so a testify failure is attributed to its test file instead of its package.
 - `replay fetch` retries a 5xx from GitHub up to three times, after 5, 10 and 15 seconds; one transient 500 used to stop the whole fetch.
 - Replay no longer bloats a blobless clone: checking whether a recorded commit is present made git lazily fetch it without negotiation, resending the whole history's trees each time, and a bench clone grew to 13 GiB. Commit lookups now set `GIT_NO_LAZY_FETCH` (git 2.44 or later), and missing commits come through the one negotiated fetch.
+- `plan.ignore` applies to source files too: a changed source nothing imports, matching it, selects nothing instead of falling to `tests.unreached`. An imported source still reaches its tests and a changed test file always runs. This changes the defaults' behaviour for an unimported source under `docs/**`, which used to widen to every test ([#124](https://github.com/mahkassem/fairlead/issues/124)).
+- An owner rule whose `match` names no test file no longer counts as covering a changed path, so the path falls to `tests.unreached` instead of silently selecting nothing, and `config check` warns about such a rule. A rule written only to make paths select nothing should become a `plan.ignore` entry ([#124](https://github.com/mahkassem/fairlead/issues/124)).
 
 ## 0.5.0 (2026-09-28)
 
