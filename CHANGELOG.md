@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### New
+
+- `fairlead done` runs the gate a change passes before it counts as finished (the planned tests and checks, the checks `done.always` names, and the guard) and records the outcome against the tree it checked, so any later edit makes a pass stale. `--check` says whether the working tree as it stands has passed. See [The done gate](https://mahkassem.github.io/fairlead/docs/done.html).
+
 ## 0.5.1 (2026-09-29)
 
 ### Fixed
@@ -10,7 +16,6 @@
 
 ### New
 
-- `fairlead done` runs the gate a change passes before it counts as finished (the planned tests and checks, the checks `done.always` names, and the guard) and records the outcome against the tree it checked, so any later edit makes a pass stale. `--check` says whether the working tree as it stands has passed. See [The done gate](https://mahkassem.github.io/fairlead/docs/done.html).
 - Coverage maps: `fairlead coverage import --format phpunit-xml|coverage-py` turns a coverage run's report into a map of which files each test ran, stamped with its commit and date, and `[graph.coverage] map = ...` adds those edges to the static graph. A dependency only a run shows, such as a class a container builds from a string or a module imported by name, then reaches its tests. An old map leaves a `coverage-stale` warning and an unreadable one `coverage-unreadable`; neither fails the plan. The map's shape is committed as `coverage-v1.schema.json`. See [Coverage maps](https://mahkassem.github.io/fairlead/docs/graph.html#coverage-maps).
 - Replay reads `go test` failures, plain or `-v`, and gotestsum's, with the `go` extractor. Each failed top-level test is attributed to the test file it logged, else a test file in its panic, else a compile error in a test file, under the package's import path, and attribution matches such a path by its tail, even for a module in a subfolder.
 - Python files are in the import graph, as the built-in `python` provider: each import reaches its module and the package `__init__.py` files above it, `from a.b import c` reaches `a.b.c` when it's a module and `a.b` otherwise, relative imports resolve from the file's package, and a test or `conftest.py` depends on every `conftest.py` above it. Modules resolve under the root, each Python project's folder and its `src`. Replay reads pytest failures with the `pytest` extractor. Python manifests and lockfiles are in the default `plan.run_all`.
