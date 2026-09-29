@@ -19,7 +19,7 @@ use crate::plan_cmd::{make, Changes, Planned};
 const SHOWN: usize = 5;
 /// The variable Claude Code sets for the commands an agent runs; it equals
 /// the `session_id` its hooks receive.
-const SESSION_ENV: &str = "CLAUDE_CODE_SESSION_ID";
+pub const SESSION_ENV: &str = "CLAUDE_CODE_SESSION_ID";
 const NUDGE: &str = "fairlead: no brief for this change yet; `fairlead brief <paths>` lists what those paths reach, the tests that will run and the done gate.";
 
 #[derive(clap::Args)]
@@ -381,6 +381,10 @@ impl Store {
         fairlead_guard::git::git_dir(root).map(|d| Store {
             dir: d.join("fairlead").join("briefs"),
         })
+    }
+
+    pub fn dir(&self) -> &Path {
+        &self.dir
     }
 
     fn save(&self, brief: &Brief) -> Result<(), String> {

@@ -15,6 +15,7 @@
 - [Guard rules](guard.md)
 - [The brief](brief.md)
 - [The done gate](done.md)
+- [The receipt and next](receipt.md)
 
 # Measuring
 
