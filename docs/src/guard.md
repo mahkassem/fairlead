@@ -183,6 +183,7 @@ external rule can run at: when the hook runs, the file isn't written yet.
 fairlead hooks install         # the Claude Code hooks, and the git hook if lefthook is set up
 fairlead hooks install --git   # only the git hook, making lefthook.yml if there's none
 fairlead hooks install --codex # the same hooks for Codex, in .codex/hooks.json
+fairlead hooks install --gemini # the same hooks for Gemini CLI, in .gemini/settings.json
 fairlead hooks status          # where each is, and whether uninstall can restore the file exactly
 fairlead hooks uninstall       # take them out again
 fairlead doctor                # the hooks, the binary on the PATH, and what the event log recorded
@@ -258,6 +259,22 @@ Codex starts a hook in the session's directory, so the Codex entries change
 to the repository's root first. It runs a project's hooks only once you trust
 the project and approve them: it asks when it starts, and `/hooks` in Codex
 lists them.
+
+### Gemini CLI
+
+*Unreleased:* `fairlead hooks install --gemini` merges the same three hooks
+into `.gemini/settings.json`, under Gemini CLI's names for the moments:
+`BeforeTool` for the write stage, `AfterTool` for the brief nudge and
+`AfterAgent` for the Stop hook, which sends the agent back with its reason
+as a new prompt. Its timeouts are in milliseconds, and the edit matcher is
+`write_file|replace`; `run_shell_command` stands for `Bash` when there are
+`[[guard.commands]]`. The write hook reads `write_file` as a write and
+`replace` as an edit (`allow_multiple` as `replace_all`), and answers a
+`BeforeTool` call in Gemini CLI's shape: a top-level `decision` and
+`reason`. Gemini CLI has no way for a hook to add a note for the agent
+before a tool runs, so with `on_finding = "warn"` the findings are shown to
+you as a system message instead. It runs a project's hooks only in a folder
+you trust, and warns once when it first sees them.
 
 ## The git hook
 
