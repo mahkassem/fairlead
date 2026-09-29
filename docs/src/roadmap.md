@@ -10,6 +10,6 @@
 | K5 | MCP server, trackers, headless runner, token sources | Planned |
 | K6 | Blueprints, readiness score, insights, 1.0 | Planned |
 
-Alongside the milestones, [any stack, any framework, any layout](https://github.com/mahkassem/fairlead/issues/47) brings more of what Fairlead reads. PHP, Vue, Svelte and Astro components, and coverage maps shipped in 0.5.0; Python and Go, framework packs such as Laravel's, and folders of several repositories are next.
+Alongside the milestones, [any stack, any framework, any layout](https://github.com/mahkassem/fairlead/issues/47) brings more of what Fairlead reads. Python, Go, PHP, Vue, Svelte and Astro components, external graph providers and coverage maps shipped in 0.5.0; framework packs such as Laravel's and folders of several repositories are next.
 
 Each milestone is an issue on GitHub with its exit criteria.

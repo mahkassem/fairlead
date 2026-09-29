@@ -82,13 +82,14 @@ of trying things like a stranger.
 
 ## Works with
 
-- **Any test runner.** Vitest, Jest, Playwright, `node --test`, Bun: a runner is
-  one command in your config, so Fairlead never needs a plugin for your stack.
+- **Any test runner.** Vitest, Jest, Playwright, `node --test`, Bun, pytest,
+  `go test`, PHPUnit and Pest: a runner is one command in your config, so
+  Fairlead never needs a plugin for your stack.
 - **Monorepos, precisely.** pnpm, npm, yarn and bun workspaces. A pnpm lockfile
   change runs only the packages whose dependencies actually changed.
-- **No install needed to read your code.** The JavaScript and TypeScript import
-  graph comes from source alone, with tsconfig paths resolved and parsed files
-  cached, so a plan takes a fraction of a second.
+- **No install needed to read your code.** The import graph comes from source
+  alone, with tsconfig paths, `go.mod` and composer's autoload resolved and
+  parsed files cached, so a plan takes a fraction of a second.
 - **Your CI, not a new one.** A GitHub Action and `ci plan --format github` for
   Actions, and a JSON plan with a published schema for any other CI.
 - **Proven on real projects.** Recall is replayed from the CI history of Effect,
@@ -98,9 +99,10 @@ of trying things like a stranger.
 - **One binary, everywhere.** Linux, macOS and Windows, installed with a shell
   script, PowerShell or npm.
 
-*It reads JavaScript and TypeScript, Vue, Svelte and Astro components, and
-PHP (since 0.5.0), and a coverage map adds what imports can't show. More
-languages, framework packs and folders of several repositories are on the way
+*It reads JavaScript and TypeScript since 0.2.0, and Python, Go, PHP and Vue,
+Svelte and Astro components since 0.5.0. An external provider feeds the graph
+for any other language, and a coverage map adds what imports can't show.
+Framework packs and folders of several repositories are on the way
 ([#47](https://github.com/mahkassem/fairlead/issues/47)).*
 
 ## What it does
