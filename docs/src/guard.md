@@ -259,6 +259,7 @@ to the repository's root first. It runs a project's hooks only once you trust
 the project and approve them: it asks when it starts, and `/hooks` in Codex
 lists them.
 
+## The git hook
 
 The commit stage runs through [lefthook](https://github.com/evilmartians/lefthook):
 install adds a `fairlead-guard` command running `fairlead guard check --staged`
