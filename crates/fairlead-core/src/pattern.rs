@@ -1,7 +1,8 @@
 //! Globs that can capture a path segment: `services/{name}/src/**` matches
 //! `services/api/src/x.ts` with `name = "api"`. Owner rules and module
 //! patterns need the capture, which `globset` can't give, so these compile
-//! to an anchored regex. `{a,b}` with a comma is still an alternation.
+//! to an anchored regex. `{a,b}` with a comma is still an alternation, and
+//! may nest; a backslash makes the next character literal, so `\[` is `[`.
 
 use std::collections::BTreeMap;
 
@@ -97,23 +98,33 @@ fn translate(glob: &str, values: &Captures) -> Result<String, String> {
                 out.push_str("[^/]");
                 i += 1;
             }
+            '\\' => {
+                let literal = chars.get(i + 1).copied().unwrap_or('\\');
+                out.push_str(&regex::escape(&literal.to_string()));
+                i += 2;
+            }
             '{' => {
-                let close = chars[i..]
-                    .iter()
-                    .position(|&c| c == '}')
-                    .ok_or_else(|| format!("`{glob}`: unclosed `{{`"))?;
-                let inner: String = chars[i + 1..i + close].iter().collect();
+                let (close, commas) =
+                    group(&chars, i).ok_or_else(|| format!("`{glob}`: unclosed `{{`"))?;
+                let inner: String = chars[i + 1..close].iter().collect();
                 if is_capture(&inner) {
                     match values.get(&inner) {
                         Some(value) => out.push_str(&regex::escape(value)),
                         None => out.push_str(&format!("(?P<{inner}>[^/]+)")),
                     }
                 } else {
-                    let alternatives: Result<Vec<String>, String> =
-                        inner.split(',').map(|a| translate(a, values)).collect();
+                    let mut bounds = vec![i];
+                    bounds.extend(&commas);
+                    bounds.push(close);
+                    let alternatives: Result<Vec<String>, String> = bounds
+                        .windows(2)
+                        .map(|w| {
+                            translate(&chars[w[0] + 1..w[1]].iter().collect::<String>(), values)
+                        })
+                        .collect();
                     out.push_str(&format!("(?:{})", alternatives?.join("|")));
                 }
-                i += close + 1;
+                i = close + 1;
             }
             '[' => {
                 let close = chars[i..]
@@ -134,6 +145,31 @@ fn translate(glob: &str, values: &Captures) -> Result<String, String> {
         }
     }
     Ok(out)
+}
+
+/// The `}` closing the brace group opening at `open`, and the commas at its
+/// own depth, skipping escaped characters and `[...]` classes.
+fn group(chars: &[char], open: usize) -> Option<(usize, Vec<usize>)> {
+    let mut depth = 0;
+    let mut commas = Vec::new();
+    let mut i = open;
+    while i < chars.len() {
+        match chars[i] {
+            '\\' => i += 1,
+            '[' => i += chars[i..].iter().position(|&c| c == ']')?,
+            '{' => depth += 1,
+            '}' => {
+                depth -= 1;
+                if depth == 0 {
+                    return Some((i, commas));
+                }
+            }
+            ',' if depth == 1 => commas.push(i),
+            _ => {}
+        }
+        i += 1;
+    }
+    None
 }
 
 #[cfg(test)]
@@ -178,6 +214,19 @@ mod tests {
             assert!(!filled.is_match("pages/s/x.ts"), "{value}");
             assert!(!filled.is_match("pages/other/x.ts"), "{value}");
         }
+    }
+
+    #[test]
+    fn alternations_nest_and_a_backslash_makes_the_next_character_literal() {
+        let nested = "{src/**/*.test.{ts,tsx},tests/**/*.test.ts}";
+        assert!(m(nested, "src/a/b.test.tsx"));
+        assert!(m(nested, "tests/c.test.ts"));
+        assert!(!m(nested, "tests/c.test.tsx"));
+        assert!(m("app/**/\\[...slug\\]/**", "app/docs/[...slug]/page.tsx"));
+        assert!(!m("app/**/\\[...slug\\]/**", "app/docs/s/page.tsx"));
+        assert!(m("a\\{b\\}.ts", "a{b}.ts"));
+        assert!(m("{a\\,b,c}.ts", "a,b.ts"));
+        assert!(Pattern::new("{a,{b,c}").is_err());
     }
 
     #[test]
