@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### New
+
+- `fairlead init` writes a first `fairlead.toml` from what the repository shows: a runner for Vitest, Jest, Mocha, `bun test` or `node --test` through the lockfile's package runner, `go test`, pytest (through `uv` or `poetry` when they're used) and PHPUnit, Pest or `artisan test`, each added only when its `match` finds a test file, and a whole-suite check for Rust, Java, Kotlin, .NET and Ruby, which the graph doesn't read yet. It validates what it wrote and never replaces a config without `--force`. See [A first config](https://mahkassem.github.io/fairlead/docs/install.html#a-first-config-fairlead-init).
+
 ## 0.6.0 (2026-09-29)
 
 ### New

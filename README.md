@@ -139,6 +139,7 @@ Then `fairlead doctor` says which binary, platform and config it would use.
 ## Quick start
 
 ```sh
+fairlead init                                # a first fairlead.toml, from what the repository shows
 fairlead config check                        # validate fairlead.toml
 fairlead plan --base main                    # the tests and checks this branch can affect
 fairlead test --explain src/a.test.ts        # why that test is in the plan, or isn't
