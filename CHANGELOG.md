@@ -23,6 +23,7 @@
 - `replay fetch` retries a 5xx from GitHub up to three times, after 5, 10 and 15 seconds; one transient 500 used to stop the whole fetch.
 - Globs take nested alternations (`{src/**/*.test.{ts,tsx},tests/**}`) and backslash escapes (`\[...slug\]`); both used to fail at plan time. `config check` now compiles every glob the planner compiles (test matches, runners, owners, `plan.run_all`, `plan.ignore`), so a bad one fails there instead of the first time a change reaches it.
 - `config check` warns when a layer writes `[]` over a list that already has items: lists append, so it changes nothing, and `{ replace = [] }` is what clears one.
+- Replay no longer bloats a blobless clone: checking whether a recorded commit is present made git lazily fetch it without negotiation, resending the whole history's trees each time, and a bench clone grew to 13 GiB. Commit lookups now set `GIT_NO_LAZY_FETCH` (git 2.44 or later), and missing commits come through the one negotiated fetch.
 
 ## 0.5.0 (2026-09-28)
 
