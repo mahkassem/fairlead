@@ -83,7 +83,6 @@ pub fn validate(config: &Config) -> Vec<Problem> {
             }
         }
     }
-    plan_globs(config, &mut problems);
     checks(config, &mut problems);
     replay(config, &mut problems);
     graph_edges(config, &mut problems);
@@ -93,8 +92,11 @@ pub fn validate(config: &Config) -> Vec<Problem> {
 }
 
 /// The globs `fairlead plan` compiles, which would otherwise fail only once
-/// a change reached them.
-fn plan_globs(config: &Config, problems: &mut Vec<Problem>) {
+/// a change reached them. Kept out of `validate`, which every load runs,
+/// hooks included, since compiling them all costs more than a hook's budget.
+pub fn plan_globs(config: &Config) -> Vec<Problem> {
+    let mut problems = Vec::new();
+    let problems = &mut problems;
     let tests = &config.tests;
     globs("tests.match", tests.matches.items(), problems);
     globs("tests.exclude", tests.exclude.items(), problems);
@@ -122,6 +124,7 @@ fn plan_globs(config: &Config, problems: &mut Vec<Problem>) {
     }
     globs("plan.run_all", config.plan.run_all.items(), problems);
     globs("plan.ignore", config.plan.ignore.items(), problems);
+    std::mem::take(problems)
 }
 
 fn globs(key: &str, globs: &[String], problems: &mut Vec<Problem>) {
