@@ -79,7 +79,8 @@ of trying things like a stranger.
   works, catching a wrong move in seconds instead of minutes later in CI.
   *Since 0.4.0:* `[guard.*]` rules run in a Claude Code hook before each edit
   and in a git commit hook, and `fairlead guard check` runs them on the tree.
-  *Unreleased:* the same hooks for Codex, with `fairlead hooks install --codex`.
+  *Unreleased:* the same hooks for Codex and Gemini CLI, with
+  `fairlead hooks install --codex` or `--gemini`.
 
 ## Works with
 

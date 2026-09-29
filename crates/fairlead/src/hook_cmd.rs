@@ -71,6 +71,10 @@ pub fn run() -> ExitCode {
         .get("tool_name")
         .and_then(Value::as_str)
         .map(String::from);
+    let hook_event = call
+        .get("hook_event_name")
+        .and_then(Value::as_str)
+        .map(String::from);
     let record = |decision: &'static str, outcome: Option<&Outcome>| {
         let Some(log) = &log else { return };
         let mut event = Event::new("write", decision, start.elapsed());
@@ -106,7 +110,7 @@ pub fn run() -> ExitCode {
         Ok(Ok(Some(outcome))) => {
             record(outcome.decision, Some(&outcome));
             if let Some(answer) = &outcome.answer {
-                println!("{answer}");
+                println!("{}", hook::for_event(answer, hook_event.as_deref()));
             }
         }
         Ok(Ok(None)) => {}

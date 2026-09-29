@@ -44,9 +44,9 @@ fn replace(edit: &Value) -> Option<(String, String, bool)> {
     Some((
         string(edit, "old_string")?.to_string(),
         string(edit, "new_string")?.to_string(),
-        edit.get("replace_all")
-            .and_then(Value::as_bool)
-            .unwrap_or(false),
+        ["replace_all", "allow_multiple"]
+            .iter()
+            .any(|k| edit.get(*k).and_then(Value::as_bool) == Some(true)),
     ))
 }
 
@@ -59,6 +59,13 @@ pub fn request(call: &Value) -> Request {
     let unknown = |why| Request::Unknown {
         tool: tool.to_string(),
         why,
+    };
+    // Gemini CLI names its tools in snake case, with Claude Code's arguments.
+    let tool = match tool {
+        "run_shell_command" => "Bash",
+        "write_file" => "Write",
+        "replace" => "Edit",
+        other => other,
     };
     if tool == "Bash" {
         if let Some(files) = string(input, "command").and_then(shell_patch) {
@@ -124,6 +131,26 @@ pub fn rebuild(current: &str, edits: &[(String, String, bool)]) -> Rebuilt {
         })
         .collect();
     edit::apply(current, &replaces)
+}
+
+/// The answer in the shape the calling agent reads: Gemini CLI's
+/// `BeforeTool` takes a top-level `decision` and `reason`, and shows a
+/// note only to the person, as `systemMessage`.
+pub fn for_event(answer: &Value, event: Option<&str>) -> Value {
+    if event != Some("BeforeTool") {
+        return answer.clone();
+    }
+    let out = &answer["hookSpecificOutput"];
+    match (
+        out["permissionDecision"].as_str(),
+        out["permissionDecisionReason"].as_str(),
+    ) {
+        (Some("deny"), Some(reason)) => json!({ "decision": "deny", "reason": reason }),
+        _ => match out["additionalContext"].as_str() {
+            Some(note) => json!({ "systemMessage": note }),
+            None => answer.clone(),
+        },
+    }
 }
 
 /// Stops the call; the reason is what the agent reads.
@@ -259,6 +286,41 @@ mod tests {
             request(&call("Bash", json!({"command": echo}))),
             Request::Bash { .. }
         ));
+    }
+
+    #[test]
+    fn gemini_tools_read_as_their_claude_code_twins_and_answers_take_its_shape() {
+        assert_eq!(
+            request(&call(
+                "write_file",
+                json!({"file_path": "a.ts", "content": "x"})
+            )),
+            Request::Write {
+                path: "a.ts".into(),
+                text: "x".into()
+            }
+        );
+        assert_eq!(
+            request(&call(
+                "replace",
+                json!({"file_path": "a.ts", "old_string": "a", "new_string": "b", "allow_multiple": true})
+            )),
+            Request::Edit {
+                path: "a.ts".into(),
+                edits: vec![("a".into(), "b".into(), true)]
+            }
+        );
+        assert!(matches!(
+            request(&call("run_shell_command", json!({"command": "ls"}))),
+            Request::Bash { .. }
+        ));
+        let denied = for_event(&deny("no"), Some("BeforeTool"));
+        assert_eq!(denied, json!({"decision": "deny", "reason": "no"}));
+        assert_eq!(
+            for_event(&warn("note"), Some("BeforeTool")),
+            json!({"systemMessage": "note"})
+        );
+        assert_eq!(for_event(&deny("no"), Some("PreToolUse")), deny("no"));
     }
 
     #[test]
