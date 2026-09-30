@@ -13,6 +13,7 @@ mod graph_cmd;
 mod guard_cmd;
 mod hook_cmd;
 mod hooks_cmd;
+mod init_cmd;
 mod plan_cmd;
 mod receipt_cmd;
 mod replay_cmd;
@@ -44,6 +45,11 @@ struct Cli {
 enum Command {
     /// Report the binary, the platform and the config Fairlead would use here.
     Doctor,
+    /// Write a first fairlead.toml from what the repository shows: its test runners, and a check for each language the graph doesn't read.
+    Init {
+        #[command(flatten)]
+        args: init_cmd::InitArgs,
+    },
     /// Validate, show or describe the config.
     Config {
         #[command(subcommand)]
@@ -365,6 +371,7 @@ fn main() -> ExitCode {
             );
             ExitCode::SUCCESS
         }
+        Some(Command::Init { args }) => init_cmd::run(args, &cwd()),
         Some(Command::Config { action, sets }) => run_config(action, sets),
         Some(Command::Graph { action, sets }) => graph_cmd::run(action, sets, &cwd()),
         Some(Command::Coverage { action }) => coverage_cmd::run(action, &cwd()),

@@ -2,8 +2,13 @@
 
 ## Unreleased
 
+### New
+
+- `fairlead init` writes a first `fairlead.toml` from what the repository shows: a runner for Vitest, Jest, Mocha, `bun test` or `node --test` through the lockfile's package runner, `go test`, pytest (through `uv` or `poetry` when they're used) and PHPUnit, Pest or `artisan test`, each added only when its `match` finds a test file, and a whole-suite check for Rust, Java, Kotlin, .NET and Ruby, which the graph doesn't read yet. It validates what it wrote and never replaces a config without `--force`. See [A first config](https://mahkassem.github.io/fairlead/docs/install.html#a-first-config-fairlead-init).
+
 ### Fixed
 
+- A plan in a repository where no file matches `[tests] match` warns `no-tests` and names `fairlead init`, and says "everything, and there's nothing to run" where it used to say "everything" over 0 tests.
 - `fairlead hooks --help` and `hooks install --help` name every hook install adds: the guard before an edit, the brief nudge after one, the Stop hook and the git hook, where they used to name one Claude Code hook.
 
 ## 0.6.0 (2026-09-29)
