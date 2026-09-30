@@ -204,6 +204,33 @@ fn javascript(root: &Path, files: &[String], found: &mut Found) {
             standard,
             args(&["node", "--test", "{files}"]),
         )
+    } else if depends("ava") {
+        let matches = match manifest["ava"]["files"].as_array() {
+            Some(globs) => globs
+                .iter()
+                .filter_map(|g| g.as_str())
+                .map(String::from)
+                .collect(),
+            None => [
+                "**/*.{test,spec}.{js,mjs,cjs,ts}",
+                "**/test-*.{js,mjs,cjs,ts}",
+                "test/**/*.{js,mjs,cjs,ts}",
+                "tests/**/*.{js,mjs,cjs,ts}",
+                "**/__tests__/**/*.{js,mjs,cjs,ts}",
+            ]
+            .map(String::from)
+            .to_vec(),
+        };
+        found.notes.push(
+            "ava: copy any options or environment (such as NODE_OPTIONS) from scripts.test into the runner's command"
+                .into(),
+        );
+        (
+            "ava",
+            "ava in package.json",
+            matches,
+            with(&["ava", "{files}"]),
+        )
     } else if depends("mocha") {
         let spec_dir = vec!["test/**/*.{js,mjs,cjs,ts}".to_string()];
         let matches = if count(files, &standard) > 0 {
@@ -229,6 +256,15 @@ fn javascript(root: &Path, files: &[String], found: &mut Found) {
         }
         return;
     };
+    let modules: &[&str] = match id {
+        "vitest" => &["vitest"],
+        "jest" => &["@jest/globals"],
+        "bun" => &["bun:test"],
+        "node" => &["node:test"],
+        _ => &[],
+    };
+    let mut matches = matches;
+    matches.extend(importing(root, files, &matches, modules));
     push(found, files, id, why, matches, command);
     if depends("@playwright/test") {
         found.notes.push(
@@ -236,6 +272,49 @@ fn javascript(root: &Path, files: &[String], found: &mut Found) {
                 .into(),
         );
     }
+}
+
+/// Patterns for test files the runner's patterns miss but that import its
+/// module, such as a `test.ts` beside each function: a name two files share
+/// becomes `**/name`, a name one file has stays that file's path.
+fn importing(root: &Path, files: &[String], matches: &[String], modules: &[&str]) -> Vec<String> {
+    if modules.is_empty() {
+        return Vec::new();
+    }
+    let known: Vec<Pattern> = matches
+        .iter()
+        .filter_map(|g| Pattern::new(g).ok())
+        .collect();
+    let quoted: Vec<String> = modules
+        .iter()
+        .flat_map(|m| [format!("\"{m}\""), format!("'{m}'")])
+        .collect();
+    let mut names: std::collections::BTreeMap<&str, Vec<&String>> = Default::default();
+    for file in files.iter().filter(|f| !f.contains("node_modules/")) {
+        let name = file.rsplit('/').next().unwrap_or(file);
+        let script = [".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".mts", ".cts"]
+            .iter()
+            .any(|e| name.ends_with(e));
+        if !script || !(name.contains("test") || name.contains("spec")) {
+            continue;
+        }
+        if known.iter().any(|p| p.is_match(file)) {
+            continue;
+        }
+        let Ok(text) = std::fs::read_to_string(root.join(file)) else {
+            continue;
+        };
+        if quoted.iter().any(|q| text.contains(q.as_str())) {
+            names.entry(name).or_default().push(file);
+        }
+    }
+    names
+        .into_iter()
+        .flat_map(|(name, paths)| match paths.as_slice() {
+            [one] => vec![(*one).clone()],
+            _ => vec![format!("**/{name}")],
+        })
+        .collect()
 }
 
 /// `scripts.test`, with each script it runs by name (`npm run unit`) put in
@@ -292,6 +371,12 @@ fn python(files: &[String], found: &mut Found) {
         )
     };
     push(found, files, "pytest", why, matches, command);
+    if has("tests/runtests.py") {
+        found.notes.push(
+            "tests/runtests.py is this project's own test runner; if its suite doesn't run under pytest, change the pytest runner's command"
+                .into(),
+        );
+    }
 }
 
 fn php(root: &Path, files: &[String], found: &mut Found) {
@@ -321,8 +406,34 @@ fn php(root: &Path, files: &[String], found: &mut Found) {
     } else {
         return;
     };
-    let matches = vec!["tests/**/*Test.php".to_string()];
+    let matches =
+        phpunit_dirs(root, files).unwrap_or_else(|| vec!["tests/**/*Test.php".to_string()]);
     push(found, files, id, why, matches, command);
+}
+
+/// The test directories `phpunit.xml` or `phpunit.xml.dist` names, each with
+/// its `suffix` (`Test.php` by default), since not every project calls the
+/// folder `tests`.
+fn phpunit_dirs(root: &Path, files: &[String]) -> Option<Vec<String>> {
+    let name = ["phpunit.xml", "phpunit.xml.dist"]
+        .into_iter()
+        .find(|n| files.iter().any(|f| f == n))?;
+    let text = std::fs::read_to_string(root.join(name)).ok()?;
+    let directory = regex::Regex::new(r#"<directory([^>]*)>\s*([^<]+?)\s*</directory>"#).ok()?;
+    let suffix = regex::Regex::new(r#"suffix\s*=\s*"([^"]+)""#).ok()?;
+    let mut out: Vec<String> = directory
+        .captures_iter(&text)
+        .map(|c| {
+            let dir = c[2].trim_start_matches("./").trim_end_matches('/');
+            let end = suffix
+                .captures(&c[1])
+                .map_or("Test.php".to_string(), |s| s[1].to_string());
+            format!("{dir}/**/*{end}")
+        })
+        .collect();
+    out.sort();
+    out.dedup();
+    (!out.is_empty()).then_some(out)
 }
 
 /// Languages the import graph doesn't read yet: a check runs the whole suite
@@ -361,6 +472,19 @@ fn fallbacks(files: &[String], found: &mut Found) {
             why: ".NET isn't in the import graph yet",
             paths: vec!["**/*.cs", "**/*.csproj", "**/*.sln"],
             command: vec!["dotnet", "test"],
+        });
+    }
+    if has("Gemfile")
+        && !files.iter().any(|f| f.starts_with("spec/"))
+        && files
+            .iter()
+            .any(|f| f.starts_with("test/") && f.ends_with("_test.rb"))
+    {
+        found.checks.push(Check {
+            id: "rake-test",
+            why: "Ruby isn't in the import graph yet",
+            paths: vec!["**/*.rb", "Gemfile", "Gemfile.lock"],
+            command: vec!["bundle", "exec", "rake", "test"],
         });
     }
     if has("Gemfile") && files.iter().any(|f| f.starts_with("spec/")) {
@@ -439,12 +563,15 @@ fn render(found: &Found) -> String {
          # lists every key.\n\
          fairlead = \"{minor}\"\n"
     );
-    if !found.runners.is_empty() {
-        let mut all: Vec<&String> = found.runners.iter().flat_map(|r| &r.matches).collect();
-        all.sort();
-        all.dedup();
-        out.push_str(&format!("\n[tests]\nmatch = {}\n", list(&all)));
-    }
+    // Replacing the built-in patterns, which lists would otherwise append to,
+    // keeps a test file no runner here covers out of the plan.
+    let mut all: Vec<&String> = found.runners.iter().flat_map(|r| &r.matches).collect();
+    all.sort();
+    all.dedup();
+    out.push_str(&format!(
+        "\n[tests]\nmatch = {{ replace = {} }}\n",
+        list(&all)
+    ));
     for r in &found.runners {
         out.push_str(&format!(
             "\n# {}: {} test files, from {}.\n[[tests.runners]]\nid = \"{}\"\nmatch = {}\ncommand = {}\n",

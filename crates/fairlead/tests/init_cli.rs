@@ -108,7 +108,7 @@ fn go_python_and_rust_in_one_repository_get_a_runner_each_and_a_check_for_rust()
     );
     assert!(out.contains(r#"id = "cargo-test""#), "{out}");
     assert!(
-        out.contains(r#"match = ["**/*_test.go", "**/test_*.py"]"#),
+        out.contains(r#"match = { replace = ["**/*_test.go", "**/test_*.py"] }"#),
         "{out}"
     );
     assert!(
@@ -194,4 +194,117 @@ fn a_repository_init_knows_nothing_about_gets_no_config() {
         "{out}"
     );
     assert!(!dir.join("fairlead.toml").exists());
+}
+
+#[test]
+fn test_files_no_runner_covers_stay_out_so_the_plan_still_runs() {
+    let dir = repo(
+        "stray",
+        &[
+            ("pyproject.toml", "[project]\nname = \"p\"\n"),
+            ("pkg/a.py", "x = 1\n"),
+            ("tests/test_a.py", "from pkg import a\n"),
+            ("js_tests/core.test.js", "test('x', () => {});\n"),
+        ],
+    );
+    let (code, out) = fairlead(&dir, &["init"]);
+    assert_eq!(code, 0, "{out}");
+    let (code, out) = fairlead(&dir, &["plan", "--files", "pkg/a.py"]);
+    assert_eq!(
+        code, 0,
+        "a JavaScript test no runner covers must not stop the plan: {out}"
+    );
+    assert!(!out.contains("js_tests"), "{out}");
+}
+
+#[test]
+fn phpunit_test_directories_come_from_its_config() {
+    let dir = repo(
+        "phpdirs",
+        &[
+            (
+                "composer.json",
+                r#"{ "require-dev": { "phpunit/phpunit": "^10" } }"#,
+            ),
+            (
+                "phpunit.xml.dist",
+                r#"<phpunit><testsuites><testsuite name="unit"><directory>./Tests/</directory><directory suffix="Spec.php">./specs</directory></testsuite></testsuites></phpunit>"#,
+            ),
+            ("Tests/Command/RunTest.php", "<?php\n"),
+            ("specs/RunSpec.php", "<?php\n"),
+        ],
+    );
+    let (code, out) = fairlead(&dir, &["init", "--dry-run"]);
+    assert_eq!(code, 0, "{out}");
+    assert!(
+        out.contains(r#"match = ["Tests/**/*Test.php", "specs/**/*Spec.php"]"#),
+        "{out}"
+    );
+    assert!(out.contains("2 test files"), "{out}");
+}
+
+#[test]
+fn test_files_that_import_the_runner_are_found_whatever_they_are_called() {
+    let dir = repo(
+        "importing",
+        &[
+            (
+                "package.json",
+                r#"{ "devDependencies": { "vitest": "^3" } }"#,
+            ),
+            ("src/addDays/index.ts", "export const addDays = 1;\n"),
+            (
+                "src/addDays/test.ts",
+                "import { it } from \"vitest\";\nimport { addDays } from \"./index\";\n",
+            ),
+            ("src/subDays/test.ts", "import { it } from 'vitest';\n"),
+            ("src/only/testing.ts", "import { it } from 'vitest';\n"),
+            ("src/helpers/test.ts", "export const notATest = 1;\n"),
+        ],
+    );
+    let (code, out) = fairlead(&dir, &["init"]);
+    assert_eq!(code, 0, "{out}");
+    let config = std::fs::read_to_string(dir.join("fairlead.toml")).unwrap();
+    assert!(config.contains(r#""**/test.ts""#), "{config}");
+    assert!(config.contains(r#""src/only/testing.ts""#), "{config}");
+    let (code, out) = fairlead(&dir, &["plan", "--files", "src/addDays/index.ts"]);
+    assert_eq!(code, 0, "{out}");
+    assert!(out.contains("src/addDays/test.ts"), "{out}");
+}
+
+#[test]
+fn ava_and_minitest_are_recognised() {
+    let dir = repo(
+        "ava",
+        &[
+            (
+                "package.json",
+                r#"{ "devDependencies": { "ava": "^6" }, "ava": { "files": ["test/*.js"] } }"#,
+            ),
+            ("test/a.js", "import test from 'ava';\n"),
+        ],
+    );
+    let (code, out) = fairlead(&dir, &["init", "--dry-run"]);
+    assert_eq!(code, 0, "{out}");
+    assert!(
+        out.contains(r#"command = ["npx", "ava", "{files}"]"#),
+        "{out}"
+    );
+    assert!(out.contains(r#"match = ["test/*.js"]"#), "{out}");
+
+    let dir = repo(
+        "minitest",
+        &[
+            ("Gemfile", "source 'https://rubygems.org'\n"),
+            ("Rakefile", "task default: :test\n"),
+            ("lib/app.rb", "class App; end\n"),
+            ("test/app_test.rb", "require 'minitest/autorun'\n"),
+        ],
+    );
+    let (code, out) = fairlead(&dir, &["init", "--dry-run"]);
+    assert_eq!(code, 0, "{out}");
+    assert!(
+        out.contains(r#"command = ["bundle", "exec", "rake", "test"]"#),
+        "{out}"
+    );
 }
