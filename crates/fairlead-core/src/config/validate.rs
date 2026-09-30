@@ -464,24 +464,31 @@ fn graph_edges(config: &Config, problems: &mut Vec<Problem>) {
     }
 }
 
+/// Whether a `fairlead` pin names a later version than this binary, or
+/// `None` when it isn't a version.
+pub(crate) fn needs_later(pin: &str) -> Option<bool> {
+    let parse = |v: &str| -> Option<Vec<u64>> { v.split('.').map(|p| p.parse().ok()).collect() };
+    let want = parse(pin)?;
+    let have = parse(env!("CARGO_PKG_VERSION")).expect("the crate version is a version");
+    Some(want > have[..want.len().min(have.len())].to_vec())
+}
+
+pub(crate) fn needs_later_message(pin: &str) -> String {
+    format!(
+        "this config needs Fairlead {pin} or later; this is {}",
+        env!("CARGO_PKG_VERSION")
+    )
+}
+
 fn version_pin(config: &Config, problems: &mut Vec<Problem>) {
     let Some(pin) = &config.fairlead else { return };
-    let parse = |v: &str| -> Option<Vec<u64>> { v.split('.').map(|p| p.parse().ok()).collect() };
-    match (parse(pin), parse(env!("CARGO_PKG_VERSION"))) {
-        (Some(want), Some(have)) if want > have[..want.len().min(have.len())].to_vec() => {
-            problems.push(problem(
-                "fairlead",
-                format!(
-                    "this config needs Fairlead {pin} or later; this is {}",
-                    env!("CARGO_PKG_VERSION")
-                ),
-            ));
-        }
-        (None, _) => problems.push(problem(
+    match needs_later(pin) {
+        Some(true) => problems.push(problem("fairlead", needs_later_message(pin))),
+        None => problems.push(problem(
             "fairlead",
             format!("`{pin}` isn't a version like \"0.2\""),
         )),
-        _ => {}
+        Some(false) => {}
     }
 }
 
