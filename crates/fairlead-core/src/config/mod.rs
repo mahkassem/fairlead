@@ -2,13 +2,15 @@
 //! valid config, and the same types read TOML and YAML.
 
 mod load;
+mod quarantine;
 mod validate;
 
 pub use load::{
     find_config, load, load_file, ConfigError, LoadOptions, Loaded, ENV_NAME, LOCAL_NAMES,
     PROJECT_NAMES,
 };
-pub use validate::{plan_globs, validate, Problem, GUARD_RULES};
+pub use quarantine::{Condition, Os, PlatformQuarantine};
+pub use validate::{is_date, plan_globs, validate, Problem, GUARD_RULES};
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -74,6 +76,11 @@ pub struct Config {
     pub graph: Graph,
     pub tests: Tests,
     pub checks: List<Check>,
+    /// Tests and checks that fail on one platform whatever the change, held
+    /// there with their evidence. Left out of the digest when empty, so
+    /// configs without them keep their plan ids.
+    #[serde(skip_serializing_if = "List::is_empty")]
+    pub quarantine: List<PlatformQuarantine>,
     pub plan: Plan,
     pub replay: Replay,
     pub guard: Guard,

@@ -2,7 +2,6 @@
 //! `file:line message` or `file:line:column message`, one per line.
 
 use std::path::Path;
-use std::process::Command;
 use std::sync::OnceLock;
 
 use fairlead_core::config::{ExternalRule, Stage};
@@ -50,9 +49,8 @@ impl External {
         let (program, args) = argv
             .split_first()
             .ok_or_else(|| format!("{}: the command is empty", self.id))?;
-        let out = Command::new(program)
+        let out = fairlead_core::process::command(program, root)
             .args(args)
-            .current_dir(root)
             .output()
             .map_err(|e| format!("{}: {program}: {e}", self.id))?;
         let found = parse(self.id, &String::from_utf8_lossy(&out.stdout));

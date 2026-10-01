@@ -12,6 +12,7 @@ pub mod modules;
 pub mod owners;
 pub use fairlead_core::pattern;
 pub mod planner;
+pub mod quarantine;
 pub mod render;
 pub mod select;
 pub mod testfiles;

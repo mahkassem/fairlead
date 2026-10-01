@@ -21,6 +21,8 @@ In order:
 
 Each step prints its command, then whether it passed and how long it took. The gate stops at the first failure unless `--keep-going` is given; either way it passes only when every step passed.
 
+*Unreleased:* a test or check a [`[[quarantine]]` entry](plan.md#tests-that-lie-on-one-platform) holds on this machine is the exception. When it fails with the output its entry expects, the step is *not provable here*: it doesn't fail the gate, and the gate's last line says how many steps weren't provable, so the agent can say so in the pull request. Any other failure, or any failure after the entry's date, counts. This covers a `done.always` check too. A command in a step is found the way a shell finds it, so on Windows a `.cmd` shim such as `npm` or `pnpm` starts.
+
 ```toml
 [done]
 tests  = "planned"      # planned | none
@@ -33,7 +35,7 @@ A check `done.always` names needs no `paths` or `modules`, since it always runs.
 
 ## The record
 
-Every run appends a `done` event to `.git/fairlead/events.jsonl`: the plan's tree hash, whether it passed, and each step's id, outcome and seconds, never its output. A result belongs to one tree. The tree hash is HEAD's tree when the working tree is clean, else a hash of every file's path and blob id, so any edit after a pass makes it stale, and `--check` says so. Nothing needs clearing by hand, and switching branches or rebasing can't make an old result look current.
+Every run appends a `done` event to `.git/fairlead/events.jsonl`: the plan's tree hash, whether it passed, and each step's id, outcome and seconds, never its output. A step that wasn't provable here is recorded with `"quarantined": true`. A result belongs to one tree. The tree hash is HEAD's tree when the working tree is clean, else a hash of every file's path and blob id, so any edit after a pass makes it stale, and `--check` says so. Nothing needs clearing by hand, and switching branches or rebasing can't make an old result look current.
 
 `[done]` never changes a plan, so it's left out of the plan's config digest, like `[guard]` and `[hooks]`.
 

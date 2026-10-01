@@ -2,8 +2,13 @@
 
 ## Unreleased
 
+### New
+
+- `[[quarantine]]` records a test or check that fails on one platform whatever the change, with its evidence ([#146](https://github.com/mahkassem/fairlead/issues/146)). An entry names the test file (`path`) or check (`check`), where it lies (an `os`, and `when` conditions detected on the machine: `autocrlf` for a CRLF checkout, `space-in-path` for a repository path with a space), the failure it gives (`signature`, a regex over the output), `reason`, `proved_in` and `until`. Where an entry holds, `fairlead plan` and `test --explain` list the test as not provable here, it runs alone, and `fairlead done` and `ci run` don't count a failure that matches its signature: they report it, so the agent can say so in the pull request instead of diagnosing it again. Any other failure counts, and after `until` the entry stops holding and the plan warns `quarantine-expired`. Elsewhere the entry does nothing. `fairlead config check` names the conditions it detects and whether each entry holds, and `fairlead doctor` names the conditions. The plan JSON gains an optional `quarantined` list. See [Tests that lie on one platform](https://mahkassem.github.io/fairlead/docs/plan.html#tests-that-lie-on-one-platform).
+
 ### Fixed
 
+- On Windows, `fairlead done`, `ci run`, `[[guard.external]]` rules and graph providers start a command the way a shell does. A name with no extension is looked up on `PATH` with each of `PATHEXT`'s `.com`, `.exe`, `.bat` and `.cmd`, and a relative path such as `node_modules/.bin/eslint` beside the working directory. A check or runner that called `npm`, `npx`, `pnpm` or `yarn`, which install `.cmd` shims, used to fail with "program not found".
 - `fairlead hooks --help` and `hooks install --help` name every hook install adds: the guard before an edit, the brief nudge after one, the Stop hook and the git hook, where they used to name one Claude Code hook.
 
 ## 0.6.0 (2026-09-29)

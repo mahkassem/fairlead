@@ -223,7 +223,8 @@ pub fn plan(scan: &mut Scan, config: &Config, input: Input) -> Result<Plan, Stri
                 .into(),
         });
     }
-    let invocations = invocations(&cx, &tests, &checks, all);
+    let quarantined = crate::quarantine::apply(&cx, &tests, &checks, &mut warnings);
+    let invocations = invocations(&cx, &tests, &checks, all, &quarantined);
     let plan_id = crate::digest::plan_id(
         &input.config_digest,
         &input.tree_hash,
@@ -246,6 +247,7 @@ pub fn plan(scan: &mut Scan, config: &Config, input: Input) -> Result<Plan, Stri
         invocations,
         unreached,
         warnings,
+        quarantined,
     })
 }
 

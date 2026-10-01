@@ -81,6 +81,7 @@ fairlead.toml: tests.unreachd: unknown field `unreachd`, expected one of ...
 | `tests.owners` | `[]` | Tests that don't import what they test: `match`, `covers`, and `overrides_run_all` to let a covered `plan.run_all` path select only those tests |
 | `tests.classes` | `[]` | `class` (`unit`, `own`, `demand`, `canary`) for a `match` |
 | `checks` | `[]` | Steps that aren't tests: `id`, `command`, `paths`, `modules`, `files` |
+| `quarantine` | `[]` | A test (`path`) or check (`check`) that fails on one platform whatever the change: `os`, `when` (`autocrlf`, `space-in-path`), `signature`, `reason`, `proved_in`, `until` ([Test plan](plan.md#tests-that-lie-on-one-platform)) |
 | `plan.run_all` | lockfiles, root manifests, tsconfig, runner and CI config | A changed path matching one selects everything |
 | `plan.lockfile` | `"all"` | `all`: a changed lockfile selects everything; `scope` (opt-in): a changed root `pnpm-lock.yaml` selects the workspace packages whose resolved dependencies changed |
 | `plan.ignore` | root Markdown, the changesets tool's folder (`.changeset/**`), `docs/**`, READMEs, changelogs, licences | A changed path matching one that reaches no test selects nothing, instead of falling to `tests.unreached`; one that reaches tests still selects them, and a changed test file always runs |

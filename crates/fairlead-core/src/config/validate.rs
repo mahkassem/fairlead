@@ -84,6 +84,7 @@ pub fn validate(config: &Config) -> Vec<Problem> {
         }
     }
     checks(config, &mut problems);
+    quarantine(config, &mut problems);
     replay(config, &mut problems);
     graph_edges(config, &mut problems);
     graph_providers(config, &mut problems);
@@ -570,15 +571,7 @@ fn replay(config: &Config, problems: &mut Vec<Problem>) {
     }
     for (i, entry) in config.replay.quarantine.items().iter().enumerate() {
         let key = format!("replay.quarantine[{i}]");
-        let date = entry.until.len() == 10
-            && entry.until.chars().enumerate().all(|(j, c)| {
-                if j == 4 || j == 7 {
-                    c == '-'
-                } else {
-                    c.is_ascii_digit()
-                }
-            });
-        if !date {
+        if !is_date(&entry.until) {
             problems.push(problem(
                 format!("{key}.until"),
                 "must be a date, YYYY-MM-DD",
@@ -613,6 +606,76 @@ fn replay(config: &Config, problems: &mut Vec<Problem>) {
             problems.push(problem(
                 format!("done.always[{i}]"),
                 format!("no check has id `{id}`"),
+            ));
+        }
+    }
+}
+
+/// `YYYY-MM-DD`, the form every `until` takes.
+pub fn is_date(text: &str) -> bool {
+    text.len() == 10
+        && text.chars().enumerate().all(|(j, c)| {
+            if j == 4 || j == 7 {
+                c == '-'
+            } else {
+                c.is_ascii_digit()
+            }
+        })
+}
+
+fn quarantine(config: &Config, problems: &mut Vec<Problem>) {
+    let check_ids: BTreeSet<&str> = config
+        .checks
+        .items()
+        .iter()
+        .map(|c| c.id.as_str())
+        .collect();
+    for (i, entry) in config.quarantine.items().iter().enumerate() {
+        let key = format!("quarantine[{i}]");
+        match (&entry.path, &entry.check) {
+            (Some(_), Some(_)) | (None, None) => problems.push(problem(
+                key.clone(),
+                "names one test file (`path`) or one check (`check`)",
+            )),
+            (Some(path), None) if path.trim().is_empty() || path.contains('*') => {
+                problems.push(problem(
+                    format!("{key}.path"),
+                    "must name one test file, not a pattern",
+                ))
+            }
+            (None, Some(id)) if !check_ids.contains(id.as_str()) => problems.push(problem(
+                format!("{key}.check"),
+                format!("no check has id `{id}`"),
+            )),
+            _ => {}
+        }
+        if entry.os.is_none() && entry.when.is_empty() {
+            problems.push(problem(
+                key.clone(),
+                "names no `os` and no `when`, so it would hold everywhere",
+            ));
+        }
+        regexes(
+            &format!("{key}.signature"),
+            std::slice::from_ref(&entry.signature),
+            problems,
+        );
+        for (field, text, why) in [
+            ("reason", &entry.reason, "must give the evidence"),
+            (
+                "proved_in",
+                &entry.proved_in,
+                "must say where it is proved instead",
+            ),
+        ] {
+            if text.trim().is_empty() {
+                problems.push(problem(format!("{key}.{field}"), why));
+            }
+        }
+        if !is_date(&entry.until) {
+            problems.push(problem(
+                format!("{key}.until"),
+                "must be a date, YYYY-MM-DD",
             ));
         }
     }

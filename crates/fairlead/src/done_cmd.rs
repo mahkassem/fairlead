@@ -4,15 +4,16 @@
 //! tree it checked, so a result can never stand for a tree that has changed.
 
 use std::path::Path;
-use std::process::{Command, ExitCode};
+use std::process::ExitCode;
 use std::time::Instant;
 
 use fairlead_core::config::{DoneTests, OnStop};
-use fairlead_core::plan::{Invocation, InvocationKind};
+use fairlead_core::plan::{Invocation, InvocationKind, Quarantined};
 use fairlead_guard::events::{Event, EventLog, Step};
-use fairlead_tests::git;
+use fairlead_tests::{git, quarantine};
 
 use crate::plan_cmd::{make, Changes};
+use crate::step::Outcome;
 
 #[derive(clap::Args)]
 pub struct DoneArgs {
@@ -66,28 +67,36 @@ fn gate(args: &DoneArgs, cwd: &Path) -> Result<ExitCode, String> {
         println!("done: {} steps", steps.len());
         return Ok(ExitCode::SUCCESS);
     }
+    let held = held(&planned, &steps);
     let started = Instant::now();
     let mut ran = Vec::new();
     for s in &steps {
         let at = Instant::now();
         println!("done: ({}) {}", s.cwd, s.argv.join(" "));
-        let passed = run_step(&root, s);
+        let entry = s.quarantined.as_ref().and_then(|target| {
+            held.iter()
+                .find(|q| q.kind == s.kind && &q.target == target)
+        });
+        let (outcome, _) = crate::step::run("done", &root, s, entry, false);
         let seconds = (at.elapsed().as_secs_f64() * 10.0).round() / 10.0;
-        println!(
-            "done: {} {} in {seconds} s",
-            if passed { "passed" } else { "failed" },
-            s.id
-        );
+        let (word, name) = match (outcome, entry) {
+            (Outcome::Passed, _) => ("passed", s.id.clone()),
+            (Outcome::Held, Some(q)) => ("not provable here:", format!("{} ({})", s.id, q.target)),
+            _ => ("failed", s.id.clone()),
+        };
+        println!("done: {word} {name} in {seconds} s");
         ran.push(Step {
             id: s.id.clone(),
-            passed,
+            passed: outcome == Outcome::Passed,
+            quarantined: outcome == Outcome::Held,
             seconds,
         });
-        if !passed && !args.keep_going {
+        if outcome == Outcome::Failed && !args.keep_going {
             break;
         }
     }
-    let passed = ran.len() == steps.len() && ran.iter().all(|s| s.passed);
+    let passed = ran.len() == steps.len() && ran.iter().all(|s| s.passed || s.quarantined);
+    let not_provable = ran.iter().filter(|s| s.quarantined).count();
     if let Some(log) = &log {
         let mut event = Event::new(
             "done",
@@ -99,7 +108,13 @@ fn gate(args: &DoneArgs, cwd: &Path) -> Result<ExitCode, String> {
         // The log is a record; failing to write it never changes the outcome.
         let _ = log.append(&event);
     }
-    if passed {
+    if passed && not_provable > 0 {
+        println!(
+            "done: passed, {} steps; {not_provable} failed as quarantined, so not provable here: say so in the pull request",
+            steps.len()
+        );
+        Ok(ExitCode::SUCCESS)
+    } else if passed {
         println!("done: passed, {} steps", steps.len());
         Ok(ExitCode::SUCCESS)
     } else {
@@ -155,11 +170,14 @@ pub fn steps(planned: &crate::plan_cmd::Planned) -> Result<Vec<Invocation>, Stri
                 }
             })
             .collect();
+        let root = &planned.scan.tree.root;
+        let held = quarantine::check_held(&planned.config, root, id).map(|q| q.target);
         out.push(Invocation {
             id: check.id.clone(),
             kind: InvocationKind::Check,
             cwd: ".".into(),
             argv,
+            quarantined: held,
         });
     }
     if done.guard {
@@ -173,27 +191,23 @@ pub fn steps(planned: &crate::plan_cmd::Planned) -> Result<Vec<Invocation>, Stri
                 "guard".into(),
                 "check".into(),
             ],
+            quarantined: None,
         });
     }
     Ok(out)
 }
 
-fn run_step(root: &Path, step: &Invocation) -> bool {
-    let Some((program, args)) = step.argv.split_first() else {
-        eprintln!("done: {} has no command", step.id);
-        return false;
-    };
-    match Command::new(program)
-        .args(args)
-        .current_dir(root.join(&step.cwd))
-        .status()
-    {
-        Ok(status) => status.success(),
-        Err(e) => {
-            eprintln!("done: couldn't start {program}: {e}");
-            false
+/// The entries holding the steps: the plan's, and those holding a
+/// `done.always` check the plan didn't select.
+fn held(planned: &crate::plan_cmd::Planned, steps: &[Invocation]) -> Vec<Quarantined> {
+    let mut out = planned.plan.quarantined.clone();
+    for s in steps.iter().filter(|s| s.quarantined.is_some()) {
+        if planned.plan.quarantine_of(s).is_none() {
+            let root = &planned.scan.tree.root;
+            out.extend(quarantine::check_held(&planned.config, root, &s.id));
         }
     }
+    out
 }
 
 /// The Claude Code Stop hook. It never runs the gate itself, which would
