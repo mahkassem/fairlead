@@ -119,6 +119,8 @@ This README documents Fairlead 0.6.0. Each command, by what it's for:
   then `receipt` and `next`.
 - **Measuring:** `replay` and the benchmarks.
 - **The config:** `config check`, `show` and `schema`.
+- **Upgrading:** `migrate`, which brings the hooks, the config's version
+  floor and the version pins to the release you installed. *Unreleased.*
 
 The [quick start](#quick-start) shows the first few, and the
 [book](https://mahkassem.github.io/fairlead/docs/) covers each one.

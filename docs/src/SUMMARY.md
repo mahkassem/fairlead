@@ -6,6 +6,7 @@
 
 - [Install](install.md)
 - [Configuration](config.md)
+- [Upgrading](migrate.md)
 
 # Using Fairlead
 

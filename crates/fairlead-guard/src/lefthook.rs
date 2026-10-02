@@ -237,6 +237,34 @@ pub fn remove(text: &str) -> Option<String> {
     Some(doc.join())
 }
 
+/// The command the commit stage's `run:` line holds, unquoted.
+pub fn current_run(text: &str) -> Option<String> {
+    let line = text.lines().find(|l| runs_stage(l))?;
+    let value = line.trim().trim_start_matches("- ").strip_prefix("run:")?;
+    Some(
+        value
+            .trim()
+            .trim_matches(|c| c == '"' || c == '\'')
+            .to_string(),
+    )
+}
+
+/// The config with the commit stage's `run:` line holding `run`, its
+/// indentation and quotes kept; None when the entry isn't there.
+pub fn set_run(text: &str, run: &str) -> Option<String> {
+    let mut doc = Lines::parse(text);
+    let at = doc.lines.iter().position(|l| runs_stage(l))?;
+    let line = &doc.lines[at];
+    let key = line.find("run:").expect("a stage line has `run:`") + "run:".len();
+    let value = line[key..].trim();
+    let quote = match value.chars().next() {
+        Some(q @ ('"' | '\'')) => q.to_string(),
+        _ => String::new(),
+    };
+    doc.lines[at] = format!("{} {quote}{run}{quote}", &line[..key]);
+    Some(doc.join())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -260,6 +288,20 @@ mod tests {
         let both = text(insert(other, RUN));
         assert!(both.starts_with(other));
         assert_eq!(remove(&both).unwrap(), other);
+    }
+
+    #[test]
+    fn the_stage_command_is_read_and_replaced_in_place_with_its_quotes() {
+        let config = "pre-commit:\n  commands:\n    # guard\n    fairlead-guard:\n      run: \"fairlead guard check --staged\"\n    lint:\n      run: npm run lint\n";
+        assert_eq!(current_run(config).as_deref(), Some(RUN));
+        let run = format!("bun x {RUN}");
+        let changed = set_run(config, &run).unwrap();
+        assert_eq!(
+            changed,
+            config.replace(&format!("\"{RUN}\""), &format!("\"{run}\""))
+        );
+        assert_eq!(current_run(&changed), Some(run));
+        assert_eq!(set_run("pre-push:\n  commands: {}\n", RUN), None);
     }
 
     #[test]
