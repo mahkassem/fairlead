@@ -2,7 +2,13 @@
 
 ## Unreleased
 
+### New
+
+- `fairlead migrate` brings a repository to the installed release. It replaces Fairlead's Claude Code hooks and lefthook entry with the ones this release's `hooks install` writes for the config, keeping every other setting, and uninstall still restores the file from before Fairlead. It raises the config's `fairlead` floor when the config uses a newer table, and moves Fairlead's version in `package.json` and in workflows that pin the action. Then it lists the changes since your release that need a decision. It writes nothing without `--write`, and `--check` exits 1 while anything is left, for CI. See [Upgrading](https://mahkassem.github.io/fairlead/docs/migrate.html).
+
 ### Fixed
+
+- `fairlead hooks install` on hooks an older release installed says `fairlead migrate` updates them. It used to say only that they were installed, so a repository that re-ran it after upgrading to 0.6.0 kept its old hooks, without the Stop hook or the brief nudge.
 
 - `fairlead hooks --help` and `hooks install --help` name every hook install adds: the guard before an edit, the brief nudge after one, the Stop hook and the git hook, where they used to name one Claude Code hook.
 
