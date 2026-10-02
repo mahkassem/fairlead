@@ -289,11 +289,14 @@ fn from_version(
     version(pin).map(|v| (v, format!("{pin} (the config's floor)")))
 }
 
+/// A path relative to the repository, with `/` on every platform, as git and the docs write it.
 fn shown(root: &Path, file: &Path) -> String {
-    file.strip_prefix(root)
-        .unwrap_or(file)
-        .display()
-        .to_string()
+    let relative = file.strip_prefix(root).unwrap_or(file);
+    relative
+        .components()
+        .map(|c| c.as_os_str().to_string_lossy())
+        .collect::<Vec<_>>()
+        .join("/")
 }
 
 fn updates(root: &Path, loaded: &Loaded) -> Result<(Vec<Update>, Option<String>, bool), String> {
