@@ -181,7 +181,7 @@ fn gate(log: &str, tree: &str) -> Gate {
         at: e["at"].as_str().map(String::from),
         failed_step: steps
             .iter()
-            .find(|s| s["passed"] == false)
+            .find(|s| s["passed"] == false && s["quarantined"] != true)
             .and_then(|s| s["id"].as_str().map(String::from)),
         steps: steps.len(),
         seconds: steps.iter().filter_map(|s| s["seconds"].as_f64()).sum(),

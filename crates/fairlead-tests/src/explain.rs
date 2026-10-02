@@ -7,6 +7,7 @@ use fairlead_core::plan::{Plan, Reason};
 use fairlead_lang::Scan;
 
 use crate::modules::Modules;
+use crate::quarantine::{status, Here, Status};
 use crate::render;
 use crate::testfiles::discover;
 
@@ -51,6 +52,40 @@ fn barrier_between(scan: &Scan, deps: &HashMap<u32, u32>, test: u32, changed: u3
 }
 
 pub fn explain(plan: &Plan, scan: &Scan, config: &Config, target: &str) -> Result<String, String> {
+    let why = selection(plan, scan, config, target)?;
+    Ok(why + &quarantine_note(plan, scan, config, target))
+}
+
+/// What a `[[quarantine]]` entry naming the target does here, if one does.
+fn quarantine_note(plan: &Plan, scan: &Scan, config: &Config, target: &str) -> String {
+    if let Some(q) = plan.quarantined.iter().find(|q| q.target == target) {
+        return format!(
+            "\nnot provable here: {}\nit runs alone; a failure matching `{}` is excused, and any other failure counts",
+            crate::quarantine::line(q),
+            q.signature
+        );
+    }
+    let Some(entry) = config
+        .quarantine
+        .items()
+        .iter()
+        .find(|e| e.target() == target)
+    else {
+        return String::new();
+    };
+    let here = Here::detect(&scan.tree.root);
+    let why = match status(entry, &here) {
+        Status::Elsewhere(why) => format!("it doesn't hold here ({}): {why}", here.describe()),
+        Status::Expired => format!("it ended on {}, so a failure here counts", entry.until),
+        Status::Holds(_) if plan.tests.iter().any(|t| t.path == target) => {
+            "it holds here, but its runner can't run it alone, so a failure counts".into()
+        }
+        Status::Holds(_) => "it holds here whenever a change selects it".into(),
+    };
+    format!("\na [[quarantine]] entry names it; {why}")
+}
+
+fn selection(plan: &Plan, scan: &Scan, config: &Config, target: &str) -> Result<String, String> {
     if let Some(test) = plan.tests.iter().find(|t| t.path == target) {
         return Ok(format!(
             "{target} is selected ({}):\n{}",

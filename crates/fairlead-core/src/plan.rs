@@ -58,6 +58,35 @@ pub struct Plan {
     /// Changed files nothing reaches, and what the plan did about each.
     pub unreached: Vec<UnreachedFile>,
     pub warnings: Vec<Warning>,
+    /// Selected tests and checks a `[[quarantine]]` entry holds on the
+    /// machine that made the plan: not provable here.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub quarantined: Vec<Quarantined>,
+}
+
+/// A selected test or check held here. It runs in an invocation of its
+/// own, and a failure whose output matches `signature` is not provable here.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct Quarantined {
+    /// The test file, or the check id, as the invocation names it.
+    pub target: String,
+    pub kind: InvocationKind,
+    /// What made the entry hold here: the OS and each condition it names.
+    pub here: Vec<String>,
+    pub signature: String,
+    pub reason: String,
+    pub proved_in: String,
+    pub until: String,
+}
+
+impl Plan {
+    /// The entry holding an invocation, if one does.
+    pub fn quarantine_of(&self, invocation: &Invocation) -> Option<&Quarantined> {
+        let target = invocation.quarantined.as_deref()?;
+        self.quarantined
+            .iter()
+            .find(|q| q.kind == invocation.kind && q.target == target)
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
@@ -92,6 +121,10 @@ pub struct Invocation {
     /// Repo-relative working directory.
     pub cwd: String,
     pub argv: Vec<String>,
+    /// The test file or check id this invocation runs alone because a
+    /// `[[quarantine]]` entry holds it here; see `quarantined`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub quarantined: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]

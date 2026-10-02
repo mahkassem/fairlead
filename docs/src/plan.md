@@ -96,6 +96,42 @@ The plan lists what to run as `invocations`, each an argv and a working director
 - A runner with `invoke = "per-module"` gets one per module holding selected tests, in `cwd` with `{module}` (the module's root) and `{module.id}` (its name) filled in, with files relative to that directory.
 - Under `run_all` or a widening to everything, `{files}` expands to nothing, so each runner runs its whole suite, per module for per-module runners.
 - Each selected check follows the runners.
+- A test or check a `[[quarantine]]` entry holds on this machine runs alone, after the rest (below).
+
+## Tests that lie on one platform
+
+*Unreleased:* some tests fail on one machine whatever the change. A test that splits a file on `\n` fails on a Windows checkout with `core.autocrlf=true`, since every line keeps its `\r`. A test that runs a process in `new URL(..., import.meta.url).pathname` fails with `ENOENT` on Windows, where that path is `/C:/...`, and wherever the checkout's path has a space, which it spells `%20`. Each one looks like a regression until someone diagnoses it by hand, and the next agent on that machine starts cold and pays the same again. A `[[quarantine]]` entry records the diagnosis once:
+
+```toml
+[[quarantine]]
+path = "test/headings.test.ts"       # a test file, or `check = "<id>"` for a [[checks]] entry
+when = ["autocrlf"]                  # conditions detected here, all of which must hold
+signature = "has no heading"         # a regex over the failure's output
+reason = "it splits docs/decisions.md on LF only, so a CRLF checkout keeps a CR on every heading"
+proved_in = "CI on Linux"
+until = "2026-12-31"
+
+[[quarantine]]
+path = "test/tracked-files.test.ts"
+os = "windows"                       # windows, macos or linux
+signature = "spawnSync git ENOENT"
+reason = "it runs git in a file URL's pathname, which is /C:/... on Windows"
+proved_in = "CI on Linux"
+until = "2026-12-31"
+```
+
+An entry holds where its `os` matches and every condition in `when` is detected, and only until its `until` date. The conditions are detected, never declared: `autocrlf` when git's `core.autocrlf` is true for the repository, and `space-in-path` when the repository's path has a space in it. An entry needs an `os`, a `when` or both, so it can't hold everywhere. Elsewhere it does nothing, so the same plan on Linux runs the test as usual.
+
+Where an entry holds:
+
+- `fairlead plan` lists the test or check under *not provable here*, with what made the entry hold, its evidence, where it is proved instead and its date. The plan JSON lists it in `quarantined`, and the invocation that runs it carries its name in `quarantined`.
+- It still runs, alone, so its failure can be read by itself. Its runner's other tests run together without it, and are named one by one even in a plan that runs everything. A runner whose command has no `{files}` can't run one test alone, so the plan warns `quarantine-not-separable` and the test runs with the rest.
+- `fairlead done` and `fairlead ci run` don't count a failure whose output matches `signature`. They report it as not provable here, so the agent can say so in the pull request instead of diagnosing it again or skipping it quietly. A failure with any other output is real, and counts.
+- After `until`, the entry stops holding. The plan warns `quarantine-expired`, and a failure counts again.
+
+`fairlead test --explain` says the same for one test, or why an entry doesn't hold here. `fairlead config check` names the conditions it detects on the machine and whether each entry holds, and `fairlead doctor` names the conditions.
+
+`[[replay.quarantine]]` is a different tool: it keeps a test that flakes in named CI jobs out of replay's recall ([Replay](replay.md#quarantine)).
 
 ## Reasons
 
@@ -110,3 +146,4 @@ Every test and check carries the reason that put it in first: `run-all`, `change
 - `tree_hash`: `HEAD`'s git tree id when the working tree is clean, else `worktree:` and a hash of every file's path and blob id.
 - `head`: `HEAD`'s commit when the working tree is clean, else `worktree`.
 - `base`, `all`, `changed`, `ignored`, `tests`, `checks`, `invocations`, `unreached` and `warnings` as described above.
+- `quarantined`: the selected tests and checks a `[[quarantine]]` entry holds on the machine that made the plan, left out when there are none. Each has its `target` (the test file or check id), `kind`, what made it hold (`here`), `signature`, `reason`, `proved_in` and `until`.

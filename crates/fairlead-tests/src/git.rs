@@ -103,6 +103,16 @@ pub fn head(root: &Path) -> Option<String> {
         .map(|s| s.trim().to_string())
 }
 
+/// Whether a boolean git setting is true for the repository, as git reads it.
+pub fn config_true(root: &Path, key: &str) -> bool {
+    git(root, &["config", "--get", key]).is_ok_and(|v| {
+        matches!(
+            v.trim().to_ascii_lowercase().as_str(),
+            "true" | "yes" | "on" | "1"
+        )
+    })
+}
+
 /// The tree the plan was made from: HEAD's tree id when the working tree
 /// matches it, else `None`.
 pub fn clean_tree_id(root: &Path) -> Option<String> {

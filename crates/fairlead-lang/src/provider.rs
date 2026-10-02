@@ -5,7 +5,7 @@
 use std::collections::HashMap;
 use std::io::Write as _;
 use std::path::Path;
-use std::process::{Command, Stdio};
+use std::process::Stdio;
 
 use fairlead_core::config::GraphProvider;
 use fairlead_core::pattern::Pattern;
@@ -126,9 +126,8 @@ fn output(
     claimed: &[String],
 ) -> Result<ProviderOutput, String> {
     let (program, args) = provider.command.split_first().ok_or("no command")?;
-    let mut child = Command::new(program)
+    let mut child = fairlead_core::process::command(program, root)
         .args(args)
-        .current_dir(root)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())

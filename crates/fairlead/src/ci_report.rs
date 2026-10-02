@@ -36,19 +36,28 @@ pub struct Ran {
     pub cwd: String,
     pub argv: Vec<String>,
     pub passed: bool,
+    /// It failed as its `[[quarantine]]` entry expects: not provable where it ran.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub quarantined: bool,
     pub seconds: f64,
 }
 
 impl Ran {
-    pub fn of(inv: &Invocation, passed: bool, started: Instant) -> Ran {
+    pub fn of(inv: &Invocation, outcome: crate::step::Outcome, started: Instant) -> Ran {
         Ran {
             id: inv.id.clone(),
             kind: inv.kind.clone(),
             cwd: inv.cwd.clone(),
             argv: inv.argv.clone(),
-            passed,
+            passed: outcome == crate::step::Outcome::Passed,
+            quarantined: outcome == crate::step::Outcome::Held,
             seconds: tenths(started.elapsed().as_secs_f64()),
         }
+    }
+
+    /// A failure that counts; one its quarantine entry expects doesn't.
+    pub fn failed(&self) -> bool {
+        !self.passed && !self.quarantined
     }
 }
 
@@ -66,7 +75,7 @@ pub fn write_results(
     let results = Results {
         version: 1,
         plan_id: plan.plan_id.clone(),
-        passed: ran.iter().all(|r| r.passed) && ran.len() == plan.invocations.len(),
+        passed: ran.iter().all(|r| !r.failed()) && ran.len() == plan.invocations.len(),
         seconds: tenths(started.elapsed().as_secs_f64()),
         invocations: ran,
         judged: judged.to_vec(),
@@ -148,7 +157,7 @@ pub fn markdown(plan: &Plan, results: Option<&Results>, receipt: Option<&str>) -
     let checks = plan.checks.len();
     let headline = match results {
         Some(r) => {
-            let failed = r.invocations.iter().filter(|i| !i.passed).count();
+            let failed = r.invocations.iter().filter(|i| i.failed()).count();
             let outcome = if r.passed {
                 "passed".to_string()
             } else {
@@ -208,10 +217,28 @@ pub fn markdown(plan: &Plan, results: Option<&Results>, receipt: Option<&str>) -
             }
         ));
     }
+    if !plan.quarantined.is_empty() {
+        out.push_str("Not provable where the plan was made (`[[quarantine]]`):\n\n");
+        for q in &plan.quarantined {
+            out.push_str(&format!(
+                "- `{}` [{}]: {}; proved in {}, until {}\n",
+                q.target,
+                q.here.join(", "),
+                q.reason,
+                q.proved_in,
+                q.until
+            ));
+        }
+        out.push('\n');
+    }
     if let Some(r) = results {
         out.push_str("| Ran | Result | Time |\n|---|---|---|\n");
         for i in &r.invocations {
-            let result = if i.passed { "passed" } else { "**failed**" };
+            let result = match (i.passed, i.quarantined) {
+                (true, _) => "passed",
+                (false, true) => "failed as quarantined: not provable here",
+                (false, false) => "**failed**",
+            };
             out.push_str(&format!(
                 "| `{}` in `{}` | {result} | {:.1} s |\n",
                 i.id,
@@ -220,7 +247,7 @@ pub fn markdown(plan: &Plan, results: Option<&Results>, receipt: Option<&str>) -
             ));
         }
         out.push('\n');
-        let failed: Vec<&Ran> = r.invocations.iter().filter(|i| !i.passed).collect();
+        let failed: Vec<&Ran> = r.invocations.iter().filter(|i| i.failed()).collect();
         if !failed.is_empty() {
             out.push_str("To run a failed one again:\n\n```sh\n");
             for i in failed {

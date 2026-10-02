@@ -212,6 +212,14 @@ fn assemble(
         }
     }
     let item = |name: String, why: String| Item { name, why };
+    let held = |target: &str| {
+        plan.quarantined
+            .iter()
+            .find(|q| q.target == target)
+            .map_or(String::new(), |q| {
+                format!("; not provable here [{}]", q.here.join(", "))
+            })
+    };
     let steps = crate::done_cmd::steps(planned)?;
     Ok(Brief {
         version: 1,
@@ -233,7 +241,7 @@ fn assemble(
             items: plan
                 .tests
                 .iter()
-                .map(|t| item(t.path.clone(), render::reason(&t.reason)))
+                .map(|t| item(t.path.clone(), render::reason(&t.reason) + &held(&t.path)))
                 .collect(),
         },
         checks: Section {
@@ -241,7 +249,7 @@ fn assemble(
             items: plan
                 .checks
                 .iter()
-                .map(|c| item(c.id.clone(), render::reason(&c.reason)))
+                .map(|c| item(c.id.clone(), render::reason(&c.reason) + &held(&c.id)))
                 .collect(),
         },
         rules: Section {
