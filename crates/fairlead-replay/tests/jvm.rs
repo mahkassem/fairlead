@@ -333,3 +333,38 @@ fn both_extractors_are_named_in_config() {
         Ok(Extractor::Gradle)
     ));
 }
+
+#[test]
+fn gradle_names_a_test_file_that_fails_to_compile_and_not_main_code() {
+    let found = extract(&Extractor::Gradle, &fixture("gradle-compile.log"));
+    assert_eq!(
+        found,
+        [
+            printed(
+                "/home/runner/work/okhttp/okhttp/okhttp/src/jvmTest/kotlin/okhttp3/internal/TestAndSetTest.kt",
+                Some("okhttp"),
+                None
+            ),
+            printed(
+                "/home/runner/work/okhttp/okhttp/regression-test/src/test/java/okhttp/regression/LetsEncryptTest.java",
+                Some("regression-test"),
+                None
+            ),
+        ],
+        "a main source that fails to compile is no test's failure"
+    );
+    let files = strings(&[
+        "okhttp/src/jvmTest/kotlin/okhttp3/internal/TestAndSetTest.kt",
+        "regression-test/src/test/java/okhttp/regression/LetsEncryptTest.java",
+        "mockwebserver/src/main/kotlin/mockwebserver3/MockWebServer.kt",
+    ]);
+    assert_eq!(
+        attributed(&found, &files, |_| None),
+        [
+            "okhttp/src/jvmTest/kotlin/okhttp3/internal/TestAndSetTest.kt",
+            "regression-test/src/test/java/okhttp/regression/LetsEncryptTest.java",
+        ]
+    );
+    let excerpt = fairlead_replay::dataset::log_excerpt(&fixture("gradle-compile.log")).join("\n");
+    assert_eq!(extract(&Extractor::Gradle, &excerpt), found);
+}

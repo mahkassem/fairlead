@@ -106,7 +106,9 @@ jobs:
           token="$(openssl rand -hex 16)"
           echo "::stop-commands::$token"
           jq -r 'select(.conclusion == "failure") | .jobs[] | select(.conclusion == "failure")
-            | "=== \(.name)", ((.log // [])[:40][] | "    " + .)' out/data.jsonl | head -4000
+            | "=== \(.name)", ((.log // [])[:40][] | "    " + .)' out/data.jsonl > out/failed-lines.txt
+          # A file, not a pipe: `head` closing early fails the step under pipefail.
+          head -4000 out/failed-lines.txt
           echo "::$token::"
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         if: ${{ !cancelled() }}

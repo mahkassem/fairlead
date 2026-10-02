@@ -200,6 +200,31 @@ fn gradle_title(parts: &[&str]) -> Option<String> {
     (!title.is_empty()).then_some(title)
 }
 
+/// A path a tool printed as a file URL or a plain path, with Windows'
+/// `/D:/...` form put back to `D:/...`.
+fn local(path: &str) -> String {
+    let path = path.strip_prefix("file://").unwrap_or(path);
+    match path.strip_prefix('/') {
+        Some(rest) if rest.as_bytes().get(1) == Some(&b':') => rest.to_string(),
+        _ => path.to_string(),
+    }
+}
+
+/// The source file of a Kotlin or Java compile error, while a task that
+/// compiles tests runs: a test file that doesn't compile is that file's failure.
+fn test_compile_error(task: &str, line: &str) -> Option<String> {
+    static KOTLIN: OnceLock<Regex> = OnceLock::new();
+    static JAVA: OnceLock<Regex> = OnceLock::new();
+    let name = task.rsplit(':').next().unwrap_or(task).to_ascii_lowercase();
+    if !(name.starts_with("compile") && name.contains("test")) {
+        return None;
+    }
+    let kotlin = re(&KOTLIN, r"^e: (?P<path>\S+?\.kts?):\d+:\d+");
+    let java = re(&JAVA, r"^(?P<path>\S+?\.java):\d+: error:");
+    let c = kotlin.captures(line).or_else(|| java.captures(line))?;
+    Some(local(&c["path"]))
+}
+
 pub fn gradle(lines: &[String]) -> Vec<Printed> {
     static TASK: OnceLock<Regex> = OnceLock::new();
     static FAILED: OnceLock<Regex> = OnceLock::new();
@@ -214,11 +239,20 @@ pub fn gradle(lines: &[String]) -> Vec<Printed> {
     );
     let mut out = Vec::new();
     let mut project: Option<String> = None;
+    let mut current = String::new();
     let mut failing: Option<Option<String>> = None;
     let mut named: Vec<Option<String>> = Vec::new();
     for line in lines {
         if let Some(c) = task.captures(line) {
             project = project_dir(&c["task"]);
+            current = c["task"].to_string();
+            continue;
+        }
+        if let Some(path) = test_compile_error(&current, line) {
+            if !named.contains(&project) {
+                named.push(project.clone());
+            }
+            push(&mut out, printed(path, project.clone(), None));
             continue;
         }
         if let Some(c) = execution.captures(line) {
@@ -230,12 +264,7 @@ pub fn gradle(lines: &[String]) -> Vec<Printed> {
         if let Some(c) = report.captures(line) {
             let task_project = failing.take().unwrap_or_else(|| project.clone());
             if !named.contains(&task_project) {
-                let path = c["path"].to_string();
-                let path = match path.strip_prefix('/') {
-                    Some(rest) if rest.as_bytes().get(1) == Some(&b':') => rest.to_string(),
-                    _ => path,
-                };
-                push(&mut out, printed(path, task_project, None));
+                push(&mut out, printed(local(&c["path"]), task_project, None));
             }
             continue;
         }

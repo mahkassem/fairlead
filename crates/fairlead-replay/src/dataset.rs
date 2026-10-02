@@ -180,9 +180,12 @@ fn go_file_line(line: &str) -> bool {
             || !line.starts_with(char::is_whitespace))
 }
 
-/// A Surefire test that errored, or a Gradle task's failure and its report.
+/// A Surefire test that errored, a Kotlin or Java compile error, or a
+/// Gradle task's failure and its report.
 fn jvm_failure(line: &str) -> bool {
-    line.contains("<<< ERROR!")
+    line.starts_with("e: ") && (line.contains(".kt:") || line.contains(".kts:"))
+        || line.contains(".java:") && line.contains(": error:")
+        || line.contains("<<< ERROR!")
         || line.contains("Execution failed for task '")
         || line.contains("There were failing tests. See the report at")
 }
