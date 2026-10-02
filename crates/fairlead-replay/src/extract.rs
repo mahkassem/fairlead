@@ -34,6 +34,9 @@ pub enum Extractor {
     /// Pest, and Laravel's `artisan test`, which prints the same way, or
     /// PHPUnit's way under `--parallel`: both are read.
     Pest,
+    /// Maven's Surefire and Failsafe.
+    Maven,
+    Gradle,
     /// A pattern with a named `file` group, and optionally `project` and `title`.
     Regex(Regex),
 }
@@ -48,6 +51,8 @@ impl Extractor {
             ("go", _) => Ok(Extractor::Go),
             ("pytest", _) => Ok(Extractor::Pytest),
             ("pest", _) => Ok(Extractor::Pest),
+            ("maven", _) => Ok(Extractor::Maven),
+            ("gradle", _) => Ok(Extractor::Gradle),
             ("regex", Some(p)) => {
                 let re = Regex::new(p).map_err(|e| format!("replay.failures pattern: {e}"))?;
                 if re.capture_names().flatten().all(|n| n != "file") {
@@ -57,7 +62,7 @@ impl Extractor {
             }
             ("regex", None) => Err("replay.failures: extractor \"regex\" needs a pattern".into()),
             (other, _) => Err(format!(
-                "unknown extractor `{other}`; use vitest, jest, bun, phpunit, pest, go, pytest or regex"
+                "unknown extractor `{other}`; use vitest, jest, bun, phpunit, pest, go, pytest, maven, gradle or regex"
             )),
         }
     }
@@ -114,6 +119,8 @@ pub fn extract(extractor: &Extractor, log: &str) -> Vec<Printed> {
             return out;
         }
         Extractor::Go => return crate::gotest::gotest(&lines),
+        Extractor::Maven => return crate::jvm::maven(&lines),
+        Extractor::Gradle => return crate::jvm::gradle(&lines),
         _ => {}
     }
     let mut out: Vec<Printed> = Vec::new();
@@ -130,7 +137,12 @@ pub fn extract(extractor: &Extractor, log: &str) -> Vec<Printed> {
             }),
             Extractor::Pytest => pytest(line),
             Extractor::Regex(re) => custom(re, line),
-            Extractor::Bun | Extractor::Phpunit | Extractor::Pest | Extractor::Go => {
+            Extractor::Bun
+            | Extractor::Phpunit
+            | Extractor::Pest
+            | Extractor::Go
+            | Extractor::Maven
+            | Extractor::Gradle => {
                 unreachable!("handled above")
             }
         };

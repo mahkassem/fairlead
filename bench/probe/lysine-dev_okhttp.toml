@@ -1,0 +1,54 @@
+# lysine-dev/okhttp's build.yml (formerly square/okhttp): a Gradle build of
+# Kotlin and Java modules, with Kotlin Multiplatform's jvmTest and
+# commonTest beside plain src/test. `./gradlew test allTests` runs them in
+# the jvm matrix, openjdk8alpn, openjdklatest, openjdkearlyaccess,
+# testwindows and the label-gated providers jobs; java9_modules runs one
+# module's. The maven job runs the one Surefire test in maven-tests/. The
+# android and graal jobs run instrumented and native-image tests, printed
+# in other formats, so they're left unwatched.
+
+[tests]
+match = { replace = [
+  "**/src/test/**/*Test.kt",
+  "**/src/test/**/*Test.java",
+  "**/src/jvmTest/**/*Test.kt",
+  "**/src/commonTest/**/*Test.kt",
+  "**/src/androidHostTest/**/*Test.kt",
+] }
+
+[[tests.runners]]
+id = "maven"
+match = ["maven-tests/**"]
+command = ["maven-tests/mvnw", "-f", "maven-tests/pom.xml", "-q", "verify", "-Dtest={classes}", "-Dsurefire.failIfNoSpecifiedTests=false"]
+
+[[tests.runners]]
+id = "gradle"
+match = ["**/src/**"]
+exclude = ["maven-tests/**"]
+command = ["./gradlew", "test", "allTests", "--tests={class}"]
+
+[plan]
+# Build files and the version catalog pick every dependency's version.
+run_all = [
+  "**/build.gradle.kts",
+  "**/settings.gradle.kts",
+  "gradle.properties",
+  "gradle/**",
+  "build-logic/**",
+  "**/pom.xml",
+  ".github/workflows/**",
+]
+
+[replay]
+window_days = 90
+min_failures = 10
+
+[[replay.failures]]
+runner = "gradle"
+extractor = "gradle"
+job = "^(jvm \\(\\d+\\)|openjdk8alpn|openjdklatest|openjdkearlyaccess|testwindows|java9_modules|providers \\(.*\\))$"
+
+[[replay.failures]]
+runner = "maven"
+extractor = "maven"
+job = "^maven$"

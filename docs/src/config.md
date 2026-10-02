@@ -87,7 +87,7 @@ fairlead.toml: tests.unreachd: unknown field `unreachd`, expected one of ...
 | `replay.provider` | `"github"` | Where CI history comes from |
 | `replay.window_days` | `90` | How far back replay looks |
 | `replay.min_failures` | `30` | Failures needed before a replay result counts |
-| `replay.failures` | `[]` | `runner`, `extractor` (`vitest`, `jest`, `bun`, `regex`), `job`, `pattern` |
+| `replay.failures` | `[]` | `runner`, `extractor` (`vitest`, `jest`, `bun`, `phpunit`, `pest`, `go`, `pytest`, `maven`, `gradle`, `regex`), `job`, `pattern` |
 | `replay.checks` | `[]` | Map a CI `job` and `step` to a `check` |
 | `replay.ignore` | `[]` | CI job names (regexes) whose failures replay leaves out on purpose, such as a job that only aggregates others |
 | `replay.quarantine` | `[]` | Tests declared flaky in named jobs: `path`, `job`, `reason`, `until` ([Replay](replay.md#quarantine)) |

@@ -10,6 +10,7 @@ pub mod git;
 pub mod github;
 pub mod gotest;
 pub mod inherited;
+pub mod jvm;
 pub mod phpunit;
 pub mod quarantine;
 pub mod report;
