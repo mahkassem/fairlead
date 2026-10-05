@@ -266,6 +266,14 @@ pub struct Runner {
     pub cwd: Option<String>,
     /// An argv array; `{files}` expands to one argument per file.
     pub command: Vec<String>,
+    /// The argv when everything runs, for a tool that left without files
+    /// finds more tests than `match` claims; `command` when left out.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub all_command: Option<Vec<String>>,
+    /// An argv fragment holding `{file}`, added once per held test file, so
+    /// a run of everything can leave out what runs alone.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub exclude_arg: Option<Vec<String>>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, JsonSchema)]

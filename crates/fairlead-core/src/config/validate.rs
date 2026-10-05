@@ -508,6 +508,7 @@ fn runners(config: &Config, problems: &mut Vec<Problem>) {
         if runner.matches.is_empty() {
             problems.push(problem(format!("tests.runners[{i}].match"), "is empty"));
         }
+        runner_extras(i, runner, problems);
         if let Some(cwd) = &runner.cwd {
             for name in braces(cwd) {
                 if !CWD_PLACEHOLDERS.contains(&name.as_str()) {
@@ -517,6 +518,35 @@ fn runners(config: &Config, problems: &mut Vec<Problem>) {
                     ));
                 }
             }
+        }
+    }
+}
+
+/// `all_command` runs with no files to name, and `exclude_arg` exists to
+/// name one, so each is checked for the placeholder it can use.
+fn runner_extras(i: usize, runner: &super::Runner, problems: &mut Vec<Problem>) {
+    if let Some(all) = &runner.all_command {
+        let key = format!("tests.runners[{i}].all_command");
+        if all.is_empty() {
+            problems.push(problem(key.clone(), "is empty"));
+        }
+        for name in ["files", "class", "classes"] {
+            if all.iter().any(|a| a.contains(&format!("{{{name}}}"))) {
+                problems.push(problem(
+                    key.clone(),
+                    format!(
+                        "`{{{name}}}` has nothing to expand to when everything runs; leave it out"
+                    ),
+                ));
+            }
+        }
+    }
+    if let Some(exclude) = &runner.exclude_arg {
+        if !exclude.iter().any(|a| a.contains("{file}")) {
+            problems.push(problem(
+                format!("tests.runners[{i}].exclude_arg"),
+                "needs `{file}`, where each held test file goes, such as [\"--exclude\", \"{file}\"]",
+            ));
         }
     }
 }
@@ -712,6 +742,44 @@ mod tests {
         assert_eq!(
             placeholders(glob).into_iter().collect::<Vec<_>>(),
             vec!["area".to_string()]
+        );
+    }
+
+    fn runner_problems(extra: &str) -> Vec<Problem> {
+        let text = format!(
+            "[[tests.runners]]\nid = \"unit\"\nmatch = [\"t/*.test.ts\"]\ncommand = [\"run\", \"{{files}}\"]\n{extra}"
+        );
+        let config: Config = toml::from_str(&text).expect("the config parses");
+        validate(&config)
+            .into_iter()
+            .filter(|p| p.key.starts_with("tests.runners"))
+            .collect()
+    }
+
+    #[test]
+    fn an_all_command_naming_files_or_classes_is_a_problem() {
+        let problems = runner_problems("all_command = [\"run\", \"{files}\"]\n");
+        assert_eq!(problems.len(), 1, "{problems:?}");
+        assert_eq!(problems[0].key, "tests.runners[0].all_command");
+        assert!(problems[0]
+            .message
+            .contains("`{files}` has nothing to expand to"));
+        assert_eq!(
+            runner_problems("all_command = [\"-Dtest={classes}\"]\n").len(),
+            1
+        );
+        let fine = "all_command = [\"run\", \"--dir\", \"{module}\", \"{packages}\"]\n";
+        assert_eq!(runner_problems(fine), Vec::new());
+    }
+
+    #[test]
+    fn an_exclude_arg_without_a_file_placeholder_is_a_problem() {
+        let problems = runner_problems("exclude_arg = [\"--exclude\"]\n");
+        assert_eq!(problems.len(), 1, "{problems:?}");
+        assert_eq!(problems[0].key, "tests.runners[0].exclude_arg");
+        assert_eq!(
+            runner_problems("exclude_arg = [\"--ignore={file}\"]\n"),
+            Vec::new()
         );
     }
 

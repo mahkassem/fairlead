@@ -352,3 +352,176 @@ fn jvm_runners_get_class_names_repeated_or_joined_and_none_when_everything_runs(
     let gradle = plan.invocations.iter().find(|i| i.id == "gradle").unwrap();
     assert_eq!(gradle.argv, ["./gradlew", "test"]);
 }
+
+const WHOLE_RUNNERS: &str = r#"
+[[tests.runners]]
+id = "vitest"
+match = ["packages/**"]
+command = ["vitest", "run", "{files}"]
+all_command = ["vitest", "run", "--project", "unit"]
+
+[[tests.runners]]
+id = "jest"
+match = ["tools/**"]
+invoke = "per-module"
+cwd = "{module}"
+command = ["jest", "--selectProjects", "{module.id}", "{files}"]
+all_command = ["jest", "--selectProjects", "{module.id}", "--rootDir", "{module}"]
+"#;
+
+const HELD: &str = r#"
+[[quarantine]]
+path = "packages/a/test/x.test.ts"
+signature = "ENOENT"
+reason = "spawns a process from a URL path"
+proved_in = "CI on Linux"
+until = "2099-12-31"
+
+[[quarantine]]
+path = "tools/gen/test/g.test.ts"
+signature = "ENOENT"
+reason = "spawns a process from a URL path"
+proved_in = "CI on Linux"
+until = "2099-12-31"
+"#;
+
+fn argvs<'a>(plan: &'a fairlead_core::plan::Plan, id: &str) -> Vec<(&'a [String], bool)> {
+    plan.invocations
+        .iter()
+        .filter(|i| i.id == id)
+        .map(|i| (i.argv.as_slice(), i.quarantined.is_some()))
+        .collect()
+}
+
+fn run_all_repo(name: &str) -> std::path::PathBuf {
+    let mut files = FILES.to_vec();
+    files.push(("pnpm-lock.yaml", "x\n"));
+    repo(name, &files)
+}
+
+#[test]
+fn all_command_runs_when_everything_does_and_command_otherwise() {
+    let dir = run_all_repo("inv-all-command");
+    let plan = run(
+        &dir,
+        &config(WHOLE_RUNNERS),
+        vec![modified("pnpm-lock.yaml")],
+    );
+    assert_eq!(
+        argvs(&plan, "vitest"),
+        [(
+            &["vitest", "run", "--project", "unit"].map(String::from)[..],
+            false
+        )]
+    );
+    let jest = ["jest", "--selectProjects", "gen", "--rootDir", "tools/gen"].map(String::from);
+    assert_eq!(argvs(&plan, "jest"), [(&jest[..], false)]);
+
+    let plan = run(
+        &dir,
+        &config(WHOLE_RUNNERS),
+        vec![
+            modified("packages/a/src/x.ts"),
+            modified("tools/gen/src/g.ts"),
+        ],
+    );
+    let vitest = [
+        "vitest",
+        "run",
+        "packages/a/test/x.test.ts",
+        "packages/b/test/y.test.ts",
+    ]
+    .map(String::from);
+    assert_eq!(argvs(&plan, "vitest"), [(&vitest[..], false)]);
+    let jest = ["jest", "--selectProjects", "gen", "test/g.test.ts"].map(String::from);
+    assert_eq!(argvs(&plan, "jest"), [(&jest[..], false)]);
+}
+
+#[test]
+fn exclude_arg_keeps_everything_whole_and_runs_each_held_test_alone() {
+    let dir = run_all_repo("inv-exclude");
+    let text = WHOLE_RUNNERS
+        .replace(
+            "all_command = [\"vitest\", \"run\", \"--project\", \"unit\"]",
+            "all_command = [\"vitest\", \"run\", \"--project\", \"unit\"]\nexclude_arg = [\"--exclude\", \"{file}\"]",
+        )
+        .replace(
+            "\"--rootDir\", \"{module}\"]",
+            "\"--rootDir\", \"{module}\"]\nexclude_arg = [\"--testPathIgnorePatterns={file}\"]",
+        )
+        + HELD;
+    let plan = run(&dir, &config(&text), vec![modified("pnpm-lock.yaml")]);
+    let whole = [
+        "vitest",
+        "run",
+        "--project",
+        "unit",
+        "--exclude",
+        "packages/a/test/x.test.ts",
+    ]
+    .map(String::from);
+    let alone = ["vitest", "run", "packages/a/test/x.test.ts"].map(String::from);
+    assert_eq!(
+        argvs(&plan, "vitest"),
+        [(&whole[..], false), (&alone[..], true)]
+    );
+    let whole = [
+        "jest",
+        "--selectProjects",
+        "gen",
+        "--rootDir",
+        "tools/gen",
+        "--testPathIgnorePatterns=test/g.test.ts",
+    ]
+    .map(String::from);
+    let alone = ["jest", "--selectProjects", "gen", "test/g.test.ts"].map(String::from);
+    assert_eq!(
+        argvs(&plan, "jest"),
+        [(&whole[..], false), (&alone[..], true)]
+    );
+    assert!(
+        plan.warnings
+            .iter()
+            .all(|w| w.code != "quarantine-narrowed-everything"),
+        "{:?}",
+        plan.warnings
+    );
+}
+
+#[test]
+fn without_exclude_arg_everything_names_the_runners_tests_and_warns() {
+    let dir = run_all_repo("inv-narrowed");
+    let text = WHOLE_RUNNERS.to_string() + HELD;
+    let plan = run(&dir, &config(&text), vec![modified("pnpm-lock.yaml")]);
+    let named = ["vitest", "run", "packages/b/test/y.test.ts"].map(String::from);
+    let alone = ["vitest", "run", "packages/a/test/x.test.ts"].map(String::from);
+    assert_eq!(
+        argvs(&plan, "vitest"),
+        [(&named[..], false), (&alone[..], true)]
+    );
+    let narrowed: Vec<_> = plan
+        .warnings
+        .iter()
+        .filter(|w| w.code == "quarantine-narrowed-everything")
+        .collect();
+    assert_eq!(narrowed.len(), 2, "{:?}", plan.warnings);
+    assert_eq!(
+        narrowed[0].path.as_deref(),
+        Some("packages/a/test/x.test.ts")
+    );
+    assert!(
+        narrowed[0].message.contains("runner `vitest`")
+            && narrowed[0].message.contains("exclude_arg"),
+        "{}",
+        narrowed[0].message
+    );
+
+    let plan = run(&dir, &config(&text), vec![modified("packages/a/src/x.ts")]);
+    assert!(
+        plan.warnings
+            .iter()
+            .all(|w| w.code != "quarantine-narrowed-everything"),
+        "only a plan that runs everything is narrowed: {:?}",
+        plan.warnings
+    );
+}
