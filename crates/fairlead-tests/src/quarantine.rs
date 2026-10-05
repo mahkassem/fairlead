@@ -140,15 +140,16 @@ pub fn apply(
 /// The entry holding a check here that runs outside the plan, such as one
 /// `done.always` names, if one does.
 pub fn check_held(config: &Config, root: &Path, id: &str) -> Option<Quarantined> {
-    let entry = config
+    let here = Here::detect(root);
+    config
         .quarantine
         .items()
         .iter()
-        .find(|e| e.check.as_deref() == Some(id))?;
-    match status(entry, &Here::detect(root)) {
-        Status::Holds(reasons) => Some(held(entry, reasons)),
-        _ => None,
-    }
+        .filter(|e| e.check.as_deref() == Some(id))
+        .find_map(|entry| match status(entry, &here) {
+            Status::Holds(reasons) => Some(held(entry, reasons)),
+            _ => None,
+        })
 }
 
 fn held(entry: &PlatformQuarantine, reasons: Vec<String>) -> Quarantined {
@@ -264,5 +265,27 @@ mod tests {
         ));
         assert!(!expected(&q, "AssertionError: 1 !== 2", "2026-10-01"));
         assert!(!expected(&q, "Error: spawnSync git ENOENT", "2026-10-02"));
+    }
+
+    #[test]
+    fn a_check_held_on_two_platforms_holds_on_the_second() {
+        let all = [Os::Windows, Os::Macos, Os::Linux];
+        let this = all
+            .iter()
+            .copied()
+            .find(|o| o.name() == std::env::consts::OS)
+            .expect("tests run on a known OS");
+        let other = all.iter().copied().find(|o| *o != this).unwrap();
+        let check = |os| PlatformQuarantine {
+            path: None,
+            check: Some("lint".into()),
+            ..entry(Some(os), vec![], "2099-12-31")
+        };
+        let config = Config {
+            quarantine: vec![check(other), check(this)].into(),
+            ..Config::default()
+        };
+        let held = check_held(&config, Path::new("."), "lint").expect("the second entry holds");
+        assert_eq!(held.here, vec![this.name().to_string()]);
     }
 }

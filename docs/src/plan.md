@@ -126,7 +126,8 @@ Where an entry holds:
 
 - `fairlead plan` lists the test or check under *not provable here*, with what made the entry hold, its evidence, where it is proved instead and its date. The plan JSON lists it in `quarantined`, and the invocation that runs it carries its name in `quarantined`.
 - It still runs, alone, so its failure can be read by itself. Its runner's other tests run together without it, and are named one by one even in a plan that runs everything. A runner whose command has no `{files}` can't run one test alone, so the plan warns `quarantine-not-separable` and the test runs with the rest.
-- `fairlead done` and `fairlead ci run` don't count a failure whose output matches `signature`. They report it as not provable here, so the agent can say so in the pull request instead of diagnosing it again or skipping it quietly. A failure with any other output is real, and counts.
+- `fairlead done` and `fairlead ci run` don't count a failure whose output matches `signature`. They report it as not provable here, so the agent can say so in the pull request instead of diagnosing it again or skipping it quietly. A failure with any other output is real, and counts. An entry excuses one failure: when the held file's output names more than one failed test, read the way replay reads that runner (Vitest, Jest, bun, pytest, PHPUnit, Pest or `go test`), the run counts. A runner whose output Fairlead can't read is judged by `signature` alone.
+- The machine that runs a plan checks the entry again: a plan made where an entry holds excuses nothing on a machine where its OS or conditions don't hold.
 - After `until`, the entry stops holding. The plan warns `quarantine-expired`, and a failure counts again.
 
 `fairlead test --explain` says the same for one test, or why an entry doesn't hold here. `fairlead config check` names the conditions it detects on the machine and whether each entry holds, and `fairlead doctor` names the conditions.

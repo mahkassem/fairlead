@@ -62,7 +62,7 @@ Runs each invocation's argv in its working directory (relative to the repository
 
 *Unreleased:* a program is found the way a shell finds it. On Windows, a name with no extension is looked up on `PATH` with each of `PATHEXT`'s `.com`, `.exe`, `.bat` and `.cmd`, and a relative path such as `node_modules/.bin/eslint` beside the working directory, so `npx` and other `.cmd` shims start. Before, they needed the full name, such as `npx.cmd`, which still works. The same goes for `fairlead done`, `[[guard.external]]` rules and graph providers.
 
-An invocation a [`[[quarantine]]` entry](plan.md#tests-that-lie-on-one-platform) holds on the machine that made the plan doesn't fail the run when its output matches the entry's signature. It is reported as not provable here, and the last line counts it. Any other failure counts.
+An invocation a [`[[quarantine]]` entry](plan.md#tests-that-lie-on-one-platform) holds doesn't fail the run when its output matches the entry's signature and names no other failed test. It is reported as not provable here, and the last line counts it. Any other failure counts. The entry is checked again on the machine running the plan, so a plan made on Windows excuses nothing on Linux.
 
 `--results PATH` also writes each invocation's id, working directory, argv, outcome and seconds, for `fairlead ci report`, with `"quarantined": true` on one that failed as its entry expects.
 
