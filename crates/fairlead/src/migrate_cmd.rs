@@ -60,19 +60,29 @@ fn this() -> Vec<u64> {
     version(SELF).expect("the crate version parses")
 }
 
-fn minor(v: &[u64]) -> String {
-    format!("{}.{}", v[0], v.get(1).copied().unwrap_or(0))
+/// Whether `value` sets the key `path` names. A list, plain or written as
+/// `{ replace = [...] }`, sets a key when any of its items does, so a key
+/// inside `[[tests.runners]]` counts from any runner.
+fn sets(value: &Value, path: &[&str]) -> bool {
+    let Some((head, rest)) = path.split_first() else {
+        return !value.is_null();
+    };
+    match value {
+        Value::Array(items) => items.iter().any(|v| sets(v, path)),
+        Value::Object(map) if map.len() == 1 && !map.contains_key(*head) => map
+            .get("replace")
+            .is_some_and(|v| v.is_array() && sets(v, path)),
+        _ => value.get(head).is_some_and(|v| sets(v, rest)),
+    }
 }
 
-/// The oldest version that reads every table the project file sets.
-fn needed_floor(layer: &Value) -> Option<(Vec<u64>, &'static str)> {
+/// The oldest version that reads every table and key the project file sets,
+/// and the text SINCE gives it.
+fn needed_floor(layer: &Value) -> Option<(Vec<u64>, &'static str, &'static str)> {
     SINCE
         .iter()
-        .filter(|(key, _)| {
-            let pointer = format!("/{}", key.replace('.', "/"));
-            layer.pointer(&pointer).is_some_and(|v| !v.is_null())
-        })
-        .map(|(key, since)| (version(since).expect("SINCE versions parse"), *key))
+        .filter(|(key, _)| sets(layer, &key.split('.').collect::<Vec<_>>()))
+        .map(|(key, since)| (version(since).expect("SINCE versions parse"), *since, *key))
         .max_by(|a, b| a.0.cmp(&b.0))
 }
 
@@ -89,7 +99,7 @@ fn floor(loaded: &Loaded) -> Result<Option<Update>, String> {
     let Some(have) = version(pin) else {
         return Ok(None);
     };
-    let Some((need, key)) = needed_floor(&layer) else {
+    let Some((need, want, key)) = needed_floor(&layer) else {
         return Ok(None);
     };
     if !older(&have, &need) {
@@ -97,7 +107,6 @@ fn floor(loaded: &Loaded) -> Result<Option<Update>, String> {
     }
     let text = std::fs::read_to_string(file).map_err(|e| format!("{}: {e}", file.display()))?;
     let line = Regex::new(r#"(?m)^(fairlead\s*[=:]\s*)(["'])([^"']*)(["'])"#).expect("regex");
-    let want = minor(&need);
     let Some(found) = line.captures(&text) else {
         return Ok(None);
     };
@@ -467,6 +476,34 @@ mod tests {
                 "`{key}` needs an entry in migrate_notes::SINCE"
             );
         }
+    }
+
+    #[test]
+    fn a_runner_key_raises_the_floor_to_the_patch_that_added_it() {
+        let runner = |extra: Value| {
+            let mut r = serde_json::json!({"id": "unit", "match": ["t/**"], "command": ["t"]});
+            r.as_object_mut()
+                .unwrap()
+                .extend(extra.as_object().unwrap().clone());
+            r
+        };
+        let plain = serde_json::json!({"tests": {"runners": [runner(serde_json::json!({}))]},
+            "quarantine": []});
+        assert_eq!(needed_floor(&plain).map(|f| f.1), Some("0.7"));
+        let second = serde_json::json!({"tests": {"runners": [
+            runner(serde_json::json!({})),
+            runner(serde_json::json!({"all_command": ["t", "all"]})),
+        ]}});
+        assert_eq!(
+            needed_floor(&second).map(|f| (f.1, f.2)),
+            Some(("0.7.1", "tests.runners.all_command"))
+        );
+        let replaced = serde_json::json!({"tests": {"runners": {"replace": [
+            runner(serde_json::json!({"exclude_arg": ["--skip", "{file}"]})),
+        ]}}});
+        assert_eq!(needed_floor(&replaced).map(|f| f.1), Some("0.7.1"));
+        let none = serde_json::json!({"tests": {"runners": [runner(serde_json::json!({}))]}});
+        assert_eq!(needed_floor(&none), None);
     }
 
     #[test]
