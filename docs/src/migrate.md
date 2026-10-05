@@ -30,7 +30,7 @@ nothing to do.
      would update .claude/settings.json: Fairlead's hooks: adds the brief nudge and the Stop hook
      would update lefthook.yml: the commit stage runs `bun x fairlead guard check --staged` instead of `fairlead guard check --staged`
      would update fairlead.toml: `fairlead = "0.4"` becomes "0.6": the config uses `done`, which 0.6 added
-     would update .github/workflows/ci.yml: Fairlead's action at v0.4.2 becomes v0.7.0
+     would update .github/workflows/ci.yml: Fairlead's action at v0.4.2 becomes v0.7.1
      review (0.5.0): `plan.ignore` applies to source files too: ...
      review (0.6.0): `hooks install` adds a Stop hook, ...
    migrate: dry run; `fairlead migrate --write` makes these 4 change(s)
@@ -174,10 +174,18 @@ For you to decide:
 
 ### To 0.7.1
 
-*Unreleased:* migrate updates:
+Migrate updates:
 
 - The config's `fairlead` floor, to 0.7.1, where a runner uses `all_command`
   or `exclude_arg`.
+
+For you to decide:
+
+- A runner whose tool, given no files, finds more tests than its `match`
+  claims (a bare `bun test` that also finds end-to-end specs) can set
+  `all_command` for the run of everything. A runner holding a test in
+  `[[quarantine]]` can set `exclude_arg` so that run stays whole
+  ([Configuration](config.md)).
 
 ## Going back to an older release
 

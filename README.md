@@ -114,7 +114,7 @@ selected test classes.
 
 ## What it does
 
-This README documents Fairlead 0.7.0. Each command, by what it's for:
+This README documents Fairlead 0.7.1. Each command, by what it's for:
 
 - **The test plan:** `plan`, `test --explain`, the import graph (`graph`) and
   coverage maps (`coverage import`).
@@ -136,7 +136,9 @@ The [quick start](#quick-start) shows the first few, and the
 
 ## Status
 
-Pre-alpha. The latest release, v0.7.0, brings the hooks to Codex and Gemini
+Pre-alpha. The latest release, v0.7.1, lets a runner say what "everything"
+means (`all_command`) and keeps a run of everything whole around a held test
+(`exclude_arg`). v0.7.0 brought the hooks to Codex and Gemini
 CLI, reads Java and Kotlin in the graph and Maven and Gradle in replay, and
 adds `fairlead init` for a first config, `fairlead migrate` for an upgrade, and
 `[[quarantine]]` for a test that fails on one platform whatever the change.
