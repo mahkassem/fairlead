@@ -1,5 +1,7 @@
 //! `fairlead hooks install | status | uninstall`: the Claude Code hook in
-//! `.claude/settings.json` (shared) or `.claude/settings.local.json`. Install
+//! `.claude/settings.json` (shared) or `.claude/settings.local.json`, or the
+//! same hooks for Codex in `.codex/hooks.json` and for Gemini CLI in
+//! `.gemini/settings.json`. Install
 //! keeps a manifest in the git directory with the file's original bytes and
 //! the bytes it wrote, so uninstall can put the file back exactly.
 
@@ -25,13 +27,27 @@ const NUDGE_MARK: &str = "fairlead guard nudge";
 /// Seconds; the Stop hook hashes the working tree, which a large one makes slower.
 const STOP_TIMEOUT: u64 = 30;
 const EDIT_TOOLS: &str = "Edit|Write|MultiEdit";
+/// Codex names its one editing tool; it also lets `Edit|Write` select it.
+const CODEX_EDIT_TOOLS: &str = "apply_patch|Edit|Write";
+const GEMINI_EDIT_TOOLS: &str = "write_file|replace";
+/// Each agent's names for the three moments, before a tool, after it and at
+/// the end of a turn; installed and stripped under any of them.
+const EVENTS: [[&str; 3]; 2] = [
+    ["PreToolUse", "PostToolUse", "Stop"],
+    ["BeforeTool", "AfterTool", "AfterAgent"],
+];
+/// Where each agent's hook starts from: Claude Code says, and Codex starts a
+/// hook in the session's directory, which can be below the root.
+const CLAUDE_DIR: &str = "${CLAUDE_PROJECT_DIR:-.}";
+const CODEX_DIR: &str = "$(git rev-parse --show-toplevel 2>/dev/null || pwd)";
 /// Seconds; the hook keeps to its own much shorter budget.
 const TIMEOUT: u64 = 10;
 
 #[derive(Subcommand)]
 pub enum HooksAction {
     /// Add the Claude Code hooks (the guard before an edit, the brief nudge
-    /// after one, the Stop hook) and the git hook when lefthook is set up.
+    /// after one, the Stop hook) and the git hook when lefthook is set up;
+    /// `--codex` and `--gemini` add the same hooks for Codex or Gemini CLI.
     Install {
         #[command(flatten)]
         target: Target,
@@ -53,6 +69,12 @@ pub struct Target {
     /// Only the Claude Code hooks.
     #[arg(long, conflicts_with = "git")]
     claude: bool,
+    /// The same hooks for Codex, in `.codex/hooks.json`, instead of Claude Code's.
+    #[arg(long, conflicts_with_all = ["claude", "git", "local", "shared"])]
+    codex: bool,
+    /// The same hooks for Gemini CLI, in `.gemini/settings.json`, instead of Claude Code's.
+    #[arg(long, conflicts_with_all = ["claude", "git", "local", "shared", "codex"])]
+    gemini: bool,
     /// Only the git pre-commit hook, through lefthook; install makes a
     /// `lefthook.yml` when there's none.
     #[arg(long)]
@@ -103,21 +125,42 @@ pub fn run(action: HooksAction, cwd: &Path) -> ExitCode {
         HooksTarget::Shared => "settings.json",
         HooksTarget::Local => "settings.local.json",
     };
-    let file = root.join(".claude").join(name);
-    let manifest = claude_manifest(&git_dir, name);
+    let (file, manifest_name) = if target.codex {
+        (
+            root.join(".codex").join("hooks.json"),
+            "codex-hooks.json".to_string(),
+        )
+    } else if target.gemini {
+        (
+            root.join(".gemini").join("settings.json"),
+            "gemini-settings.json".to_string(),
+        )
+    } else {
+        (root.join(".claude").join(name), format!("claude-{name}"))
+    };
+    let manifest = git_dir.join("fairlead").join("backups").join(manifest_name);
     let lefthook = lefthook_file(&root);
     let lefthook_manifest = lefthook_manifest(&git_dir, &lefthook);
     let claude = !target.git;
     // Without `--git`, install only touches a lefthook config that's already there.
     let git = target.git
         || (!target.claude
+            && !target.codex
+            && !target.gemini
             && (lefthook.exists() || !matches!(action, HooksAction::Install { .. })));
+    let agent = if target.codex {
+        Agent::Codex
+    } else if target.gemini {
+        Agent::Gemini
+    } else {
+        Agent::Claude
+    };
     let runner = package_runner(&root);
     let mut result = Ok(());
     if claude {
         result = match action {
             HooksAction::Install { .. } => {
-                install(&file, &manifest, stages(&loaded.config), runner)
+                install(&file, &manifest, stages(&loaded.config), runner, agent)
             }
             HooksAction::Status { .. } => status(&file, &manifest),
             HooksAction::Uninstall { .. } => uninstall(&file, &manifest),
@@ -174,7 +217,23 @@ pub fn describe(root: &Path, config: &fairlead_core::config::Config) -> Vec<Stri
         _ => "git hook: not installed; `fairlead hooks install --git` adds it through lefthook"
             .to_string(),
     };
-    vec![claude, git]
+    let mut lines = vec![claude, git];
+    // Only shown where another agent's hooks are, so a Claude Code project isn't told about them.
+    for (agent, rel) in [
+        ("codex", ".codex/hooks.json"),
+        ("gemini", ".gemini/settings.json"),
+    ] {
+        let path = root.join(rel);
+        if let Some(Ok(settings)) = read(&path).ok().flatten().map(|t| parse(&path, &t)) {
+            if !installed(&settings).is_empty() {
+                lines.push(format!(
+                    "{agent} hook: installed in {rel} for {}",
+                    installed(&settings).join(", ")
+                ));
+            }
+        }
+    }
+    lines
 }
 
 /// How a repository that lists Fairlead as a package dependency runs its
@@ -205,24 +264,24 @@ pub fn package_runner(root: &Path) -> Option<&'static str> {
 /// The Stop and PostToolUse hooks' command, for `fairlead guard <stage>`.
 /// Unlike the write hook's it keeps the exit code and output: the Stop
 /// hook's exit 2 and the PostToolUse note are how they reach the agent.
-fn stage_command(stage: &str, runner: Option<&str>) -> String {
+fn stage_command(stage: &str, runner: Option<&str>, dir: &str) -> String {
     match runner {
         None => {
             format!("command -v fairlead >/dev/null 2>&1 || exit 0; exec fairlead guard {stage}")
         }
         Some(runner) => format!(
-            "cd \"${{CLAUDE_PROJECT_DIR:-.}}\" 2>/dev/null || exit 0; \
+            "cd \"{dir}\" 2>/dev/null || exit 0; \
              if [ -x {NPM_BINARY} ]; then exec {NPM_BINARY} guard {stage}; fi; \
              exec {runner} fairlead guard {stage}"
         ),
     }
 }
 
-fn claude_command(runner: Option<&str>) -> String {
+fn claude_command(runner: Option<&str>, dir: &str) -> String {
     match runner {
         None => COMMAND.to_string(),
         Some(runner) => format!(
-            "cd \"${{CLAUDE_PROJECT_DIR:-.}}\" 2>/dev/null || exit 0; \
+            "cd \"{dir}\" 2>/dev/null || exit 0; \
              if [ -x {NPM_BINARY} ]; then {NPM_BINARY} guard hook; \
              else {runner} fairlead guard hook 2>/dev/null; fi; exit 0"
         ),
@@ -400,7 +459,11 @@ fn installed(settings: &Map<String, Value>) -> Vec<String> {
             .and_then(Value::as_array)
             .is_some_and(|hs| hs.iter().any(is_ours))
     };
-    let mut out: Vec<String> = groups("PreToolUse")
+    let [pre, post, stop] = EVENTS
+        .into_iter()
+        .find(|events| events.iter().any(|e| !groups(e).is_empty()))
+        .unwrap_or(EVENTS[0]);
+    let mut out: Vec<String> = groups(pre)
         .iter()
         .filter(|g| ours(g))
         .map(|g| {
@@ -410,17 +473,24 @@ fn installed(settings: &Map<String, Value>) -> Vec<String> {
                 .to_string()
         })
         .collect();
-    if groups("PostToolUse").iter().any(ours) {
-        out.push("PostToolUse".into());
+    if groups(post).iter().any(ours) {
+        out.push(post.into());
     }
-    if groups("Stop").iter().any(ours) {
-        out.push("Stop".into());
+    if groups(stop).iter().any(ours) {
+        out.push(stop.into());
     }
     out
 }
 
 fn pretty(settings: &Map<String, Value>) -> String {
     serde_json::to_string_pretty(settings).expect("settings serialize") + "\n"
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Agent {
+    Claude,
+    Codex,
+    Gemini,
 }
 
 /// Which hooks install writes beside the write stage on edits.
@@ -471,44 +541,58 @@ fn add_ours(
     file: &Path,
     stages: &Stages,
     runner: Option<&str>,
+    agent: Agent,
 ) -> Result<(), String> {
     let &Stages { bash, stop, nudge } = stages;
+    let (edits, dir) = match agent {
+        Agent::Claude => (EDIT_TOOLS, CLAUDE_DIR),
+        Agent::Codex => (CODEX_EDIT_TOOLS, CODEX_DIR),
+        Agent::Gemini => (GEMINI_EDIT_TOOLS, CODEX_DIR),
+    };
+    // Gemini CLI names the moments its own way and counts timeouts in milliseconds.
+    let ([pre_event, post_event, stop_event], shell, unit) = match agent {
+        Agent::Gemini => (EVENTS[1], "run_shell_command", 1000),
+        _ => (EVENTS[0], "Bash", 1),
+    };
     let hooks = settings.entry("hooks").or_insert_with(|| json!({}));
 
     let Some(hooks) = hooks.as_object_mut() else {
         return Err(format!("{}: `hooks` isn't an object", file.display()));
     };
-    let pre = hooks.entry("PreToolUse").or_insert_with(|| json!([]));
+    let pre = hooks.entry(pre_event).or_insert_with(|| json!([]));
     let Some(pre) = pre.as_array_mut() else {
         return Err(format!(
-            "{}: `hooks.PreToolUse` isn't a list",
+            "{}: `hooks.{pre_event}` isn't a list",
             file.display()
         ));
     };
-    let command = claude_command(runner);
-    let entry = json!({ "type": "command", "command": command, "timeout": TIMEOUT });
-    pre.push(json!({ "matcher": EDIT_TOOLS, "hooks": [entry.clone()] }));
+    let command = claude_command(runner, dir);
+    let entry = json!({ "type": "command", "command": command, "timeout": TIMEOUT * unit });
+    pre.push(json!({ "matcher": edits, "hooks": [entry.clone()] }));
     if bash {
-        pre.push(json!({ "matcher": "Bash", "hooks": [entry] }));
+        pre.push(json!({ "matcher": shell, "hooks": [entry] }));
     }
     if stop {
-        let groups = hooks.entry("Stop").or_insert_with(|| json!([]));
-        let Some(groups) = groups.as_array_mut() else {
-            return Err(format!("{}: `hooks.Stop` isn't a list", file.display()));
-        };
-        let command = stage_command("stop", runner);
-        groups.push(json!({ "hooks": [{ "type": "command", "command": command, "timeout": STOP_TIMEOUT }] }));
-    }
-    if nudge {
-        let groups = hooks.entry("PostToolUse").or_insert_with(|| json!([]));
+        let groups = hooks.entry(stop_event).or_insert_with(|| json!([]));
         let Some(groups) = groups.as_array_mut() else {
             return Err(format!(
-                "{}: `hooks.PostToolUse` isn't a list",
+                "{}: `hooks.{stop_event}` isn't a list",
                 file.display()
             ));
         };
-        let command = stage_command("nudge", runner);
-        groups.push(json!({ "matcher": EDIT_TOOLS, "hooks": [{ "type": "command", "command": command, "timeout": TIMEOUT }] }));
+        let command = stage_command("stop", runner, dir);
+        groups.push(json!({ "hooks": [{ "type": "command", "command": command, "timeout": STOP_TIMEOUT * unit }] }));
+    }
+    if nudge {
+        let groups = hooks.entry(post_event).or_insert_with(|| json!([]));
+        let Some(groups) = groups.as_array_mut() else {
+            return Err(format!(
+                "{}: `hooks.{post_event}` isn't a list",
+                file.display()
+            ));
+        };
+        let command = stage_command("nudge", runner, dir);
+        groups.push(json!({ "matcher": edits, "hooks": [{ "type": "command", "command": command, "timeout": TIMEOUT * unit }] }));
     }
     Ok(())
 }
@@ -518,6 +602,7 @@ fn install(
     manifest: &Path,
     stages: Stages,
     runner: Option<&str>,
+    agent: Agent,
 ) -> Result<(), String> {
     let Stages { bash, stop, nudge } = stages;
     let original = read(file)?;
@@ -526,13 +611,15 @@ fn install(
         None => Map::new(),
     };
     if !installed(&settings).is_empty() {
-        println!(
-            "hooks: already installed in {}; `fairlead migrate` brings them to this version's",
-            file.display()
-        );
+        // migrate refreshes Claude Code's settings only.
+        let hint = match agent {
+            Agent::Claude => "; `fairlead migrate` brings them to this version's",
+            _ => "",
+        };
+        println!("hooks: already installed in {}{hint}", file.display());
         return Ok(());
     }
-    add_ours(&mut settings, file, &stages, runner)?;
+    add_ours(&mut settings, file, &stages, runner, agent)?;
     let written = pretty(&settings);
     let dir = file.parent().expect("a settings file has a directory");
     let made_dir = !dir.exists();
@@ -569,6 +656,11 @@ fn install(
         "hooks: installed in {}, checking {what}{note}",
         file.display()
     );
+    match agent {
+        Agent::Codex => println!("hooks: Codex runs a project's hooks once the project is trusted and you approve them; it asks when it starts, or see /hooks"),
+        Agent::Gemini => println!("hooks: Gemini CLI runs a project's hooks only in a trusted folder, and warns once when it first sees them"),
+        Agent::Claude => {}
+    }
     Ok(())
 }
 
@@ -660,7 +752,7 @@ fn strip(settings: &mut Map<String, Value>) {
     let Some(hooks) = settings.get_mut("hooks").and_then(Value::as_object_mut) else {
         return;
     };
-    for event in ["PreToolUse", "PostToolUse", "Stop"] {
+    for event in EVENTS.concat() {
         let Some(groups) = hooks.get_mut(event).and_then(Value::as_array_mut) else {
             continue;
         };
@@ -784,7 +876,13 @@ pub fn stale_claude(
         }
         let mut want = settings.clone();
         strip(&mut want);
-        add_ours(&mut want, &file, &stages(config), package_runner(root))?;
+        add_ours(
+            &mut want,
+            &file,
+            &stages(config),
+            package_runner(root),
+            Agent::Claude,
+        )?;
         let (had, wanted) = (ours(&settings), ours(&want));
         if had == wanted {
             continue;

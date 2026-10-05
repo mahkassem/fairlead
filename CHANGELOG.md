@@ -10,6 +10,12 @@
 
 - `fairlead hooks install` on hooks an older release installed says `fairlead migrate` updates them. It used to say only that they were installed, so a repository that re-ran it after upgrading to 0.6.0 kept its old hooks, without the Stop hook or the brief nudge.
 
+- Codex hooks. `fairlead hooks install --codex` writes the guard, the brief nudge and the Stop hook to `.codex/hooks.json`, and the write hook reads Codex's `apply_patch`: each file the patch adds, changes or moves is linted as the patch would leave it, and a patch that edits, moves or deletes a migration that already exists is denied. See [Codex](https://mahkassem.github.io/fairlead/docs/guard.html#codex).
+- Gemini CLI hooks. `fairlead hooks install --gemini` merges the guard, the brief nudge and the Stop hook into `.gemini/settings.json` as `BeforeTool`, `AfterTool` and `AfterAgent`, with timeouts in milliseconds, and the write hook reads `write_file`, `replace` and `run_shell_command` and answers in Gemini CLI's shape. See [Gemini CLI](https://mahkassem.github.io/fairlead/docs/guard.html#gemini-cli).
+
+### Fixed
+
+- A config that sets `fairlead = "X.Y"` and uses keys a binary doesn't know yet gets "this config needs Fairlead X.Y or later" from that binary, where it used to get "unknown field" for the first new key.
 - `fairlead hooks --help` and `hooks install --help` name every hook install adds: the guard before an edit, the brief nudge after one, the Stop hook and the git hook, where they used to name one Claude Code hook.
 
 ## 0.6.0 (2026-09-29)
