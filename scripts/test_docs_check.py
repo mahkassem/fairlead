@@ -38,13 +38,17 @@ class DocsCheck(unittest.TestCase):
         return docs_check.check(self.root, release)
 
     def released(self):
-        """The copy as its release would have it: no Unreleased notes left."""
+        """The copy as its release would have it: no Unreleased notes or
+        labels left."""
         path = self.root / "CHANGELOG.md"
         text = path.read_text()
         start = text.find("## Unreleased")
         if start >= 0:
             end = text.index("\n## ", start + 1) + 1
             path.write_text(text[:start] + text[end:])
+        for page in [self.root / "README.md", *(self.root / "docs/src").glob("*.md")]:
+            text = page.read_text()
+            page.write_text(text.replace("*Unreleased:*", f"*Since {self.version}:*"))
         return f"v{self.version}"
 
     def test_the_docs_as_they_stand_pass(self):

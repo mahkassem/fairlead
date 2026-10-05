@@ -14,6 +14,8 @@ mod guard_cmd;
 mod hook_cmd;
 mod hooks_cmd;
 mod init_cmd;
+mod migrate_cmd;
+mod migrate_notes;
 mod plan_cmd;
 mod receipt_cmd;
 mod replay_cmd;
@@ -121,6 +123,12 @@ enum Command {
     Next {
         #[command(flatten)]
         args: receipt_cmd::NextArgs,
+    },
+    /// Bring the hooks, the config's version floor and the version pins to
+    /// this release, and list what changed since that needs a person.
+    Migrate {
+        #[command(flatten)]
+        args: migrate_cmd::MigrateArgs,
     },
     /// Install, check or remove the Claude Code and git hooks that run the guard, the brief nudge and the Stop hook.
     Hooks {
@@ -377,6 +385,7 @@ fn main() -> ExitCode {
         Some(Command::Coverage { action }) => coverage_cmd::run(action, &cwd()),
         Some(Command::Guard { action, sets }) => guard_cmd::run(action, sets, &cwd()),
         Some(Command::Hooks { action }) => hooks_cmd::run(action, &cwd()),
+        Some(Command::Migrate { args }) => migrate_cmd::run(args, &cwd()),
         Some(Command::Done { args }) => done_cmd::run(args, &cwd()),
         Some(Command::Brief { args }) => brief_cmd::run(args, &cwd()),
         Some(Command::Receipt { args }) => receipt_cmd::run(args, &cwd()),

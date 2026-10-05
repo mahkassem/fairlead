@@ -212,7 +212,7 @@ fn load_from(
         ));
     }
     for (label, value) in &layers {
-        typed(label, value.clone())?;
+        typed(label, value.clone()).map_err(|e| later_floor(label, value).unwrap_or(e))?;
     }
     let mut merged = serde_json::to_value(Config::default()).expect("defaults serialize");
     let mut origins = BTreeMap::new();
@@ -282,6 +282,11 @@ fn local_file(root: &Path) -> Result<Option<PathBuf>, ConfigError> {
     one_of(root, "fairlead.local", "local")
 }
 
+/// One config file as written, before it's merged or typed.
+pub fn read_layer(path: &Path) -> Result<Value, ConfigError> {
+    read_file(path)
+}
+
 fn read_file(path: &Path) -> Result<Value, ConfigError> {
     let label = file_name(path);
     let text = std::fs::read_to_string(path).map_err(|e| error(&label, None, e.to_string()))?;
@@ -294,6 +299,19 @@ fn read_file(path: &Path) -> Result<Value, ConfigError> {
     Ok(match value {
         Value::Null => Value::Object(Map::new()),
         other => other,
+    })
+}
+
+/// A layer written for a later Fairlead can hold keys this binary doesn't
+/// know, and its `fairlead` floor is the answer that says what to do.
+fn later_floor(label: &str, value: &Value) -> Option<ConfigError> {
+    let pin = value.get("fairlead")?.as_str()?;
+    super::validate::needs_later(pin)?.then(|| {
+        error(
+            label,
+            Some("fairlead".into()),
+            super::validate::needs_later_message(pin),
+        )
     })
 }
 
@@ -439,6 +457,26 @@ fn record(value: &Value, path: &str, label: &str, origins: &mut BTreeMap<String,
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn a_layer_for_a_later_version_names_the_version_before_its_unknown_keys() {
+        let later = json!({"fairlead": "99.0", "memory": {"dir": "x"}});
+        let err = typed("fairlead.toml", later.clone())
+            .map_err(|e| later_floor("fairlead.toml", &later).unwrap_or(e))
+            .unwrap_err();
+        assert_eq!(err.key.as_deref(), Some("fairlead"));
+        assert!(
+            err.message
+                .starts_with("this config needs Fairlead 99.0 or later"),
+            "{err}"
+        );
+
+        let current = json!({"fairlead": "0.1", "memory": {"dir": "x"}});
+        assert!(later_floor("fairlead.toml", &current).is_none());
+        let err = typed("fairlead.toml", current).unwrap_err();
+        assert!(err.message.contains("unknown field `memory`"), "{err}");
+        assert!(later_floor("fairlead.toml", &json!({"memory": {}})).is_none());
+    }
 
     #[test]
     fn env_names_map_to_dotted_keys_and_others_are_ignored() {

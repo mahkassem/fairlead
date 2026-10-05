@@ -9,6 +9,20 @@
 ### Fixed
 
 - A plan in a repository where no file matches `[tests] match` warns `no-tests` and names `fairlead init`, and says "everything, and there's nothing to run" where it used to say "everything" over 0 tests.
+- `fairlead migrate` brings a repository to the installed release. It replaces Fairlead's Claude Code hooks and lefthook entry with the ones this release's `hooks install` writes for the config, keeping every other setting, and uninstall still restores the file from before Fairlead. It raises the config's `fairlead` floor when the config uses a newer table, and moves Fairlead's version in `package.json` and in workflows that pin the action. Then it lists the changes since your release that need a decision. It writes nothing without `--write`, and `--check` exits 1 while anything is left, for CI. See [Upgrading](https://mahkassem.github.io/fairlead/docs/migrate.html).
+
+### Fixed
+
+- `fairlead hooks install` on hooks an older release installed says `fairlead migrate` updates them. It used to say only that they were installed, so a repository that re-ran it after upgrading to 0.6.0 kept its old hooks, without the Stop hook or the brief nudge.
+
+- Java and Kotlin in the graph. `.java` and `.kt` files are read by a lexer of their own, and a reference resolves through an index of every file's package and top-level declarations, so an import, a wildcard import, a static import and a class of the same package with no import all count, across the modules of a Maven or Gradle build. Runner commands take `{class}`, repeated once per selected test class (Gradle's `--tests={class}`), and `{classes}`, joined with commas (Surefire's `-Dtest={classes}`). On gson and moshi, a change to each of 40 sampled classes selected every test file that names the class. See [Java and Kotlin](https://mahkassem.github.io/fairlead/docs/graph.html#java-and-kotlin).
+- Replay reads Maven's Surefire and Failsafe output (`extractor = "maven"`) and Gradle's (`extractor = "gradle"`). A failing class attributes to its Java or Kotlin file in any module, a nested class to its outer class's file, and a Gradle failure printed by simple name to the file under its task's project; Surefire's closing lists never count a failure twice. A test file that fails to compile under Gradle is that file's failure. See [Replay](https://mahkassem.github.io/fairlead/docs/replay.html#replay-run).
+- Codex hooks. `fairlead hooks install --codex` writes the guard, the brief nudge and the Stop hook to `.codex/hooks.json`, and the write hook reads Codex's `apply_patch`: each file the patch adds, changes or moves is linted as the patch would leave it, and a patch that edits, moves or deletes a migration that already exists is denied. See [Codex](https://mahkassem.github.io/fairlead/docs/guard.html#codex).
+- Gemini CLI hooks. `fairlead hooks install --gemini` merges the guard, the brief nudge and the Stop hook into `.gemini/settings.json` as `BeforeTool`, `AfterTool` and `AfterAgent`, with timeouts in milliseconds, and the write hook reads `write_file`, `replace` and `run_shell_command` and answers in Gemini CLI's shape. See [Gemini CLI](https://mahkassem.github.io/fairlead/docs/guard.html#gemini-cli).
+
+### Fixed
+
+- A config that sets `fairlead = "X.Y"` and uses keys a binary doesn't know yet gets "this config needs Fairlead X.Y or later" from that binary, where it used to get "unknown field" for the first new key.
 - `fairlead hooks --help` and `hooks install --help` name every hook install adds: the guard before an edit, the brief nudge after one, the Stop hook and the git hook, where they used to name one Claude Code hook.
 
 ## 0.6.0 (2026-09-29)

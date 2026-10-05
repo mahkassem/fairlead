@@ -63,7 +63,7 @@ fairlead.toml: tests.unreachd: unknown field `unreachd`, expected one of ...
 
 | Key | Default | Meaning |
 | --- | --- | --- |
-| `fairlead` | none | The oldest Fairlead version this config needs, such as `"0.2"` |
+| `fairlead` | none | The oldest Fairlead version this config needs, such as `"0.2"`. *Unreleased:* a config that an older binary can't read, because it uses keys added later, gets this version in the error instead of the unknown key. |
 | `modules.discover` | `["workspaces"]` | Where modules come from |
 | `modules.define` | `[]` | Extra modules: `{ pattern = "services/{name}/src" }` |
 | `graph.tsconfig` | `"auto"` | The nearest tsconfig to each file, or a path |
@@ -87,7 +87,7 @@ fairlead.toml: tests.unreachd: unknown field `unreachd`, expected one of ...
 | `replay.provider` | `"github"` | Where CI history comes from |
 | `replay.window_days` | `90` | How far back replay looks |
 | `replay.min_failures` | `30` | Failures needed before a replay result counts |
-| `replay.failures` | `[]` | `runner`, `extractor` (`vitest`, `jest`, `bun`, `regex`), `job`, `pattern` |
+| `replay.failures` | `[]` | `runner`, `extractor` (`vitest`, `jest`, `bun`, `phpunit`, `pest`, `go`, `pytest`, `maven`, `gradle`, `regex`), `job`, `pattern` |
 | `replay.checks` | `[]` | Map a CI `job` and `step` to a `check` |
 | `replay.ignore` | `[]` | CI job names (regexes) whose failures replay leaves out on purpose, such as a job that only aggregates others |
 | `replay.quarantine` | `[]` | Tests declared flaky in named jobs: `path`, `job`, `reason`, `until` ([Replay](replay.md#quarantine)) |
@@ -117,6 +117,6 @@ fairlead.toml: tests.unreachd: unknown field `unreachd`, expected one of ...
 | `ci.escapes` | `"report"` | What a failing test the merged change's plan left out does once `ci run --judge` finds it: `"report"` lists it, `"fail"` also makes `ci report` exit 1. See [Escapes](ci.md#escapes---judge-path) |
 | `guard.comments` | off | `files`, `exclude`, `tests`, `migrations`, `block_length`, `density`, `history`, `item_codes`, `agent_phrases`, `block_marker`, and `ratchet` (default `false`). See [Guard rules](guard.md#comments) |
 
-Commands are always argv arrays, never shell strings, and `{files}` expands to one argument per file. `{packages}` expands to one `./dir` per directory holding a selected test, or `./...` when everything runs, for `go test`. In `tests.runners.cwd`, `{module}` is the module's root path and `{module.id}` its id.
+Commands are always argv arrays, never shell strings, and `{files}` expands to one argument per file. `{packages}` expands to one `./dir` per directory holding a selected test, or `./...` when everything runs, for `go test`. *Unreleased:* for Maven and Gradle, an argument holding `{class}` is repeated once per selected test class and `{classes}` joins them with commas; either is dropped when everything runs ([Java and Kotlin](graph.md#java-and-kotlin)). In `tests.runners.cwd`, `{module}` is the module's root path and `{module.id}` its id.
 
 `config check` validates every key's type, the ids, placeholders and references between sections, and lists test files that match no runner or more than one. In `tests.owners`, a placeholder used in `covers` must be captured in `match`.

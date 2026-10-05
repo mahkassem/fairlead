@@ -5,9 +5,9 @@
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
-pub const SOURCE_EXTENSIONS: [&str; 14] = [
+pub const SOURCE_EXTENSIONS: [&str; 16] = [
     "ts", "tsx", "mts", "cts", "js", "jsx", "mjs", "cjs", "vue", "svelte", "astro", "php", "go",
-    "py",
+    "py", "java", "kt",
 ];
 const SKIPPED_DIRS: [&str; 2] = [".git", "node_modules"];
 

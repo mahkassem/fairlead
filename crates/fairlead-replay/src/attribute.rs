@@ -3,6 +3,7 @@
 //! match tries, in order: the path as it stands, the path under the named
 //! project (a workspace package's name or folder), a unique suffix, then
 //! the suffix candidates whose source contains the failing test's title.
+//! A JVM class printed as a path is matched by its own rules (`jvm_class`).
 //! Anything still ambiguous is unattributed, never guessed.
 
 use crate::extract::Printed;
@@ -96,6 +97,12 @@ pub fn attribute(
             }
         }
     }
+    if let Some(stem) = JVM_EXTENSIONS
+        .iter()
+        .find_map(|ext| path.strip_suffix(&format!(".{ext}")))
+    {
+        return jvm_class(stem, printed, repo.files, &read);
+    }
     let suffix = format!("/{path}");
     let candidates: Vec<String> = repo
         .files
@@ -106,16 +113,84 @@ pub fn attribute(
     if candidates.len() == 1 {
         return Attribution::File(candidates[0].clone());
     }
-    if let Some(title) = printed.title.as_deref().filter(|t| t.len() >= 8) {
-        let named: Vec<&String> = candidates
-            .iter()
-            .filter(|f| read(f).is_some_and(|text| text.contains(title)))
-            .collect();
-        if named.len() == 1 {
-            return Attribution::File(named[0].clone());
-        }
+    if let Some(file) = by_title(&candidates, printed.title.as_deref(), &read) {
+        return Attribution::File(file);
     }
     Attribution::Unattributed(candidates)
+}
+
+/// The one candidate whose source holds the failing test's title, when
+/// the title is long enough to mean something.
+fn by_title(
+    candidates: &[String],
+    title: Option<&str>,
+    read: &dyn Fn(&str) -> Option<String>,
+) -> Option<String> {
+    let title = title.filter(|t| t.len() >= 8)?;
+    let named: Vec<&String> = candidates
+        .iter()
+        .filter(|f| read(f).is_some_and(|text| text.contains(title)))
+        .collect();
+    (named.len() == 1).then(|| named[0].clone())
+}
+
+/// A JVM class's source may be Java or Kotlin, whatever extension the
+/// class was printed with.
+const JVM_EXTENSIONS: [&str; 2] = ["java", "kt"];
+
+fn declares_package(source: &str, package: &str) -> bool {
+    source.lines().any(|line| {
+        line.trim()
+            .strip_prefix("package ")
+            .is_some_and(|p| p.trim().trim_end_matches(';').trim() == package)
+    })
+}
+
+/// A JVM class printed as a path, `com/acme/FooTest`: the file whose path
+/// ends with it in either extension, under any module's source root.
+/// Kotlin may leave a package's leading folders out, so failing that, a
+/// shorter tail counts for a file that declares the class's package.
+/// Several matches narrow to the printed project's folder, then to the one
+/// holding the test's title.
+fn jvm_class(
+    stem: &str,
+    printed: &Printed,
+    files: &[String],
+    read: &dyn Fn(&str) -> Option<String>,
+) -> Attribution {
+    let segments: Vec<&str> = stem.split('/').filter(|s| !s.is_empty()).collect();
+    let package = segments[..segments.len().saturating_sub(1)].join(".");
+    for start in 0..segments.len() {
+        let tail = segments[start..].join("/");
+        let ends = |f: &str| {
+            JVM_EXTENSIONS.iter().any(|ext| {
+                let name = format!("{tail}.{ext}");
+                f == name || f.ends_with(&format!("/{name}"))
+            })
+        };
+        let mut found: Vec<String> = files.iter().filter(|f| ends(f)).cloned().collect();
+        if start > 0 {
+            found.retain(|f| read(f).is_some_and(|text| declares_package(&text, &package)));
+        }
+        if found.len() == 1 {
+            return Attribution::File(found.remove(0));
+        }
+        if found.is_empty() {
+            continue;
+        }
+        if let Some(dir) = printed.project.as_deref() {
+            let prefix = format!("{dir}/");
+            let under: Vec<&String> = found.iter().filter(|f| f.starts_with(&prefix)).collect();
+            if let [one] = under.as_slice() {
+                return Attribution::File((*one).clone());
+            }
+        }
+        if let Some(file) = by_title(&found, printed.title.as_deref(), read) {
+            return Attribution::File(file);
+        }
+        return Attribution::Unattributed(found);
+    }
+    Attribution::Unattributed(Vec::new())
 }
 
 #[cfg(test)]

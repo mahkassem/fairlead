@@ -110,9 +110,60 @@ command = ["pytest", "{files}"]
 
 A change to `pyproject.toml`, `setup.py`, `setup.cfg`, `requirements*.txt`, `poetry.lock`, `uv.lock` or `Pipfile.lock` runs everything by default (`plan.run_all`).
 
+## Java and Kotlin
+
+*Unreleased:* `.java` and `.kt` files are scanned as the `jvm` provider, with
+a small lexer of its own rather than a grammar, so it costs the binary almost
+nothing. Java and Kotlin refer to a class by its qualified name, and a class
+in the same package needs no import, which is how a JUnit test usually
+reaches the class it tests. So every file's `package` line and top-level
+declarations (classes, interfaces, enums, records, annotations, and Kotlin's
+objects, type aliases and top-level functions) make an index of qualified
+names, and a file depends on:
+
+- each class an `import` names, or the class that holds a nested class or a
+  static member it names (`import static a.b.Money.format` is `a.b.Money`);
+- each class it uses by name that its own package, or a wildcard import
+  (`import a.b.*`), declares;
+- in Kotlin, each top-level function it calls that its package declares.
+
+A name nothing in the tree declares, such as the JDK's or a dependency's, is
+left out. Paths and build files don't matter: the index is built from what
+the files say, so a multi-module Maven or Gradle build resolves across
+modules. Names used only in comments or strings, and reflection, don't count.
+
+Maven and Gradle take test classes rather than files. An argument holding
+`{class}` is repeated once per selected test class, and `{classes}` joins
+them with commas; the class comes from the source-set layout, so
+`core/src/test/java/com/acme/OrderTest.java` is `com.acme.OrderTest`. When
+everything runs, the argument is dropped and the whole suite runs.
+
+```toml
+[tests]
+match = ["**/src/test/**/*.java", "**/src/test/**/*.kt"]
+
+[[tests.runners]]
+id = "gradle"
+match = ["**/src/test/**"]
+command = ["./gradlew", "test", "--tests={class}"]
+# Maven instead: command = ["mvn", "test", "-Dtest={classes}", "-Dsurefire.failIfNoSpecifiedTests=false"]
+
+[plan]
+# Build files pick every dependency's version, as a lockfile does.
+run_all = ["**/pom.xml", "**/build.gradle", "**/build.gradle.kts", "settings.gradle*", "gradle/libs.versions.toml"]
+```
+
+Setting `plan.run_all` replaces the default list, so copy the defaults you
+still want (`fairlead config show --origin` prints them).
+
+On two public repositories, a change to each of 40 sampled main classes
+selected every test file that names the class, apart from names that
+appear only in a comment, a string or a test's own class of the same name:
+gson (122 main and 142 test files) and moshi (Kotlin and Java, 95 and 48).
+
 ## Other languages: external providers
 
-The built-in scanners read JavaScript, TypeScript, PHP, Go and Python. For any other language, or a build tool that already knows its own graph, a `[[graph.providers]]` entry names a command that prints the graph for the files it claims:
+The built-in scanners read JavaScript, TypeScript, PHP, Go and Python, and Java and Kotlin (unreleased). For any other language, or a build tool that already knows its own graph, a `[[graph.providers]]` entry names a command that prints the graph for the files it claims:
 
 ```toml
 [[graph.providers]]

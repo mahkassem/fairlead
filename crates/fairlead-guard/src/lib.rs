@@ -18,6 +18,7 @@ pub mod hook;
 pub mod lefthook;
 pub mod migrations;
 mod names;
+pub mod patch;
 mod rules;
 mod size;
 pub mod stages;
