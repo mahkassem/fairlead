@@ -136,6 +136,7 @@ pub const SINCE: &[(&str, &str)] = &[
     ("done", "0.6"),
     ("brief", "0.6"),
     ("ci", "0.6"),
+    ("quarantine", "0.7"),
 ];
 
 /// Top-level tables every released config format has had.
