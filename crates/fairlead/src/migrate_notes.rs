@@ -64,6 +64,18 @@ fn has_go(cx: &Context) -> bool {
     cx.root.join("go.mod").is_file() || cx.root.join("go.work").is_file()
 }
 
+fn has_jvm_build(cx: &Context) -> bool {
+    [
+        "pom.xml",
+        "build.gradle",
+        "build.gradle.kts",
+        "settings.gradle",
+        "settings.gradle.kts",
+    ]
+    .iter()
+    .any(|f| cx.root.join(f).is_file())
+}
+
 /// Each release, oldest first, with what it changed that needs a decision.
 pub const RELEASES: &[(&str, &[Note])] = &[
     ("0.1.0", &[]),
@@ -119,6 +131,13 @@ pub const RELEASES: &[(&str, &[Note])] = &[
         &[Note {
             text: "`hooks install` adds a Stop hook, which sends an agent back while `fairlead done` hasn't passed, and a nudge after an edit made with no brief. `migrate --write` adds both to hooks installed before; set `done.on_stop = \"off\"` or `brief.nudge = false` first to leave one out.",
             applies: has_claude_hooks,
+        }],
+    ),
+    (
+        "0.7.0",
+        &[Note {
+            text: "Java and Kotlin files are in the import graph. A Maven or Gradle build that ran everything through a `[[checks]]` entry can give its tests a runner instead, with `{class}` or `{classes}` in the command (see Java and Kotlin).",
+            applies: has_jvm_build,
         }],
     ),
 ];

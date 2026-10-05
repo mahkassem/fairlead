@@ -112,7 +112,7 @@ A change to `pyproject.toml`, `setup.py`, `setup.cfg`, `requirements*.txt`, `poe
 
 ## Java and Kotlin
 
-*Unreleased:* `.java` and `.kt` files are scanned as the `jvm` provider, with
+*Since 0.7.0:* `.java` and `.kt` files are scanned as the `jvm` provider, with
 a small lexer of its own rather than a grammar, so it costs the binary almost
 nothing. Java and Kotlin refer to a class by its qualified name, and a class
 in the same package needs no import, which is how a JUnit test usually
@@ -163,7 +163,7 @@ gson (122 main and 142 test files) and moshi (Kotlin and Java, 95 and 48).
 
 ## Other languages: external providers
 
-The built-in scanners read JavaScript, TypeScript, PHP, Go and Python, and Java and Kotlin (unreleased). For any other language, or a build tool that already knows its own graph, a `[[graph.providers]]` entry names a command that prints the graph for the files it claims:
+The built-in scanners read JavaScript, TypeScript, PHP, Go and Python, and Java and Kotlin (since 0.7.0). For any other language, or a build tool that already knows its own graph, a `[[graph.providers]]` entry names a command that prints the graph for the files it claims:
 
 ```toml
 [[graph.providers]]
