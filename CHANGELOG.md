@@ -9,6 +9,7 @@
 ### Fixed
 
 - On Windows, `fairlead done`, `ci run`, `[[guard.external]]` rules and graph providers start a command the way a shell does. A name with no extension is looked up on `PATH` with each of `PATHEXT`'s `.com`, `.exe`, `.bat` and `.cmd`, and a relative path such as `node_modules/.bin/eslint` beside the working directory. A check or runner that called `npm`, `npx`, `pnpm` or `yarn`, which install `.cmd` shims, used to fail with "program not found".
+- A config that sets `fairlead = "X.Y"` and uses keys a binary doesn't know yet gets "this config needs Fairlead X.Y or later" from that binary, where it used to get "unknown field" for the first new key.
 - `fairlead hooks --help` and `hooks install --help` name every hook install adds: the guard before an edit, the brief nudge after one, the Stop hook and the git hook, where they used to name one Claude Code hook.
 
 ## 0.6.0 (2026-09-29)

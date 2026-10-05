@@ -63,7 +63,7 @@ fairlead.toml: tests.unreachd: unknown field `unreachd`, expected one of ...
 
 | Key | Default | Meaning |
 | --- | --- | --- |
-| `fairlead` | none | The oldest Fairlead version this config needs, such as `"0.2"` |
+| `fairlead` | none | The oldest Fairlead version this config needs, such as `"0.2"`. *Unreleased:* a config that an older binary can't read, because it uses keys added later, gets this version in the error instead of the unknown key. |
 | `modules.discover` | `["workspaces"]` | Where modules come from |
 | `modules.define` | `[]` | Extra modules: `{ pattern = "services/{name}/src" }` |
 | `graph.tsconfig` | `"auto"` | The nearest tsconfig to each file, or a path |
