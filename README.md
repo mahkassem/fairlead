@@ -106,6 +106,8 @@ Svelte and Astro components since 0.5.0. An external provider feeds the graph
 for any other language, and a coverage map adds what imports can't show.
 Framework packs and folders of several repositories are on the way
 ([#47](https://github.com/mahkassem/fairlead/issues/47)).*
+*Unreleased:* Java and Kotlin, with Maven and Gradle runners that take the
+selected test classes.
 
 ## What it does
 
