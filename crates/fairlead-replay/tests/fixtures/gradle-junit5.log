@@ -1,0 +1,79 @@
+2026-08-31T14:20:05.0000000Z ##[group]Run ./gradlew test allTests -Ptest.java.version=17
+2026-08-31T14:20:05.2110000Z ./gradlew test allTests -Ptest.java.version=17
+2026-08-31T14:20:05.4220000Z shell: /usr/bin/bash -e {0}
+2026-08-31T14:20:05.6330000Z ##[endgroup]
+2026-08-31T14:20:05.8440000Z Starting a Gradle Daemon (subsequent builds will be faster)
+2026-08-31T14:20:06.0550000Z > Task :build-logic:compileKotlin UP-TO-DATE
+2026-08-31T14:20:06.2660000Z > Task :okhttp:compileTestKotlinJvm
+2026-08-31T14:20:06.4770000Z > Task :mockwebserver:compileTestKotlin
+2026-08-31T14:20:06.6880000Z > Task :okhttp:jvmTest
+2026-08-31T14:20:06.8990000Z 
+2026-08-31T14:20:07.1100000Z CallTest > cancelBeforeBodyIsRead() FAILED
+2026-08-31T14:20:07.3210000Z     java.lang.AssertionError: Expecting value to be true but was false
+2026-08-31T14:20:07.5320000Z         at app//okhttp3.CallTest.cancelBeforeBodyIsRead(CallTest.kt:1834)
+2026-08-31T14:20:07.7430000Z 
+2026-08-31T14:20:07.9540000Z OkHttpClientTest > timeoutDefaults() FAILED
+2026-08-31T14:20:08.1650000Z     org.opentest4j.AssertionFailedError: expected: <10000> but was: <0>
+2026-08-31T14:20:08.3760000Z         at app//okhttp3.OkHttpClientTest.timeoutDefaults(OkHttpClientTest.kt:71)
+2026-08-31T14:20:08.5870000Z 
+2026-08-31T14:20:08.7980000Z > Task :mockwebserver:test
+2026-08-31T14:20:09.0090000Z 
+2026-08-31T14:20:09.2200000Z MockWebServerTest > request with chunked body() FAILED
+2026-08-31T14:20:09.4310000Z     java.io.IOException: unexpected end of stream on http://localhost:38213/...
+2026-08-31T14:20:09.6420000Z         at app//mockwebserver3.MockWebServerTest.request with chunked body(MockWebServerTest.kt:214)
+2026-08-31T14:20:09.8530000Z 
+2026-08-31T14:20:10.0640000Z > Task :samples:compare:test
+2026-08-31T14:20:10.2750000Z 
+2026-08-31T14:20:10.4860000Z OkHttpClientTest > get() FAILED
+2026-08-31T14:20:10.6970000Z     java.net.SocketTimeoutException: timeout
+2026-08-31T14:20:10.9080000Z         at app//okhttp3.compare.OkHttpClientTest.get(OkHttpClientTest.kt:44)
+2026-08-31T14:20:11.1190000Z 
+2026-08-31T14:20:11.3300000Z > Task :okhttp:jvmTest
+2026-08-31T14:20:11.5410000Z 
+2026-08-31T14:20:11.7520000Z Http2ConnectionTest > ResetHandling > dataAfterRstStreamIsIgnored() FAILED
+2026-08-31T14:20:11.9630000Z     java.lang.IllegalStateException: stream was reset: CANCEL
+2026-08-31T14:20:12.1740000Z         at app//okhttp3.internal.http2.Http2ConnectionTest$ResetHandling.dataAfterRstStreamIsIgnored(Http2ConnectionTest.kt:402)
+2026-08-31T14:20:12.3850000Z 
+2026-08-31T14:20:12.5960000Z WebSocketReaderTest > closeCodes(int) > [2] 1005 FAILED
+2026-08-31T14:20:12.8070000Z     java.net.ProtocolException: Code 1005 is reserved and may not be used.
+2026-08-31T14:20:13.0180000Z         at app//okhttp3.internal.ws.WebSocketReaderTest.closeCodes(WebSocketReaderTest.kt:263)
+2026-08-31T14:20:13.2290000Z 
+2026-08-31T14:20:13.4400000Z 2814 tests completed, 6 failed, 31 skipped
+2026-08-31T14:20:13.6510000Z 
+2026-08-31T14:20:13.8620000Z > Task :okhttp:jvmTest FAILED
+2026-08-31T14:20:14.0730000Z 
+2026-08-31T14:20:14.2840000Z > Task :mockwebserver:test FAILED
+2026-08-31T14:20:14.4950000Z 
+2026-08-31T14:20:14.7060000Z > Task :samples:compare:test FAILED
+2026-08-31T14:20:14.9170000Z 
+2026-08-31T14:20:15.1280000Z FAILURE: Build completed with 3 failures.
+2026-08-31T14:20:15.3390000Z 
+2026-08-31T14:20:15.5500000Z 1: Task failed with an exception.
+2026-08-31T14:20:15.7610000Z -----------
+2026-08-31T14:20:15.9720000Z * What went wrong:
+2026-08-31T14:20:16.1830000Z Execution failed for task ':okhttp:jvmTest'.
+2026-08-31T14:20:16.3940000Z > There were failing tests. See the report at: file:///home/runner/work/okhttp/okhttp/okhttp/build/reports/tests/jvmTest/index.html
+2026-08-31T14:20:16.6050000Z 
+2026-08-31T14:20:16.8160000Z * Try:
+2026-08-31T14:20:17.0270000Z > Run with --scan to get full insights.
+2026-08-31T14:20:17.2380000Z ==============================================================================
+2026-08-31T14:20:17.4490000Z 
+2026-08-31T14:20:17.6600000Z 2: Task failed with an exception.
+2026-08-31T14:20:17.8710000Z -----------
+2026-08-31T14:20:18.0820000Z * What went wrong:
+2026-08-31T14:20:18.2930000Z Execution failed for task ':mockwebserver:test'.
+2026-08-31T14:20:18.5040000Z > There were failing tests. See the report at: file:///home/runner/work/okhttp/okhttp/mockwebserver/build/reports/tests/test/index.html
+2026-08-31T14:20:18.7150000Z 
+2026-08-31T14:20:18.9260000Z ==============================================================================
+2026-08-31T14:20:19.1370000Z 
+2026-08-31T14:20:19.3480000Z 3: Task failed with an exception.
+2026-08-31T14:20:19.5590000Z -----------
+2026-08-31T14:20:19.7700000Z * What went wrong:
+2026-08-31T14:20:19.9810000Z Execution failed for task ':samples:compare:test'.
+2026-08-31T14:20:20.1920000Z > There were failing tests. See the report at: file:///home/runner/work/okhttp/okhttp/samples/compare/build/reports/tests/test/index.html
+2026-08-31T14:20:20.4030000Z 
+2026-08-31T14:20:20.6140000Z ==============================================================================
+2026-08-31T14:20:20.8250000Z 
+2026-08-31T14:20:21.0360000Z BUILD FAILED in 9m 12s
+2026-08-31T14:20:21.2470000Z 612 actionable tasks: 598 executed, 14 up-to-date
+2026-08-31T14:20:21.4580000Z ##[error]Process completed with exit code 1.

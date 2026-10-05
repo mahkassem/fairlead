@@ -6,8 +6,8 @@ mod quarantine;
 mod validate;
 
 pub use load::{
-    find_config, load, load_file, ConfigError, LoadOptions, Loaded, ENV_NAME, LOCAL_NAMES,
-    PROJECT_NAMES,
+    find_config, load, load_file, read_layer, ConfigError, LoadOptions, Loaded, ENV_NAME,
+    LOCAL_NAMES, PROJECT_NAMES,
 };
 pub use quarantine::{Condition, Os, PlatformQuarantine};
 pub use validate::{is_date, plan_globs, validate, Problem, GUARD_RULES};
@@ -439,8 +439,8 @@ pub enum Provider {
 pub struct FailureSource {
     /// The runner whose files these failures name.
     pub runner: String,
-    /// A built-in extractor ("vitest", "jest", "bun", "phpunit", "pest", "go", "pytest") or
-    /// "regex" with `pattern`.
+    /// A built-in extractor ("vitest", "jest", "bun", "phpunit", "pest", "go", "pytest",
+    /// "maven", "gradle") or "regex" with `pattern`.
     pub extractor: String,
     /// CI job names this source reads, as a regex.
     #[serde(default, skip_serializing_if = "Option::is_none")]

@@ -215,6 +215,15 @@ pub fn plan(scan: &mut Scan, config: &Config, input: Input) -> Result<Plan, Stri
     let all = all_reason.is_some();
     let checks = checks(&cx, &walked, all_reason.as_ref())?;
     warn_unresolved(&cx, &walked, &mut warnings);
+    // An empty universe is almost always a config that doesn't fit the
+    // repository yet, which reads as a plan that found nothing to run.
+    if cx.tests.is_empty() && config.checks.items().is_empty() {
+        warnings.push(Warning {
+            code: "no-tests".into(),
+            path: None,
+            message: "no file matches [tests] match, so no test can be selected; `fairlead init` writes a first config for this repository".into(),
+        });
+    }
     if !tests.is_empty() && config.tests.runners.items().is_empty() {
         warnings.push(Warning {
             code: "no-runners".into(),
