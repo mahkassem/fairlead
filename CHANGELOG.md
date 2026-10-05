@@ -5,9 +5,12 @@
 ### New
 
 - Java and Kotlin in the graph. `.java` and `.kt` files are read by a lexer of their own, and a reference resolves through an index of every file's package and top-level declarations, so an import, a wildcard import, a static import and a class of the same package with no import all count, across the modules of a Maven or Gradle build. Runner commands take `{class}`, repeated once per selected test class (Gradle's `--tests={class}`), and `{classes}`, joined with commas (Surefire's `-Dtest={classes}`). On gson and moshi, a change to each of 40 sampled classes selected every test file that names the class. See [Java and Kotlin](https://mahkassem.github.io/fairlead/docs/graph.html#java-and-kotlin).
+- Codex hooks. `fairlead hooks install --codex` writes the guard, the brief nudge and the Stop hook to `.codex/hooks.json`, and the write hook reads Codex's `apply_patch`: each file the patch adds, changes or moves is linted as the patch would leave it, and a patch that edits, moves or deletes a migration that already exists is denied. See [Codex](https://mahkassem.github.io/fairlead/docs/guard.html#codex).
+- Gemini CLI hooks. `fairlead hooks install --gemini` merges the guard, the brief nudge and the Stop hook into `.gemini/settings.json` as `BeforeTool`, `AfterTool` and `AfterAgent`, with timeouts in milliseconds, and the write hook reads `write_file`, `replace` and `run_shell_command` and answers in Gemini CLI's shape. See [Gemini CLI](https://mahkassem.github.io/fairlead/docs/guard.html#gemini-cli).
 
 ### Fixed
 
+- A config that sets `fairlead = "X.Y"` and uses keys a binary doesn't know yet gets "this config needs Fairlead X.Y or later" from that binary, where it used to get "unknown field" for the first new key.
 - `fairlead hooks --help` and `hooks install --help` name every hook install adds: the guard before an edit, the brief nudge after one, the Stop hook and the git hook, where they used to name one Claude Code hook.
 
 ## 0.6.0 (2026-09-29)

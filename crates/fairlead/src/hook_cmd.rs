@@ -1,5 +1,5 @@
-//! `fairlead guard hook`: the write stage, run by Claude Code before an edit
-//! or a shell command. It answers only with a deny or a note, and anything
+//! `fairlead guard hook`: the write stage, run by Claude Code or Codex before
+//! an edit or a shell command. It answers only with a deny or a note, and anything
 //! it can't decide in time, read or understand lets the call go ahead.
 
 use std::io::Read;
@@ -12,6 +12,7 @@ use fairlead_core::config::{self, LoadOptions};
 use fairlead_guard::edit::Rebuilt;
 use fairlead_guard::events::{Event, EventLog};
 use fairlead_guard::hook::{self, Request};
+use fairlead_guard::patch::{self, Change, FilePatch};
 use fairlead_guard::{added, git, head_paths, Finding, Guard, Source};
 use serde_json::Value;
 
@@ -70,6 +71,10 @@ pub fn run() -> ExitCode {
         .get("tool_name")
         .and_then(Value::as_str)
         .map(String::from);
+    let hook_event = call
+        .get("hook_event_name")
+        .and_then(Value::as_str)
+        .map(String::from);
     let record = |decision: &'static str, outcome: Option<&Outcome>| {
         let Some(log) = &log else { return };
         let mut event = Event::new("write", decision, start.elapsed());
@@ -105,7 +110,7 @@ pub fn run() -> ExitCode {
         Ok(Ok(Some(outcome))) => {
             record(outcome.decision, Some(&outcome));
             if let Some(answer) = &outcome.answer {
-                println!("{answer}");
+                println!("{}", hook::for_event(answer, hook_event.as_deref()));
             }
         }
         Ok(Ok(None)) => {}
@@ -151,6 +156,7 @@ fn decide(call: &Value, settings: &config::Guard, root: &Path, dir: &Path) -> Op
         Request::Edit { path, edits } => {
             Some(check_file(&guard, settings, root, dir, &path, None, &edits))
         }
+        Request::Patch { files } => Some(check_patch(&guard, settings, root, dir, &files)),
     }
 }
 
@@ -167,42 +173,14 @@ fn check_file(
     let Some(rel) = relative(root, &abs) else {
         return Outcome::allow(None);
     };
-    let warn = settings.on_finding == config::OnFinding::Warn;
-    if let Some(m) = guard
-        .migrations
-        .as_ref()
-        .filter(|m| m.immutable() && m.covers(&rel))
-    {
-        let existed = match m.base().map(|b| git::merge_base(root, b)) {
-            Some(Ok(base)) => git::exists_at(root, &base, &rel),
-            _ => head_paths::exists_at_head(root, &m.dirs(), &rel),
-        };
-        if existed {
-            let text = format!(
-                "fairlead guard: {rel} is a migration that already exists, and a database that ran it won't run it again. Add a new migration instead."
-            );
-            return Outcome {
-                decision: if warn { "warn" } else { "deny" },
-                answer: Some(if warn {
-                    hook::warn(&text)
-                } else {
-                    hook::deny(&text)
-                }),
-                file: Some(rel),
-                found: Vec::new(),
-            };
-        }
+    if let Some(denied) = migration_denied(guard, settings, root, &rel) {
+        return denied;
     }
     if !guard.reads(&rel) {
         return Outcome::allow(Some(rel));
     }
-    let current = match std::fs::read(&abs) {
-        Ok(bytes) => match String::from_utf8(bytes) {
-            Ok(text) => text,
-            Err(_) => return Outcome::allow(Some(rel)),
-        },
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => String::new(),
-        Err(_) => return Outcome::allow(Some(rel)),
+    let Some(current) = read_current(&abs) else {
+        return Outcome::allow(Some(rel));
     };
     let after = match whole {
         Some(text) => text,
@@ -211,25 +189,148 @@ fn check_file(
             Rebuilt::Unknown(_) => return Outcome::allow(Some(rel)),
         },
     };
+    let found = lint_change(guard, settings, &rel, &current, &after);
+    answer(settings, rel, found)
+}
+
+/// Every file of a Codex patch, checked as a write or an edit would be, in
+/// one answer. A file the patch can't be applied to is let through: Codex
+/// refuses the whole patch then.
+fn check_patch(
+    guard: &Guard,
+    settings: &config::Guard,
+    root: &Path,
+    dir: &Path,
+    files: &[FilePatch],
+) -> Outcome {
+    let mut found = Vec::new();
+    let mut first = None;
+    for file in files {
+        let abs = dir.join(&file.path);
+        let Some(rel) = relative(root, &abs) else {
+            continue;
+        };
+        // Deleting or moving a migration rewrites history as editing it does.
+        if let Some(denied) = migration_denied(guard, settings, root, &rel) {
+            return denied;
+        }
+        let (target, chunks) = match &file.change {
+            Change::Delete => continue,
+            Change::Add(_) => (rel, None),
+            Change::Update { to: None, chunks } => (rel, Some(chunks)),
+            Change::Update {
+                to: Some(to),
+                chunks,
+            } => {
+                let Some(to) = relative(root, &dir.join(to)) else {
+                    continue;
+                };
+                if let Some(denied) = migration_denied(guard, settings, root, &to) {
+                    return denied;
+                }
+                (to, Some(chunks))
+            }
+        };
+        if !guard.reads(&target) {
+            continue;
+        }
+        let Some(current) = read_current(&abs) else {
+            continue;
+        };
+        let after = match (&file.change, chunks) {
+            (Change::Add(text), _) => text.clone(),
+            (_, Some(chunks)) => match patch::apply(&current, chunks) {
+                Rebuilt::Text(text) => text,
+                Rebuilt::Unknown(_) => continue,
+            },
+            _ => continue,
+        };
+        let here = lint_change(guard, settings, &target, &current, &after);
+        if first.is_none() || (!here.is_empty() && found.is_empty()) {
+            first = Some(target);
+        }
+        found.extend(here);
+    }
+    match first {
+        Some(rel) => answer(settings, rel, found),
+        None => Outcome::allow(None),
+    }
+}
+
+/// A deny, or a warning, for writing to a migration that already exists.
+fn migration_denied(
+    guard: &Guard,
+    settings: &config::Guard,
+    root: &Path,
+    rel: &str,
+) -> Option<Outcome> {
+    let m = guard
+        .migrations
+        .as_ref()
+        .filter(|m| m.immutable() && m.covers(rel))?;
+    let existed = match m.base().map(|b| git::merge_base(root, b)) {
+        Some(Ok(base)) => git::exists_at(root, &base, rel),
+        _ => head_paths::exists_at_head(root, &m.dirs(), rel),
+    };
+    if !existed {
+        return None;
+    }
+    let text = format!(
+        "fairlead guard: {rel} is a migration that already exists, and a database that ran it won't run it again. Add a new migration instead."
+    );
+    let warn = settings.on_finding == config::OnFinding::Warn;
+    Some(Outcome {
+        decision: if warn { "warn" } else { "deny" },
+        answer: Some(if warn {
+            hook::warn(&text)
+        } else {
+            hook::deny(&text)
+        }),
+        file: Some(rel.to_string()),
+        found: Vec::new(),
+    })
+}
+
+/// The file's text now, empty for a new file; none to let the call through
+/// unread.
+fn read_current(abs: &Path) -> Option<String> {
+    match std::fs::read(abs) {
+        Ok(bytes) => String::from_utf8(bytes).ok(),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Some(String::new()),
+        Err(_) => None,
+    }
+}
+
+fn lint_change(
+    guard: &Guard,
+    settings: &config::Guard,
+    rel: &str,
+    current: &str,
+    after: &str,
+) -> Vec<Finding> {
     if after.len() > MAX_BYTES || current.len() > MAX_BYTES {
-        return Outcome::allow(Some(rel));
+        return Vec::new();
     }
     // Before and after are linted at once: each is a full parse, and the
     // budget is wall time.
-    let found = match settings.findings {
-        config::Findings::All => guard.lint(&Source::new(&rel, &after)),
+    match settings.findings {
+        config::Findings::All => guard.lint(&Source::new(rel, after)),
         config::Findings::Added => std::thread::scope(|scope| {
-            let before = scope.spawn(|| guard.lint(&Source::new(&rel, &current)));
-            let now = guard.lint(&Source::new(&rel, &after));
+            let before = scope.spawn(|| guard.lint(&Source::new(rel, current)));
+            let now = guard.lint(&Source::new(rel, after));
             match before.join() {
                 Ok(before) => added::added(&before, &now),
                 Err(panic) => std::panic::resume_unwind(panic),
             }
         }),
-    };
+    }
+}
+
+fn answer(settings: &config::Guard, rel: String, found: Vec<Finding>) -> Outcome {
     if found.is_empty() {
         return Outcome::allow(Some(rel));
     }
+    let warn = settings.on_finding == config::OnFinding::Warn;
     let list: Vec<String> = found.iter().map(|f| format!("  {f}")).collect();
     let what = match settings.findings {
         config::Findings::Added => "this edit adds",
