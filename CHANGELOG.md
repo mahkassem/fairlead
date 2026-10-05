@@ -5,6 +5,7 @@
 ### New
 
 - Codex hooks. `fairlead hooks install --codex` writes the guard, the brief nudge and the Stop hook to `.codex/hooks.json`, and the write hook reads Codex's `apply_patch`: each file the patch adds, changes or moves is linted as the patch would leave it, and a patch that edits, moves or deletes a migration that already exists is denied. See [Codex](https://mahkassem.github.io/fairlead/docs/guard.html#codex).
+- Gemini CLI hooks. `fairlead hooks install --gemini` merges the guard, the brief nudge and the Stop hook into `.gemini/settings.json` as `BeforeTool`, `AfterTool` and `AfterAgent`, with timeouts in milliseconds, and the write hook reads `write_file`, `replace` and `run_shell_command` and answers in Gemini CLI's shape. See [Gemini CLI](https://mahkassem.github.io/fairlead/docs/guard.html#gemini-cli).
 
 ### Fixed
 
