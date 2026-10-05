@@ -137,6 +137,38 @@ pub fn apply(
     out
 }
 
+/// In a plan that runs everything, a runner holding a test and with no
+/// `exclude_arg` names its other tests instead of letting the tool find
+/// them, which drops any the tool finds that `match` doesn't claim.
+pub fn narrowed(cx: &Context, tests: &[TestSelection], held: &[Quarantined]) -> Vec<Warning> {
+    let mut out = Vec::new();
+    for runner in cx.config.tests.runners.items() {
+        if runner.exclude_arg.is_some() {
+            continue;
+        }
+        let mine: Vec<&str> = tests
+            .iter()
+            .filter(|t| t.runner.as_deref() == Some(runner.id.as_str()))
+            .map(|t| t.path.as_str())
+            .filter(|p| {
+                held.iter()
+                    .any(|q| q.kind == InvocationKind::Runner && q.target == *p)
+            })
+            .collect();
+        let Some(first) = mine.first() else { continue };
+        out.push(Warning {
+            code: "quarantine-narrowed-everything".into(),
+            path: Some((*first).to_string()),
+            message: format!(
+                "runner `{}` runs {} alone, so its other tests are named instead of found; give it `exclude_arg`, such as [\"--exclude\", \"{{file}}\"], to run the rest whole",
+                runner.id,
+                if mine.len() == 1 { "this test".to_string() } else { format!("{} held tests", mine.len()) },
+            ),
+        });
+    }
+    out
+}
+
 /// The entry holding a check here that runs outside the plan, such as one
 /// `done.always` names, if one does.
 pub fn check_held(config: &Config, root: &Path, id: &str) -> Option<Quarantined> {

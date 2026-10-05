@@ -30,7 +30,7 @@ nothing to do.
      would update .claude/settings.json: Fairlead's hooks: adds the brief nudge and the Stop hook
      would update lefthook.yml: the commit stage runs `bun x fairlead guard check --staged` instead of `fairlead guard check --staged`
      would update fairlead.toml: `fairlead = "0.4"` becomes "0.6": the config uses `done`, which 0.6 added
-     would update .github/workflows/ci.yml: Fairlead's action at v0.4.2 becomes v0.7.0
+     would update .github/workflows/ci.yml: Fairlead's action at v0.4.2 becomes v0.7.1
      review (0.5.0): `plan.ignore` applies to source files too: ...
      review (0.6.0): `hooks install` adds a Stop hook, ...
    migrate: dry run; `fairlead migrate --write` makes these 4 change(s)
@@ -69,7 +69,7 @@ workflow's pin, then from the config's floor.
 |---|---|---|
 | Claude Code hooks in `.claude/settings.json` and `settings.local.json` | Fairlead's entries aren't the ones this release's `hooks install` would write for your config | Fairlead's entries are replaced with this release's, and every other setting and hook stays as it was. Uninstall still restores the file from before Fairlead, byte for byte, when nobody else changed it. |
 | The commit stage in `lefthook.yml` | It runs another command than this release writes, such as `fairlead` by name where the project has its own copy | The `run:` line is replaced in place, with its indentation, quotes and comments kept |
-| The `fairlead = "X.Y"` floor in the project config | The floor is older than a table the config uses, such as `[done]` (0.6) or `[guard]` (0.4) | The floor is raised to that release, so a teammate on an older binary is told which version to install |
+| The `fairlead = "X.Y"` floor in the project config | The floor is older than a table or key the config uses, such as `[done]` (0.6) or `[guard]` (0.4) | The floor is raised to that release, so a teammate on an older binary is told which version to install |
 | `package.json` | `dependencies`, `devDependencies` or `optionalDependencies` pins an older release, as `0.4.2`, `^0.4.2`, `~0.4.2` or `>=0.4.2` | The version moves to this release and keeps its `^` or `~` |
 | Workflows under `.github/workflows/` | A step uses `mahkassem/fairlead@vX.Y.Z`, or passes `version: vX.Y.Z`, for an older release | Both move to this release |
 
@@ -171,6 +171,21 @@ For you to decide:
 - `fairlead migrate` refreshes Claude Code's hooks. Hooks for Codex
   (`hooks install --codex`) and Gemini CLI (`hooks install --gemini`) are new
   in 0.7.0, so there's nothing older to bring along.
+
+### To 0.7.1
+
+Migrate updates:
+
+- The config's `fairlead` floor, to 0.7.1, where a runner uses `all_command`
+  or `exclude_arg`.
+
+For you to decide:
+
+- A runner whose tool, given no files, finds more tests than its `match`
+  claims (a bare `bun test` that also finds end-to-end specs) can set
+  `all_command` for the run of everything. A runner holding a test in
+  `[[quarantine]]` can set `exclude_arg` so that run stays whole
+  ([Configuration](config.md)).
 
 ## Going back to an older release
 

@@ -140,11 +140,19 @@ pub const RELEASES: &[(&str, &[Note])] = &[
             applies: has_jvm_build,
         }],
     ),
+    (
+        "0.7.1",
+        &[Note {
+            text: "When everything runs, a runner's command runs with no files, so a tool that finds its own tests can run more than the runner's `match` claims. `all_command` gives the command for that case, and `exclude_arg` keeps it whole around a test `[[quarantine]]` holds (see Configuration).",
+            applies: always,
+        }],
+    ),
 ];
 
 /// Config tables and keys by the release that added them. The top-level
 /// tables older than all of these are `BASE`; a test holds every other
-/// top-level table to having an entry here.
+/// top-level table to having an entry here. A key inside a list of tables,
+/// such as `tests.runners.all_command`, counts when any item sets it.
 pub const SINCE: &[(&str, &str)] = &[
     ("graph.edges", "0.3"),
     ("graph.barrier", "0.3"),
@@ -156,6 +164,8 @@ pub const SINCE: &[(&str, &str)] = &[
     ("brief", "0.6"),
     ("ci", "0.6"),
     ("quarantine", "0.7"),
+    ("tests.runners.all_command", "0.7.1"),
+    ("tests.runners.exclude_arg", "0.7.1"),
 ];
 
 /// Top-level tables every released config format has had.

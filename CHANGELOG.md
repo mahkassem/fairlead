@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.7.1 (2026-10-05)
+
+### New
+
+- A runner's `all_command` is the command to run when everything runs. Without one, `command` runs with no files, so `bun test {files}` became a bare `bun test`, which runs every test the tool finds (end-to-end specs included), not only the files the runner's `match` claims. It takes `command`'s placeholders except `{files}`, `{class}` and `{classes}`, which `config check` refuses there ([#152](https://github.com/mahkassem/fairlead/issues/152)).
+- A runner's `exclude_arg`, an argv fragment holding `{file}` such as `["--exclude", "{file}"]`, keeps a run of everything whole when `[[quarantine]]` holds one of its tests: the held file is left out by the tool's own flag and runs alone, as before. A runner without it still names its other tests, and the plan now warns `quarantine-narrowed-everything`, since that drops tests the tool would find and can make a long command line ([#152](https://github.com/mahkassem/fairlead/issues/152)).
+- `fairlead migrate` raises the `fairlead` floor to 0.7.1 for a config that uses either key, and writes a floor at the patch release that needs it rather than cutting it to the minor.
+
+### Fixed
+
+- A `fairlead receipt` gate that passed with a failure `[[quarantine]]` excused says so, as `(3 steps, 1 held)`, and its JSON carries `gate.held`. It used to read the same as a clean pass ([#152](https://github.com/mahkassem/fairlead/issues/152)).
+- The release binary's size budget in CI is 16 MB, up from 15 MB, which the Windows build had come within 202 KB of.
+
 ## 0.7.0 (2026-10-05)
 
 ### New

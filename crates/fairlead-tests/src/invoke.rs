@@ -6,7 +6,9 @@
 //! JVM runners take class names: an argument holding `{class}` is repeated
 //! once per class, as Gradle's `--tests={class}`, and `{classes}` joins them
 //! with commas, as Surefire's `-Dtest={classes}`; either is dropped when
-//! everything runs.
+//! everything runs. A runner's `all_command` stands in for `command` when
+//! everything runs, since a tool left to find its own tests can find more
+//! than the runner's `match` claims.
 
 use std::collections::BTreeMap;
 
@@ -90,11 +92,36 @@ fn class_name(file: &str) -> String {
     parts.join(".")
 }
 
+/// One invocation's argv, with the runner's `exclude_arg` once for each
+/// file in `excluded`.
+fn runner_argv(
+    runner: &Runner,
+    files: &[String],
+    all: bool,
+    module: Option<(&str, &str)>,
+    excluded: &[String],
+) -> Vec<String> {
+    let command = match &runner.all_command {
+        Some(command) if all => command,
+        _ => &runner.command,
+    };
+    let mut argv = expand(command, files, all, module);
+    if let Some(fragment) = &runner.exclude_arg {
+        for file in excluded {
+            argv.extend(fragment.iter().map(|a| a.replace("{file}", file)));
+        }
+    }
+    argv
+}
+
+/// A runner's invocations. `excluded` are held tests a run of everything
+/// leaves out, by the runner's `exclude_arg`, because they run alone.
 fn runner_invocations(
     cx: &Context,
     runner: &Runner,
     tests: &[&TestSelection],
     all: bool,
+    excluded: &[&TestSelection],
 ) -> Vec<Invocation> {
     let invocation = |cwd: String, argv: Vec<String>| Invocation {
         id: runner.id.clone(),
@@ -118,7 +145,12 @@ fn runner_invocations(
             } else {
                 tests.iter().map(|t| relative_to(&cwd, &t.path)).collect()
             };
-            vec![invocation(cwd, expand(&runner.command, &files, all, None))]
+            let excluded: Vec<String> = excluded
+                .iter()
+                .map(|t| relative_to(&cwd, &t.path))
+                .collect();
+            let argv = runner_argv(runner, &files, all, None, &excluded);
+            vec![invocation(cwd, argv)]
         }
         Invoke::PerModule => {
             let mut groups: BTreeMap<Option<String>, Vec<&TestSelection>> = BTreeMap::new();
@@ -150,10 +182,13 @@ fn runner_invocations(
                     } else {
                         tests.iter().map(|t| relative_to(&cwd, &t.path)).collect()
                     };
-                    invocation(
-                        cwd,
-                        expand(&runner.command, &files, all, Some((&root, &id))),
-                    )
+                    let excluded: Vec<String> = excluded
+                        .iter()
+                        .filter(|t| t.module == module)
+                        .map(|t| relative_to(&cwd, &t.path))
+                        .collect();
+                    let argv = runner_argv(runner, &files, all, Some((&root, &id)), &excluded);
+                    invocation(cwd, argv)
                 })
                 .collect()
         }
@@ -185,8 +220,9 @@ fn check_files(
 }
 
 /// Every invocation, in order. A test or check `held` names runs alone, so
-/// its failure can be judged by itself; the rest of its runner's tests are
-/// then named, even in a plan that runs everything.
+/// its failure can be judged by itself. In a plan that runs everything, the
+/// rest of its runner still runs whole when the runner has `exclude_arg` to
+/// leave the held files out; without it they are named instead.
 pub fn invocations(
     cx: &Context,
     tests: &[TestSelection],
@@ -204,13 +240,15 @@ pub fn invocations(
             .filter(|t| t.runner.as_deref() == Some(runner.id.as_str()))
             .partition(|t| is_held(InvocationKind::Runner, &t.path));
         if alone.is_empty() {
-            out.extend(runner_invocations(cx, runner, &mine, all));
+            out.extend(runner_invocations(cx, runner, &mine, all, &[]));
             continue;
         }
-        out.extend(runner_invocations(cx, runner, &mine, false));
+        let whole = all && runner.exclude_arg.is_some();
+        let excluded = if whole { alone.as_slice() } else { &[] };
+        out.extend(runner_invocations(cx, runner, &mine, whole, excluded));
         for test in alone {
             out.extend(
-                runner_invocations(cx, runner, &[test], false)
+                runner_invocations(cx, runner, &[test], false, &[])
                     .into_iter()
                     .map(|i| Invocation {
                         quarantined: Some(test.path.clone()),

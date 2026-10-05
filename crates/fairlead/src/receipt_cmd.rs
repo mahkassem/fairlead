@@ -84,6 +84,10 @@ pub struct Gate {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub failed_step: Option<String>,
     pub steps: usize,
+    /// Steps that failed as their `[[quarantine]]` entry expects, so a pass
+    /// with one doesn't read as a clean pass.
+    #[serde(default)]
+    pub held: usize,
     pub seconds: f64,
 }
 
@@ -171,6 +175,7 @@ fn gate(log: &str, tree: &str) -> Gate {
             at: None,
             failed_step: None,
             steps: 0,
+            held: 0,
             seconds: 0.0,
         };
     };
@@ -184,6 +189,7 @@ fn gate(log: &str, tree: &str) -> Gate {
             .find(|s| s["passed"] == false && s["quarantined"] != true)
             .and_then(|s| s["id"].as_str().map(String::from)),
         steps: steps.len(),
+        held: steps.iter().filter(|s| s["quarantined"] == true).count(),
         seconds: steps.iter().filter_map(|s| s["seconds"].as_f64()).sum(),
     }
 }
@@ -391,13 +397,26 @@ pub fn text(r: &Receipt, all: bool) -> String {
         }
         None => out.push_str(&format!("tests    planned now {}\n", r.tests_now)),
     }
-    let g = &r.gate;
-    let gate = match g.state.as_str() {
+    let gate = gate_line(&r.gate);
+    out.push_str(&format!("gate     {gate}\n"));
+    out.push_str(&r.next.replacen("next: ", "next     ", 1));
+    out.push('\n');
+    out
+}
+
+/// The gate's state in words; a pass says how many steps were held.
+fn gate_line(g: &Gate) -> String {
+    match g.state.as_str() {
         "passed" => format!(
-            "passed for this tree at {} ({} step{}) in {:.0} s",
+            "passed for this tree at {} ({} step{}{}) in {:.0} s",
             g.at.as_deref().map_or("?", |a| a.get(11..16).unwrap_or(a)),
             g.steps,
             if g.steps == 1 { "" } else { "s" },
+            if g.held > 0 {
+                format!(", {} held", g.held)
+            } else {
+                String::new()
+            },
             g.seconds
         ),
         "failed" => format!(
@@ -405,11 +424,7 @@ pub fn text(r: &Receipt, all: bool) -> String {
             g.failed_step.as_deref().unwrap_or("a step")
         ),
         _ => "not run for this tree".into(),
-    };
-    out.push_str(&format!("gate     {gate}\n"));
-    out.push_str(&r.next.replacen("next: ", "next     ", 1));
-    out.push('\n');
-    out
+    }
 }
 
 impl Store {
@@ -452,7 +467,34 @@ mod tests {
         assert_eq!(g.state, "failed");
         assert_eq!(g.failed_step.as_deref(), Some("lint"));
         assert_eq!(g.steps, 2);
+        assert_eq!(g.held, 0);
         assert_eq!(gate(&log, "t2").state, "not run");
+    }
+
+    #[test]
+    fn a_pass_that_excused_a_quarantined_failure_counts_it_as_held() {
+        let log = r#"{"stage":"done","tree":"t1","decision":"pass","at":"2026-09-29T14:02:00.000Z","steps":[{"id":"unit","passed":true,"seconds":9.5},{"id":"unit","passed":false,"quarantined":true,"seconds":1.5},{"id":"lint","passed":true,"seconds":1.0}]}"#;
+        let g = gate(log, "t1");
+        assert_eq!((g.state.as_str(), g.steps, g.held), ("passed", 3, 1));
+        assert_eq!(g.failed_step, None);
+        assert!(
+            gate_line(&g).contains("(3 steps, 1 held)"),
+            "{}",
+            gate_line(&g)
+        );
+        let clean = Gate { held: 0, ..g };
+        assert!(
+            gate_line(&clean).contains("(3 steps)"),
+            "{}",
+            gate_line(&clean)
+        );
+    }
+
+    #[test]
+    fn a_receipt_written_before_held_was_counted_still_reads() {
+        let old = r#"{"state":"passed","at":"2026-09-29T14:02:00.000Z","steps":2,"seconds":10.5}"#;
+        let g: Gate = serde_json::from_str(old).expect("an old gate parses");
+        assert_eq!((g.steps, g.held), (2, 0));
     }
 
     #[test]

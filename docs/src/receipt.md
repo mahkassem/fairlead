@@ -25,7 +25,7 @@ Each changed file falls into one of three groups:
 - **in its reach:** the file depends on a path the brief named, so the brief already counted it.
 - **outside:** neither. This is the drift a receipt is for. A change that named billing and also edited auth says so, with the tests the extra file adds to the plan.
 
-The tests line compares the plan for what changed with the plan the brief was made from. The gate line reads the newest `fairlead done` run for the tree as it is now, so an edit after a pass shows as not run.
+The tests line compares the plan for what changed with the plan the brief was made from. The gate line reads the newest `fairlead done` run for the tree as it is now, so an edit after a pass shows as not run. *Since 0.7.1:* a pass that excused a failure a [`[[quarantine]]` entry](plan.md#tests-that-lie-on-one-platform) expects says how many steps were held, as `(3 steps, 1 held)`, and the receipt's JSON carries the count in `gate.held`, so it doesn't read as a clean pass.
 
 With no brief for the session, the receipt still lists every changed file and the gate's state, and says there was nothing to compare against.
 

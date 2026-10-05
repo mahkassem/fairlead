@@ -233,6 +233,9 @@ pub fn plan(scan: &mut Scan, config: &Config, input: Input) -> Result<Plan, Stri
         });
     }
     let quarantined = crate::quarantine::apply(&cx, &tests, &checks, &mut warnings);
+    if all {
+        warnings.extend(crate::quarantine::narrowed(&cx, &tests, &quarantined));
+    }
     let invocations = invocations(&cx, &tests, &checks, all, &quarantined);
     let plan_id = crate::digest::plan_id(
         &input.config_digest,
