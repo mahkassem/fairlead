@@ -1,0 +1,121 @@
+2026-08-31T14:02:11.0000000Z ##[group]Run ./mvnw -B -ntp -T 2 verify
+2026-08-31T14:02:11.1370000Z ./mvnw -B -ntp -T 2 verify
+2026-08-31T14:02:11.2740000Z shell: /usr/bin/bash -e {0}
+2026-08-31T14:02:11.4110000Z ##[endgroup]
+2026-08-31T14:02:11.5480000Z [INFO] Scanning for projects...
+2026-08-31T14:02:11.6850000Z [INFO] ------------------------------------------------------------------------
+2026-08-31T14:02:11.8220000Z [INFO] Reactor Build Order:
+2026-08-31T14:02:11.9590000Z [INFO] 
+2026-08-31T14:02:12.0960000Z [INFO] shop-parent                                                        [pom]
+2026-08-31T14:02:12.2330000Z [INFO] shop-core                                                          [jar]
+2026-08-31T14:02:12.3700000Z [INFO] shop-client                                                        [jar]
+2026-08-31T14:02:12.5070000Z [INFO] shop-web                                                           [jar]
+2026-08-31T14:02:12.6440000Z [INFO] 
+2026-08-31T14:02:12.7810000Z [INFO] Using the MultiThreadedBuilder implementation with a thread count of 2
+2026-08-31T14:02:12.9180000Z [INFO] 
+2026-08-31T14:02:13.0550000Z [INFO] ----------------------< com.acme.shop:shop-core >-----------------------
+2026-08-31T14:02:13.1920000Z [INFO] Building shop-core 1.4.0-SNAPSHOT                                  [2/4]
+2026-08-31T14:02:13.3290000Z [INFO]   from core/pom.xml
+2026-08-31T14:02:13.4660000Z [INFO] --------------------------------[ jar ]---------------------------------
+2026-08-31T14:02:13.6030000Z [INFO] --- surefire:3.5.2:test (default-test) @ shop-core ---
+2026-08-31T14:02:13.7400000Z [INFO] Using auto detected provider org.apache.maven.surefire.junitplatform.JUnitPlatformProvider
+2026-08-31T14:02:13.8770000Z [INFO] 
+2026-08-31T14:02:14.0140000Z [INFO] -------------------------------------------------------
+2026-08-31T14:02:14.1510000Z [INFO]  T E S T S
+2026-08-31T14:02:14.2880000Z [INFO] -------------------------------------------------------
+2026-08-31T14:02:14.4250000Z [INFO] Running com.acme.shop.OrderTest
+2026-08-31T14:02:14.5620000Z [INFO] --- surefire:3.5.2:test (default-test) @ shop-client ---
+2026-08-31T14:02:14.6990000Z [INFO] Running com.acme.shop.client.ClientTest
+2026-08-31T14:02:14.8360000Z [ERROR] Tests run: 4, Failures: 1, Errors: 0, Skipped: 0, Time elapsed: 0.052 s <<< FAILURE! -- in com.acme.shop.OrderTest
+2026-08-31T14:02:14.9730000Z [ERROR] com.acme.shop.OrderTest.totalIncludesTax -- Time elapsed: 0.011 s <<< FAILURE!
+2026-08-31T14:02:15.1100000Z org.opentest4j.AssertionFailedError: expected: <107.00> but was: <100.00>
+2026-08-31T14:02:15.2470000Z 	at org.junit.jupiter.api.AssertionFailureBuilder.build(AssertionFailureBuilder.java:151)
+2026-08-31T14:02:15.3840000Z 	at org.junit.jupiter.api.AssertEquals.assertEquals(AssertEquals.java:186)
+2026-08-31T14:02:15.5210000Z 	at com.acme.shop.OrderTest.totalIncludesTax(OrderTest.java:42)
+2026-08-31T14:02:15.6580000Z 
+2026-08-31T14:02:15.7950000Z [INFO] Running com.acme.shop.PriceTest
+2026-08-31T14:02:15.9320000Z [ERROR] Tests run: 3, Failures: 0, Errors: 2, Skipped: 0, Time elapsed: 2.031 s <<< FAILURE! -- in com.acme.shop.client.ClientTest
+2026-08-31T14:02:16.0690000Z [ERROR] com.acme.shop.client.ClientTest.retries a refused connection -- Time elapsed: 0.004 s <<< ERROR!
+2026-08-31T14:02:16.2060000Z java.net.ConnectException: Connection refused
+2026-08-31T14:02:16.3430000Z 	at java.base/sun.nio.ch.Net.pollConnect(Native Method)
+2026-08-31T14:02:16.4800000Z 	at com.acme.shop.client.ClientTest.retries a refused connection(ClientTest.kt:25)
+2026-08-31T14:02:16.4800000Z 
+2026-08-31T14:02:16.4800000Z [ERROR] com.acme.shop.client.ClientTest.times out a slow read -- Time elapsed: 2.001 s <<< ERROR!
+2026-08-31T14:02:16.4800000Z java.net.SocketTimeoutException: Read timed out
+2026-08-31T14:02:16.4800000Z 	at java.base/sun.nio.ch.NioSocketImpl.timedRead(NioSocketImpl.java:278)
+2026-08-31T14:02:16.4800000Z 	at com.acme.shop.client.ClientTest.times out a slow read(ClientTest.kt:40)
+2026-08-31T14:02:16.6170000Z 
+2026-08-31T14:02:16.7540000Z [ERROR] Tests run: 6, Failures: 1, Errors: 0, Skipped: 0, Time elapsed: 0.044 s <<< FAILURE! -- in com.acme.shop.PriceTest
+2026-08-31T14:02:16.8910000Z [ERROR] com.acme.shop.PriceTest.rounds(String)[2] -- Time elapsed: 0.002 s <<< FAILURE!
+2026-08-31T14:02:17.0280000Z org.opentest4j.AssertionFailedError: expected: <1.01> but was: <1.00>
+2026-08-31T14:02:17.1650000Z 	at com.acme.shop.PriceTest.rounds(PriceTest.kt:31)
+2026-08-31T14:02:17.3020000Z 
+2026-08-31T14:02:17.4390000Z [INFO] 
+2026-08-31T14:02:17.5760000Z [INFO] Results:
+2026-08-31T14:02:17.7130000Z [INFO] 
+2026-08-31T14:02:17.8500000Z [ERROR] Failures: 
+2026-08-31T14:02:17.9870000Z [ERROR]   OrderTest.totalIncludesTax:42 expected: <107.00> but was: <100.00>
+2026-08-31T14:02:18.1240000Z [ERROR]   PriceTest.rounds:31 expected: <1.01> but was: <1.00>
+2026-08-31T14:02:18.2610000Z [INFO] 
+2026-08-31T14:02:18.3980000Z [ERROR] Tests run: 10, Failures: 2, Errors: 0, Skipped: 0
+2026-08-31T14:02:18.5350000Z [INFO] 
+2026-08-31T14:02:18.6720000Z [INFO] 
+2026-08-31T14:02:18.8090000Z [INFO] Results:
+2026-08-31T14:02:18.9460000Z [INFO] 
+2026-08-31T14:02:19.0830000Z [ERROR] Errors: 
+2026-08-31T14:02:19.2200000Z [ERROR]   ClientTest.retries a refused connection:25 » Connect Connection refused
+2026-08-31T14:02:19.2200000Z [ERROR]   ClientTest.times out a slow read:40 » SocketTimeout Read timed out
+2026-08-31T14:02:19.3570000Z [INFO] 
+2026-08-31T14:02:19.4940000Z [ERROR] Tests run: 3, Failures: 0, Errors: 2, Skipped: 0
+2026-08-31T14:02:19.6310000Z [INFO] 
+2026-08-31T14:02:19.7680000Z [INFO] -----------------------< com.acme.shop:shop-web >-----------------------
+2026-08-31T14:02:19.9050000Z [INFO] Building shop-web 1.4.0-SNAPSHOT                                   [4/4]
+2026-08-31T14:02:20.0420000Z [INFO] --- surefire:3.5.2:test (default-test) @ shop-web ---
+2026-08-31T14:02:20.1790000Z [INFO] Running com.acme.shop.web.CartControllerTest
+2026-08-31T14:02:20.3160000Z [INFO] Running com.acme.shop.web.CartControllerTest$WhenEmpty
+2026-08-31T14:02:20.4530000Z [ERROR] Tests run: 2, Failures: 1, Errors: 0, Skipped: 0, Time elapsed: 0.205 s <<< FAILURE! -- in com.acme.shop.web.CartControllerTest$WhenEmpty
+2026-08-31T14:02:20.5900000Z [ERROR] com.acme.shop.web.CartControllerTest$WhenEmpty.checkoutIsRefused -- Time elapsed: 0.051 s <<< FAILURE!
+2026-08-31T14:02:20.7270000Z org.opentest4j.AssertionFailedError: Status expected:<409> but was:<200>
+2026-08-31T14:02:20.8640000Z 	at com.acme.shop.web.CartControllerTest$WhenEmpty.checkoutIsRefused(CartControllerTest.java:88)
+2026-08-31T14:02:21.0010000Z 
+2026-08-31T14:02:21.1380000Z [INFO] Tests run: 5, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.612 s -- in com.acme.shop.web.CartControllerTest
+2026-08-31T14:02:21.2750000Z [INFO] Running com.acme.shop.web.SessionStoreTest
+2026-08-31T14:02:21.4120000Z [ERROR] Tests run: 1, Failures: 0, Errors: 1, Skipped: 0, Time elapsed: 0.001 s <<< FAILURE! -- in com.acme.shop.web.SessionStoreTest
+2026-08-31T14:02:21.5490000Z [ERROR] com.acme.shop.web.SessionStoreTest -- Time elapsed: 0.001 s <<< ERROR!
+2026-08-31T14:02:21.6860000Z java.lang.IllegalStateException: Could not start container
+2026-08-31T14:02:21.8230000Z 	at com.acme.shop.web.SessionStoreTest.startRedis(SessionStoreTest.java:21)
+2026-08-31T14:02:21.9600000Z 
+2026-08-31T14:02:22.0970000Z [INFO] Running com.acme.shop.web.RetryClientTest
+2026-08-31T14:02:22.2340000Z [WARNING] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Flakes: 1, Time elapsed: 1.104 s -- in com.acme.shop.web.RetryClientTest
+2026-08-31T14:02:22.3710000Z [INFO] 
+2026-08-31T14:02:22.5080000Z [INFO] Results:
+2026-08-31T14:02:22.6450000Z [INFO] 
+2026-08-31T14:02:22.7820000Z [ERROR] Failures: 
+2026-08-31T14:02:22.9190000Z [ERROR] com.acme.shop.web.CartControllerTest$WhenEmpty.checkoutIsRefused
+2026-08-31T14:02:23.0560000Z [ERROR]   Run 1: CartControllerTest$WhenEmpty.checkoutIsRefused:88 Status expected:<409> but was:<200>
+2026-08-31T14:02:23.1930000Z [ERROR]   Run 2: CartControllerTest$WhenEmpty.checkoutIsRefused:88 Status expected:<409> but was:<200>
+2026-08-31T14:02:23.3300000Z [INFO] 
+2026-08-31T14:02:23.4670000Z [ERROR] Errors: 
+2026-08-31T14:02:23.6040000Z [ERROR]   SessionStoreTest.startRedis:21 IllegalState Could not start container
+2026-08-31T14:02:23.7410000Z [WARNING] Flakes: 
+2026-08-31T14:02:23.8780000Z [WARNING] com.acme.shop.web.RetryClientTest.retriesOnce
+2026-08-31T14:02:24.0150000Z [ERROR]   Run 1: RetryClientTest.retriesOnce:31 expected: <1> but was: <2>
+2026-08-31T14:02:24.1520000Z [INFO]   Run 2: PASS
+2026-08-31T14:02:24.2890000Z [INFO] 
+2026-08-31T14:02:24.4260000Z [INFO] 
+2026-08-31T14:02:24.5630000Z [ERROR] Tests run: 11, Failures: 1, Errors: 1, Skipped: 0, Flakes: 1
+2026-08-31T14:02:24.7000000Z [INFO] 
+2026-08-31T14:02:24.8370000Z [INFO] ------------------------------------------------------------------------
+2026-08-31T14:02:24.9740000Z [INFO] Reactor Summary for shop-parent 1.4.0-SNAPSHOT:
+2026-08-31T14:02:25.1110000Z [INFO] 
+2026-08-31T14:02:25.2480000Z [INFO] shop-parent ........................................ SUCCESS [  0.412 s]
+2026-08-31T14:02:25.3850000Z [INFO] shop-core .......................................... FAILURE [ 14.203 s]
+2026-08-31T14:02:25.5220000Z [INFO] shop-client ........................................ FAILURE [ 12.880 s]
+2026-08-31T14:02:25.6590000Z [INFO] shop-web ........................................... FAILURE [ 31.077 s]
+2026-08-31T14:02:25.7960000Z [INFO] ------------------------------------------------------------------------
+2026-08-31T14:02:25.9330000Z [INFO] BUILD FAILURE
+2026-08-31T14:02:26.0700000Z [INFO] ------------------------------------------------------------------------
+2026-08-31T14:02:26.2070000Z [ERROR] Failed to execute goal org.apache.maven.plugins:maven-surefire-plugin:3.5.2:test (default-test) on project shop-core: There are test failures.
+2026-08-31T14:02:26.3440000Z [ERROR] 
+2026-08-31T14:02:26.4810000Z [ERROR] See /home/runner/work/shop/shop/core/target/surefire-reports for the individual test results.
+2026-08-31T14:02:26.6180000Z ##[error]Process completed with exit code 1.

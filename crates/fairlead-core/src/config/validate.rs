@@ -5,8 +5,8 @@ use std::collections::BTreeSet;
 
 use super::Config;
 
-const EXTRACTORS: [&str; 8] = [
-    "vitest", "jest", "bun", "phpunit", "pest", "go", "pytest", "regex",
+const EXTRACTORS: [&str; 10] = [
+    "vitest", "jest", "bun", "phpunit", "pest", "go", "pytest", "maven", "gradle", "regex",
 ];
 const CWD_PLACEHOLDERS: [&str; 2] = ["module", "module.id"];
 

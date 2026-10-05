@@ -1,0 +1,40 @@
+> Task :core:compileTestJava
+> Task :core:test
+
+com.acme.ledger.AccountTest > depositRejectsNegative FAILED
+    java.lang.AssertionError: expected:<IllegalArgumentException> but was:<none>
+        at org.junit.Assert.fail(Assert.java:89)
+        at com.acme.ledger.AccountTest.depositRejectsNegative(AccountTest.java:57)
+
+com.acme.ledger.AccountTest$Overdraft > limitIsEnforced FAILED
+    java.lang.AssertionError at AccountTest.java:112
+
+com.acme.ledger.LedgerSpec > a closed period > refuses new entries FAILED
+    io.kotest.assertions.AssertionFailedError: expected:<false> but was:<true>
+
+com.acme.ledger.RatesTest > testConvert[1] FAILED
+    java.lang.AssertionError at RatesTest.java:40
+
+14 tests completed, 4 failed
+
+> Task :core:test FAILED
+
+FAILURE: Build completed with 2 failures.
+
+1: Task failed with an exception.
+-----------
+* What went wrong:
+Execution failed for task ':core:test'.
+> There were failing tests. See the report at: file:///D:/a/ledger/ledger/core/build/reports/tests/test/index.html
+
+==============================================================================
+
+2: Task failed with an exception.
+-----------
+* What went wrong:
+Execution failed for task ':reports:test'.
+> There were failing tests. See the report at: file:///D:/a/ledger/ledger/reports/build/reports/tests/test/index.html
+
+==============================================================================
+
+BUILD FAILED in 2m 3s
