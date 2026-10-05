@@ -100,7 +100,7 @@ The plan lists what to run as `invocations`, each an argv and a working director
 
 ## Tests that lie on one platform
 
-*Unreleased:* some tests fail on one machine whatever the change. A test that splits a file on `\n` fails on a Windows checkout with `core.autocrlf=true`, since every line keeps its `\r`. A test that runs a process in `new URL(..., import.meta.url).pathname` fails with `ENOENT` on Windows, where that path is `/C:/...`, and wherever the checkout's path has a space, which it spells `%20`. Each one looks like a regression until someone diagnoses it by hand, and the next agent on that machine starts cold and pays the same again. A `[[quarantine]]` entry records the diagnosis once:
+*Since 0.7.0:* some tests fail on one machine whatever the change. A test that splits a file on `\n` fails on a Windows checkout with `core.autocrlf=true`, since every line keeps its `\r`. A test that runs a process in `new URL(..., import.meta.url).pathname` fails with `ENOENT` on Windows, where that path is `/C:/...`, and wherever the checkout's path has a space, which it spells `%20`. Each one looks like a regression until someone diagnoses it by hand, and the next agent on that machine starts cold and pays the same again. A `[[quarantine]]` entry records the diagnosis once:
 
 ```toml
 [[quarantine]]

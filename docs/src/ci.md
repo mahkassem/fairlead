@@ -16,7 +16,7 @@ jobs:
           fetch-depth: 0                                    # history for the merge base
           persist-credentials: false
       - id: plan
-        uses: mahkassem/fairlead@v0.6.0
+        uses: mahkassem/fairlead@v0.7.0
         with:
           command: >-
             ci plan --format github
@@ -60,7 +60,7 @@ Nothing is keyed to a runner name or folder layout. `invocations` can feed a job
 
 Runs each invocation's argv in its working directory (relative to the repository root; a relative `--plan` is from the current directory), in order, without a shell, and exits 1 if any failed or has no argv, after running the rest. `--fail-fast` stops at the first failure. A plan of another version is refused with exit code 2.
 
-*Unreleased:* a program is found the way a shell finds it. On Windows, a name with no extension is looked up on `PATH` with each of `PATHEXT`'s `.com`, `.exe`, `.bat` and `.cmd`, and a relative path such as `node_modules/.bin/eslint` beside the working directory, so `npx` and other `.cmd` shims start. Before, they needed the full name, such as `npx.cmd`, which still works. The same goes for `fairlead done`, `[[guard.external]]` rules and graph providers.
+*Since 0.7.0:* a program is found the way a shell finds it. On Windows, a name with no extension is looked up on `PATH` with each of `PATHEXT`'s `.com`, `.exe`, `.bat` and `.cmd`, and a relative path such as `node_modules/.bin/eslint` beside the working directory, so `npx` and other `.cmd` shims start. Before, they needed the full name, such as `npx.cmd`, which still works. The same goes for `fairlead done`, `[[guard.external]]` rules and graph providers.
 
 An invocation a [`[[quarantine]]` entry](plan.md#tests-that-lie-on-one-platform) holds doesn't fail the run when its output matches the entry's signature and names no other failed test. It is reported as not provable here, and the last line counts it. Any other failure counts. The entry is checked again on the machine running the plan, so a plan made on Windows excuses nothing on Linux.
 

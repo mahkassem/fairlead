@@ -1,6 +1,6 @@
 # Upgrading
 
-*Unreleased:* `fairlead migrate` brings a repository to the release you
+*Since 0.7.0:* `fairlead migrate` brings a repository to the release you
 just installed. It updates what an older release left behind: the hooks
 `hooks install` wrote, the config's `fairlead` version floor, and the
 version pins in `package.json` and the workflows. It then lists the changes
@@ -26,11 +26,11 @@ nothing to do.
    ```
 
    ```text
-   migrate: from ^0.4.2 (package.json) to 0.6.0
+   migrate: from ^0.4.2 (package.json) to 0.7.0
      would update .claude/settings.json: Fairlead's hooks: adds the brief nudge and the Stop hook
      would update lefthook.yml: the commit stage runs `bun x fairlead guard check --staged` instead of `fairlead guard check --staged`
      would update fairlead.toml: `fairlead = "0.4"` becomes "0.6": the config uses `done`, which 0.6 added
-     would update .github/workflows/ci.yml: Fairlead's action at v0.4.2 becomes v0.6.0
+     would update .github/workflows/ci.yml: Fairlead's action at v0.4.2 becomes v0.7.0
      review (0.5.0): `plan.ignore` applies to source files too: ...
      review (0.6.0): `hooks install` adds a Stop hook, ...
    migrate: dry run; `fairlead migrate --write` makes these 4 change(s)
@@ -155,6 +155,22 @@ For you to decide:
   before `migrate --write` to leave it out, or `"require"` to ask every time.
 - The nudge notes an edit made with no brief ([The brief](brief.md)). Set
   `brief.nudge = false` to leave it out.
+
+### To 0.7.0
+
+Migrate updates:
+
+- The config's `fairlead` floor, to 0.7, where the config uses `[[quarantine]]`.
+
+For you to decide:
+
+- Java and Kotlin files are in the import graph. A Maven or Gradle build that
+  ran everything through a `[[checks]]` entry can give its tests a runner
+  instead, with `{class}` or `{classes}` in its command
+  ([Java and Kotlin](graph.md#java-and-kotlin)).
+- `fairlead migrate` refreshes Claude Code's hooks. Hooks for Codex
+  (`hooks install --codex`) and Gemini CLI (`hooks install --gemini`) are new
+  in 0.7.0, so there's nothing older to bring along.
 
 ## Going back to an older release
 

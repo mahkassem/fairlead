@@ -8,7 +8,7 @@ keeps project memory small, and measures whether all of that is working.
 It is a single Rust binary with no project-specific logic: everything about
 your repository lives in your own `fairlead.toml`.
 
-This book documents Fairlead 0.6.0, the latest release. The book for an
+This book documents Fairlead 0.7.0, the latest release. The book for an
 earlier release is its `docs/` folder at that release's tag, such as
 [`v0.5.1`](https://github.com/mahkassem/fairlead/tree/v0.5.1/docs/src).
 

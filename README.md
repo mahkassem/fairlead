@@ -37,7 +37,7 @@ of trying things like a stranger.
   the memory stays true instead of growing into noise.
   *Since 0.2.0:* owner rules record which tests guard which code, and a
   quarantined test applies only while the evidence holds and until its date.
-  *Unreleased:* a `[[quarantine]]` entry records a test that lies on one
+  *Since 0.7.0:* a `[[quarantine]]` entry records a test that lies on one
   platform, such as a CRLF checkout or a path with a space. There, the plan
   lists it as not provable here, and `done` excuses only the failure it expects.
 - **Set up once, never start cold.** The agent's first job is to learn
@@ -82,7 +82,7 @@ of trying things like a stranger.
   works, catching a wrong move in seconds instead of minutes later in CI.
   *Since 0.4.0:* `[guard.*]` rules run in a Claude Code hook before each edit
   and in a git commit hook, and `fairlead guard check` runs them on the tree.
-  *Unreleased:* the same hooks for Codex and Gemini CLI, with
+  *Since 0.7.0:* the same hooks for Codex and Gemini CLI, with
   `fairlead hooks install --codex` or `--gemini`.
 
 ## Works with
@@ -109,12 +109,12 @@ Svelte and Astro components since 0.5.0. An external provider feeds the graph
 for any other language, and a coverage map adds what imports can't show.
 Framework packs and folders of several repositories are on the way
 ([#47](https://github.com/mahkassem/fairlead/issues/47)).*
-*Unreleased:* Java and Kotlin, with Maven and Gradle runners that take the
+*Since 0.7.0:* Java and Kotlin, with Maven and Gradle runners that take the
 selected test classes.
 
 ## What it does
 
-This README documents Fairlead 0.6.0. Each command, by what it's for:
+This README documents Fairlead 0.7.0. Each command, by what it's for:
 
 - **The test plan:** `plan`, `test --explain`, the import graph (`graph`) and
   coverage maps (`coverage import`).
@@ -129,24 +129,24 @@ This README documents Fairlead 0.6.0. Each command, by what it's for:
   shows.
 - **The config:** `config check`, `show` and `schema`.
 - **Upgrading:** `migrate`, which brings the hooks, the config's version
-  floor and the version pins to the release you installed. *Unreleased.*
+  floor and the version pins to the release you installed. *Since 0.7.0.*
 
 The [quick start](#quick-start) shows the first few, and the
 [book](https://mahkassem.github.io/fairlead/docs/) covers each one.
 
 ## Status
 
-Pre-alpha. The latest release, v0.6.0, adds the change loop for agents:
-`fairlead brief` before an edit, `fairlead done` and a Claude Code Stop hook
-that holds an agent to it, `fairlead receipt` and `fairlead next` after it,
-and in CI `fairlead ci report` and `ci run --judge`, which names each failing
-test the merged change's plan left out. v0.5.0 added replay of default-branch
-pushes (escapes) and an inherited outcome for failures that came with the base
-branch.
+Pre-alpha. The latest release, v0.7.0, brings the hooks to Codex and Gemini
+CLI, reads Java and Kotlin in the graph and Maven and Gradle in replay, and
+adds `fairlead init` for a first config, `fairlead migrate` for an upgrade, and
+`[[quarantine]]` for a test that fails on one platform whatever the change.
+v0.6.0 added the change loop for agents: `fairlead brief` before an edit,
+`fairlead done` and a Stop hook that holds an agent to it, `fairlead receipt`
+after it, and in CI `fairlead ci report` and `ci run --judge`.
 Recall on real CI failures, with every miss and its cause, is in the
 [changelog](CHANGELOG.md) and on the
 [benchmarks page](https://mahkassem.github.io/fairlead/docs/benchmarks.html).
-Claude Code comes first, then Codex. The [roadmap](https://mahkassem.github.io/fairlead/docs/roadmap.html)
+Hooks ship for Claude Code, Codex and Gemini CLI. The [roadmap](https://mahkassem.github.io/fairlead/docs/roadmap.html)
 has milestones K0 to K6, each an [issue](https://github.com/mahkassem/fairlead/issues)
 with its exit criteria.
 
