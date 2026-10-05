@@ -122,6 +122,8 @@ This README documents Fairlead 0.6.0. Each command, by what it's for:
 - **The change loop:** `brief` before an edit, `done` before it's finished,
   then `receipt` and `next`.
 - **Measuring:** `replay` and the benchmarks.
+- **Getting started:** `init` writes a first config from what the repository
+  shows.
 - **The config:** `config check`, `show` and `schema`.
 - **Upgrading:** `migrate`, which brings the hooks, the config's version
   floor and the version pins to the release you installed. *Unreleased.*
@@ -163,6 +165,7 @@ Then `fairlead doctor` says which binary, platform and config it would use.
 ## Quick start
 
 ```sh
+fairlead init                                # a first fairlead.toml, from what the repository shows
 fairlead config check                        # validate fairlead.toml
 fairlead plan --base main                    # the tests and checks this branch can affect
 fairlead test --explain src/a.test.ts        # why that test is in the plan, or isn't

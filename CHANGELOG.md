@@ -4,6 +4,11 @@
 
 ### New
 
+- `fairlead init` writes a first `fairlead.toml` from what the repository shows: a runner for Vitest, Jest, Mocha, `bun test` or `node --test` through the lockfile's package runner, `go test`, pytest (through `uv` or `poetry` when they're used) and PHPUnit, Pest or `artisan test`, each added only when its `match` finds a test file, and a whole-suite check for Rust, Java, Kotlin, .NET and Ruby, which the graph doesn't read yet. It validates what it wrote and never replaces a config without `--force`. See [A first config](https://mahkassem.github.io/fairlead/docs/install.html#a-first-config-fairlead-init).
+
+### Fixed
+
+- A plan in a repository where no file matches `[tests] match` warns `no-tests` and names `fairlead init`, and says "everything, and there's nothing to run" where it used to say "everything" over 0 tests.
 - `fairlead migrate` brings a repository to the installed release. It replaces Fairlead's Claude Code hooks and lefthook entry with the ones this release's `hooks install` writes for the config, keeping every other setting, and uninstall still restores the file from before Fairlead. It raises the config's `fairlead` floor when the config uses a newer table, and moves Fairlead's version in `package.json` and in workflows that pin the action. Then it lists the changes since your release that need a decision. It writes nothing without `--write`, and `--check` exits 1 while anything is left, for CI. See [Upgrading](https://mahkassem.github.io/fairlead/docs/migrate.html).
 
 ### Fixed

@@ -28,7 +28,9 @@ pub fn reason(reason: &Reason) -> String {
 
 pub fn text(plan: &Plan) -> String {
     let mut out = String::new();
-    let scope = if plan.all {
+    let scope = if plan.all && plan.tests.is_empty() && plan.checks.is_empty() {
+        "everything, and there's nothing to run"
+    } else if plan.all {
         "everything"
     } else {
         "a selection"

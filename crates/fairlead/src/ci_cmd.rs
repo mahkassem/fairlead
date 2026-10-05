@@ -155,7 +155,9 @@ fn plan(
         planned.plan.tests.len(),
         planned.plan.checks.len(),
         planned.plan.invocations.len(),
-        if planned.plan.all {
+        if planned.plan.all && planned.plan.tests.is_empty() && planned.plan.checks.is_empty() {
+            " (everything, and there's nothing to run)"
+        } else if planned.plan.all {
             " (everything)"
         } else {
             ""
