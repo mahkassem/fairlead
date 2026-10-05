@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### New
+
+- Codex hooks. `fairlead hooks install --codex` writes the guard, the brief nudge and the Stop hook to `.codex/hooks.json`, and the write hook reads Codex's `apply_patch`: each file the patch adds, changes or moves is linted as the patch would leave it, and a patch that edits, moves or deletes a migration that already exists is denied. See [Codex](https://mahkassem.github.io/fairlead/docs/guard.html#codex).
+
 ### Fixed
 
 - A config that sets `fairlead = "X.Y"` and uses keys a binary doesn't know yet gets "this config needs Fairlead X.Y or later" from that binary, where it used to get "unknown field" for the first new key.

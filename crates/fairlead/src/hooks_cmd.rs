@@ -1,5 +1,6 @@
 //! `fairlead hooks install | status | uninstall`: the Claude Code hook in
-//! `.claude/settings.json` (shared) or `.claude/settings.local.json`. Install
+//! `.claude/settings.json` (shared) or `.claude/settings.local.json`, or the
+//! same hooks for Codex in `.codex/hooks.json`. Install
 //! keeps a manifest in the git directory with the file's original bytes and
 //! the bytes it wrote, so uninstall can put the file back exactly.
 
@@ -25,13 +26,20 @@ const NUDGE_MARK: &str = "fairlead guard nudge";
 /// Seconds; the Stop hook hashes the working tree, which a large one makes slower.
 const STOP_TIMEOUT: u64 = 30;
 const EDIT_TOOLS: &str = "Edit|Write|MultiEdit";
+/// Codex names its one editing tool; it also lets `Edit|Write` select it.
+const CODEX_EDIT_TOOLS: &str = "apply_patch|Edit|Write";
+/// Where each agent's hook starts from: Claude Code says, and Codex starts a
+/// hook in the session's directory, which can be below the root.
+const CLAUDE_DIR: &str = "${CLAUDE_PROJECT_DIR:-.}";
+const CODEX_DIR: &str = "$(git rev-parse --show-toplevel 2>/dev/null || pwd)";
 /// Seconds; the hook keeps to its own much shorter budget.
 const TIMEOUT: u64 = 10;
 
 #[derive(Subcommand)]
 pub enum HooksAction {
     /// Add the Claude Code hooks (the guard before an edit, the brief nudge
-    /// after one, the Stop hook) and the git hook when lefthook is set up.
+    /// after one, the Stop hook) and the git hook when lefthook is set up;
+    /// `--codex` adds the same hooks for Codex.
     Install {
         #[command(flatten)]
         target: Target,
@@ -53,6 +61,9 @@ pub struct Target {
     /// Only the Claude Code hooks.
     #[arg(long, conflicts_with = "git")]
     claude: bool,
+    /// The same hooks for Codex, in `.codex/hooks.json`, instead of Claude Code's.
+    #[arg(long, conflicts_with_all = ["claude", "git", "local", "shared"])]
+    codex: bool,
     /// Only the git pre-commit hook, through lefthook; install makes a
     /// `lefthook.yml` when there's none.
     #[arg(long)]
@@ -103,11 +114,15 @@ pub fn run(action: HooksAction, cwd: &Path) -> ExitCode {
         HooksTarget::Shared => "settings.json",
         HooksTarget::Local => "settings.local.json",
     };
-    let file = root.join(".claude").join(name);
-    let manifest = git_dir
-        .join("fairlead")
-        .join("backups")
-        .join(format!("claude-{name}"));
+    let (file, manifest_name) = if target.codex {
+        (
+            root.join(".codex").join("hooks.json"),
+            "codex-hooks.json".to_string(),
+        )
+    } else {
+        (root.join(".claude").join(name), format!("claude-{name}"))
+    };
+    let manifest = git_dir.join("fairlead").join("backups").join(manifest_name);
     let bash = !loaded.config.guard.commands.items().is_empty();
     let stop = loaded.config.done.on_stop != fairlead_core::config::OnStop::Off;
     let nudge = loaded.config.brief.nudge;
@@ -124,14 +139,24 @@ pub fn run(action: HooksAction, cwd: &Path) -> ExitCode {
     // Without `--git`, install only touches a lefthook config that's already there.
     let git = target.git
         || (!target.claude
+            && !target.codex
             && (lefthook.exists() || !matches!(action, HooksAction::Install { .. })));
+    let agent = if target.codex {
+        Agent::Codex
+    } else {
+        Agent::Claude
+    };
     let runner = package_runner(&root);
     let mut result = Ok(());
     if claude {
         result = match action {
-            HooksAction::Install { .. } => {
-                install(&file, &manifest, Stages { bash, stop, nudge }, runner)
-            }
+            HooksAction::Install { .. } => install(
+                &file,
+                &manifest,
+                Stages { bash, stop, nudge },
+                runner,
+                agent,
+            ),
             HooksAction::Status { .. } => status(&file, &manifest),
             HooksAction::Uninstall { .. } => uninstall(&file, &manifest),
         };
@@ -187,7 +212,18 @@ pub fn describe(root: &Path, config: &fairlead_core::config::Config) -> Vec<Stri
         _ => "git hook: not installed; `fairlead hooks install --git` adds it through lefthook"
             .to_string(),
     };
-    vec![claude, git]
+    let mut lines = vec![claude, git];
+    // Only shown where Codex hooks are, so a Claude Code project isn't told about Codex.
+    let codex = root.join(".codex").join("hooks.json");
+    if let Some(Ok(settings)) = read(&codex).ok().flatten().map(|t| parse(&codex, &t)) {
+        if !installed(&settings).is_empty() {
+            lines.push(format!(
+                "codex hook: installed in .codex/hooks.json for {}",
+                installed(&settings).join(", ")
+            ));
+        }
+    }
+    lines
 }
 
 /// How a repository that lists Fairlead as a package dependency runs its
@@ -218,24 +254,24 @@ pub fn package_runner(root: &Path) -> Option<&'static str> {
 /// The Stop and PostToolUse hooks' command, for `fairlead guard <stage>`.
 /// Unlike the write hook's it keeps the exit code and output: the Stop
 /// hook's exit 2 and the PostToolUse note are how they reach the agent.
-fn stage_command(stage: &str, runner: Option<&str>) -> String {
+fn stage_command(stage: &str, runner: Option<&str>, dir: &str) -> String {
     match runner {
         None => {
             format!("command -v fairlead >/dev/null 2>&1 || exit 0; exec fairlead guard {stage}")
         }
         Some(runner) => format!(
-            "cd \"${{CLAUDE_PROJECT_DIR:-.}}\" 2>/dev/null || exit 0; \
+            "cd \"{dir}\" 2>/dev/null || exit 0; \
              if [ -x {NPM_BINARY} ]; then exec {NPM_BINARY} guard {stage}; fi; \
              exec {runner} fairlead guard {stage}"
         ),
     }
 }
 
-fn claude_command(runner: Option<&str>) -> String {
+fn claude_command(runner: Option<&str>, dir: &str) -> String {
     match runner {
         None => COMMAND.to_string(),
         Some(runner) => format!(
-            "cd \"${{CLAUDE_PROJECT_DIR:-.}}\" 2>/dev/null || exit 0; \
+            "cd \"{dir}\" 2>/dev/null || exit 0; \
              if [ -x {NPM_BINARY} ]; then {NPM_BINARY} guard hook; \
              else {runner} fairlead guard hook 2>/dev/null; fi; exit 0"
         ),
@@ -439,6 +475,12 @@ fn pretty(settings: &Map<String, Value>) -> String {
     serde_json::to_string_pretty(settings).expect("settings serialize") + "\n"
 }
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Agent {
+    Claude,
+    Codex,
+}
+
 /// Which hooks install writes beside the write stage on edits.
 struct Stages {
     bash: bool,
@@ -451,8 +493,13 @@ fn install(
     manifest: &Path,
     stages: Stages,
     runner: Option<&str>,
+    agent: Agent,
 ) -> Result<(), String> {
     let Stages { bash, stop, nudge } = stages;
+    let (edits, dir) = match agent {
+        Agent::Claude => (EDIT_TOOLS, CLAUDE_DIR),
+        Agent::Codex => (CODEX_EDIT_TOOLS, CODEX_DIR),
+    };
     let original = read(file)?;
     let mut settings = match &original {
         Some(text) => parse(file, text)?,
@@ -473,9 +520,9 @@ fn install(
             file.display()
         ));
     };
-    let command = claude_command(runner);
+    let command = claude_command(runner, dir);
     let entry = json!({ "type": "command", "command": command, "timeout": TIMEOUT });
-    pre.push(json!({ "matcher": EDIT_TOOLS, "hooks": [entry.clone()] }));
+    pre.push(json!({ "matcher": edits, "hooks": [entry.clone()] }));
     if bash {
         pre.push(json!({ "matcher": "Bash", "hooks": [entry] }));
     }
@@ -484,7 +531,7 @@ fn install(
         let Some(groups) = groups.as_array_mut() else {
             return Err(format!("{}: `hooks.Stop` isn't a list", file.display()));
         };
-        let command = stage_command("stop", runner);
+        let command = stage_command("stop", runner, dir);
         groups.push(json!({ "hooks": [{ "type": "command", "command": command, "timeout": STOP_TIMEOUT }] }));
     }
     if nudge {
@@ -495,8 +542,8 @@ fn install(
                 file.display()
             ));
         };
-        let command = stage_command("nudge", runner);
-        groups.push(json!({ "matcher": EDIT_TOOLS, "hooks": [{ "type": "command", "command": command, "timeout": TIMEOUT }] }));
+        let command = stage_command("nudge", runner, dir);
+        groups.push(json!({ "matcher": edits, "hooks": [{ "type": "command", "command": command, "timeout": TIMEOUT }] }));
     }
     let written = pretty(&settings);
     let dir = file.parent().expect("a settings file has a directory");
@@ -534,6 +581,9 @@ fn install(
         "hooks: installed in {}, checking {what}{note}",
         file.display()
     );
+    if agent == Agent::Codex {
+        println!("hooks: Codex runs a project's hooks once the project is trusted and you approve them; it asks when it starts, or see /hooks");
+    }
     Ok(())
 }
 
