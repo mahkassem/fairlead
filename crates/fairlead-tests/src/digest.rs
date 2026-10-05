@@ -14,7 +14,7 @@ fn hex(bytes: &[u8]) -> String {
 
 /// Sections that never change a plan, left out of its digest altogether, so
 /// adding one doesn't change the digest of every plan made before it.
-const NOT_PLANNED: [&str; 5] = ["guard", "hooks", "done", "brief", "ci"];
+const NOT_PLANNED: [&str; 6] = ["guard", "hooks", "done", "brief", "ci", "memory"];
 
 pub fn config_digest(config: &Config) -> String {
     let mut value = serde_json::to_value(config).expect("config serializes");

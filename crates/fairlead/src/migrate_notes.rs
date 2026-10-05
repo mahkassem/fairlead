@@ -166,6 +166,7 @@ pub const SINCE: &[(&str, &str)] = &[
     ("quarantine", "0.7"),
     ("tests.runners.all_command", "0.7.1"),
     ("tests.runners.exclude_arg", "0.7.1"),
+    ("memory", "0.8"),
 ];
 
 /// Top-level tables every released config format has had.

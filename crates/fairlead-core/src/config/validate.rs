@@ -89,6 +89,7 @@ pub fn validate(config: &Config) -> Vec<Problem> {
     graph_edges(config, &mut problems);
     graph_providers(config, &mut problems);
     guard(config, &mut problems);
+    memory(config, &mut problems);
     problems
 }
 
@@ -570,6 +571,25 @@ fn checks(config: &Config, problems: &mut Vec<Problem>) {
                 "needs `paths` or `modules`, or it never runs",
             ));
         }
+    }
+}
+
+fn memory(config: &Config, problems: &mut Vec<Problem>) {
+    let m = &config.memory;
+    let dir = std::path::Path::new(&m.dir);
+    if m.dir.trim().is_empty() || dir.is_absolute() || m.dir.split('/').any(|p| p == "..") {
+        problems.push(problem(
+            "memory.dir",
+            "must be a path inside the repository",
+        ));
+    }
+    for (key, value) in [("memory.max_lines", m.max_lines), ("memory.cap", m.cap)] {
+        if value == 0 {
+            problems.push(problem(key, "must be at least 1"));
+        }
+    }
+    if m.review_days == 0 {
+        problems.push(problem("memory.review_days", "must be at least 1"));
     }
 }
 

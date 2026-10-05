@@ -67,6 +67,16 @@ pub struct Brief {
     pub lessons: Section<Item>,
     pub skills: Section<Item>,
     pub done: Section<Item>,
+    /// Inputs the brief couldn't use, such as a lesson file it couldn't read.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub warnings: Vec<String>,
+    /// How many lessons the text lists before "N more".
+    #[serde(default = "lesson_cap")]
+    pub lesson_cap: usize,
+}
+
+fn lesson_cap() -> usize {
+    SHOWN
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -221,6 +231,8 @@ fn assemble(
             })
     };
     let steps = crate::done_cmd::steps(planned)?;
+    let reach = crate::knowledge::reach(planned, 1);
+    let offered = crate::knowledge::lessons(planned, root, &reach);
     Ok(Brief {
         version: 1,
         id,
@@ -263,8 +275,12 @@ fn assemble(
                 .collect(),
         },
         lessons: Section {
-            source: "none recorded yet (K4)".into(),
-            items: Vec::new(),
+            source: format!("{} (fairlead lessons list)", planned.config.memory.dir),
+            items: offered
+                .lessons
+                .into_iter()
+                .map(|(n, w)| item(n, w))
+                .collect(),
         },
         skills: Section {
             source: "none routed yet (K4)".into(),
@@ -277,6 +293,12 @@ fn assemble(
                 .map(|s| item(s.id.clone(), s.argv.join(" ")))
                 .collect(),
         },
+        warnings: offered
+            .bad
+            .iter()
+            .map(|b| format!("[bad-lesson] {}: {}", b.path, b.reason))
+            .collect(),
+        lesson_cap: planned.config.memory.cap,
     })
 }
 
@@ -302,11 +324,11 @@ pub fn text(b: &Brief, all: bool) -> String {
     let head = |out: &mut String, name: &str, summary: String, source: &str| {
         out.push_str(&format!("{name:<8} {summary:<56} {source}\n"));
     };
-    let list = |out: &mut String, items: &[Item], more: &str| {
+    let capped = |out: &mut String, items: &[Item], more: &str, cap: usize| {
         let shown = if all {
             items.len()
         } else {
-            items.len().min(SHOWN)
+            items.len().min(cap)
         };
         for i in &items[..shown] {
             out.push_str(&format!("  {:<44} {}\n", i.name, i.why));
@@ -315,6 +337,7 @@ pub fn text(b: &Brief, all: bool) -> String {
             out.push_str(&format!("  … {} more ({more})\n", items.len() - shown));
         }
     };
+    let list = |out: &mut String, items: &[Item], more: &str| capped(out, items, more, SHOWN);
     head(
         &mut out,
         "reaches",
@@ -367,7 +390,19 @@ pub fn text(b: &Brief, all: bool) -> String {
         or_none(rules.join(", ")),
         &b.rules.source,
     );
-    head(&mut out, "lessons", "none".into(), &b.lessons.source);
+    let n = b.lessons.items.len();
+    let lessons = match n {
+        0 => "none".to_string(),
+        1 => "1 lesson".to_string(),
+        n => format!("{n} lessons"),
+    };
+    head(&mut out, "lessons", lessons, &b.lessons.source);
+    capped(
+        &mut out,
+        &b.lessons.items,
+        "fairlead brief --all",
+        b.lesson_cap,
+    );
     head(&mut out, "skills", "none".into(), &b.skills.source);
     head(
         &mut out,
@@ -375,6 +410,9 @@ pub fn text(b: &Brief, all: bool) -> String {
         or_none(ids(&b.done.items)),
         &b.done.source,
     );
+    for w in &b.warnings {
+        out.push_str(&format!("warning  {w}\n"));
+    }
     out.push_str("next     edit, then: fairlead done\n");
     out
 }

@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### New
+
+- Lessons ([#157](https://github.com/mahkassem/fairlead/issues/157)). One small file per lesson in `.fairlead/lessons/`, with a scope (`paths`, `modules` or `always`), evidence, a review date and a `source`: a `person` who confirmed it (`confirmed_by`), a `mistake` whose evidence is the failure, or `imported`. `fairlead brief` fills its lessons row with the ones a change reaches: named, used (one hop along imports, stopping at a barrier), always, then everything as the fallback when the plan runs everything, enforced ones first, five shown. `fairlead learn` writes one to the working tree (or prints it, with `memory.learn = "ask"`) and refuses one without a scope, evidence or source; `fairlead lessons list`, `review` and `check` list them, the ones due for review, and fail on a file that can't be offered. A check for secrets and personal data runs on every lesson. `[memory]` is left out of the plan digest, so plan ids don't move. See [Lessons](https://mahkassem.github.io/fairlead/docs/lessons.html).
+
 ## 0.7.1 (2026-10-05)
 
 ### New

@@ -25,5 +25,6 @@ fairlead-guard = { version = "0.7.1", path = "../fairlead-guard" }
 rayon = "1"
 regex = "1"
 serde = { version = "1", features = ["derive"] }
+serde-saphyr = "1.3.0"
 serde_json = "1.0.151"
 toml = "1.1.6"

@@ -88,6 +88,7 @@ pub struct Config {
     pub done: Done,
     pub brief: Brief,
     pub ci: Ci,
+    pub memory: Memory,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
@@ -703,6 +704,44 @@ impl Default for Done {
             on_stop: OnStop::Ask,
         }
     }
+}
+
+/// Lessons: one small file each, offered for a change the way tests are picked.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields, default)]
+pub struct Memory {
+    /// Where the lesson files live, from the repository root.
+    pub dir: String,
+    /// Days from `added` to the `review_by` a new lesson gets.
+    pub review_days: u32,
+    /// The longest body a lesson may have; anything longer is a doc to link.
+    pub max_lines: usize,
+    /// Lessons a brief lists before "N more".
+    pub cap: usize,
+    /// What `fairlead learn` does with the lesson it makes.
+    pub learn: Learn,
+}
+
+impl Default for Memory {
+    fn default() -> Self {
+        Memory {
+            dir: ".fairlead/lessons".into(),
+            review_days: 90,
+            max_lines: 12,
+            cap: 5,
+            learn: Learn::Write,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "kebab-case")]
+pub enum Learn {
+    /// Write the file to the working tree, for a person to review in the pull request.
+    #[default]
+    Write,
+    /// Print the file instead, for a person to save.
+    Ask,
 }
 
 /// What `fairlead ci` does beyond running the plan.

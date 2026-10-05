@@ -14,6 +14,8 @@ mod guard_cmd;
 mod hook_cmd;
 mod hooks_cmd;
 mod init_cmd;
+mod knowledge;
+mod lessons_cmd;
 mod migrate_cmd;
 mod migrate_notes;
 mod plan_cmd;
@@ -125,6 +127,16 @@ enum Command {
         #[command(flatten)]
         args: receipt_cmd::NextArgs,
     },
+    /// Write one lesson: a scope, evidence, and who or what taught it.
+    Learn {
+        #[command(flatten)]
+        args: lessons_cmd::LearnArgs,
+    },
+    /// List the lessons, the ones due for review, or check them all.
+    Lessons {
+        #[command(subcommand)]
+        action: lessons_cmd::LessonsAction,
+    },
     /// Bring the hooks, the config's version floor and the version pins to
     /// this release, and list what changed since that needs a person.
     Migrate {
@@ -211,7 +223,12 @@ fn doctor_hooks(dir: &Path, loaded: Option<&Loaded>) -> String {
 
 fn doctor_report(dir: &Path, opts: &LoadOptions) -> String {
     let loaded = config::load(dir, opts);
-    let hooks = doctor_hooks(dir, loaded.as_ref().ok());
+    let mut hooks = doctor_hooks(dir, loaded.as_ref().ok());
+    if let Ok(l) = &loaded {
+        if let Some(line) = lessons_cmd::doctor_line(&graph_cmd::repo_root(dir), &l.config.memory) {
+            hooks.push_str(&line);
+        }
+    }
     let config = match loaded {
         Ok(loaded) if loaded.files.is_empty() => "none found; defaults apply".to_string(),
         Ok(loaded) if loaded.problems.is_empty() => {
@@ -421,6 +438,8 @@ fn main() -> ExitCode {
         Some(Command::Graph { action, sets }) => graph_cmd::run(action, sets, &cwd()),
         Some(Command::Coverage { action }) => coverage_cmd::run(action, &cwd()),
         Some(Command::Guard { action, sets }) => guard_cmd::run(action, sets, &cwd()),
+        Some(Command::Learn { args }) => lessons_cmd::learn(args, &cwd()),
+        Some(Command::Lessons { action }) => lessons_cmd::run(action, &cwd()),
         Some(Command::Hooks { action }) => hooks_cmd::run(action, &cwd()),
         Some(Command::Migrate { args }) => migrate_cmd::run(args, &cwd()),
         Some(Command::Done { args }) => done_cmd::run(args, &cwd()),
