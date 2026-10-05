@@ -65,10 +65,30 @@ pub fn text(plan: &Plan) -> String {
     if !plan.ignored.is_empty() {
         let _ = writeln!(out, "\nignored: {}", plan.ignored.join(", "));
     }
+    if !plan.quarantined.is_empty() {
+        let _ = writeln!(
+            out,
+            "\nnot provable here (quarantined; each runs alone, and only a failure matching its signature is excused):"
+        );
+        let width = plan
+            .quarantined
+            .iter()
+            .map(|q| q.target.len())
+            .max()
+            .unwrap_or(0);
+        for q in &plan.quarantined {
+            let _ = writeln!(out, "  {:width$}  {}", q.target, crate::quarantine::line(q));
+        }
+    }
     if !plan.invocations.is_empty() {
         let _ = writeln!(out, "\nrun:");
         for inv in &plan.invocations {
-            let _ = writeln!(out, "  ({}) {}", inv.cwd, inv.argv.join(" "));
+            let held = if inv.quarantined.is_some() {
+                "  (quarantined)"
+            } else {
+                ""
+            };
+            let _ = writeln!(out, "  ({}) {}{held}", inv.cwd, inv.argv.join(" "));
         }
     }
     let other: Vec<_> = plan

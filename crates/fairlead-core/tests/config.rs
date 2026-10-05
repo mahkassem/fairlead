@@ -329,6 +329,57 @@ until = "next year"
 }
 
 #[test]
+fn a_platform_quarantine_names_one_target_a_place_a_signature_evidence_and_a_date() {
+    let config: Config = toml::from_str(
+        r#"
+[[checks]]
+id = "lint"
+command = ["lint"]
+paths = ["src/**"]
+
+[[quarantine]]
+path = "test/a.test.ts"
+check = "lint"
+signature = ""
+reason = " "
+proved_in = ""
+until = "soon"
+
+[[quarantine]]
+check = "typecheck"
+os = "windows"
+when = ["autocrlf", "space-in-path"]
+signature = "ENOENT"
+reason = "it opens a %20 path"
+proved_in = "CI on Linux"
+until = "2026-12-31"
+"#,
+    )
+    .unwrap();
+    let keys: Vec<String> = validate(&config).into_iter().map(|p| p.key).collect();
+    assert_eq!(
+        keys,
+        [
+            "quarantine[0]",
+            "quarantine[0]",
+            "quarantine[0].signature[0]",
+            "quarantine[0].reason",
+            "quarantine[0].proved_in",
+            "quarantine[0].until",
+            "quarantine[1].check",
+        ]
+    );
+    let none = toml::from_str::<Config>("[[quarantine]]\npath = \"a\"\nos = \"amiga\"\nsignature = \"x\"\nreason = \"r\"\nproved_in = \"CI\"\nuntil = \"2026-12-31\"\n");
+    assert!(none.is_err(), "an OS it doesn't know is refused");
+}
+
+#[test]
+fn no_quarantine_leaves_the_config_as_it_serialized_before() {
+    let json = serde_json::to_value(Config::default()).unwrap();
+    assert!(json.get("quarantine").is_none(), "{json}");
+}
+
+#[test]
 fn an_edge_rule_reads_each_placeholder_from_a_whole_segment_and_names_the_same_ones() {
     let config: Config = toml::from_str(
         r#"

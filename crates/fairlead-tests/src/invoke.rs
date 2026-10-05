@@ -11,7 +11,7 @@
 use std::collections::BTreeMap;
 
 use fairlead_core::config::{CheckFiles, Invoke, Runner};
-use fairlead_core::plan::{CheckSelection, Invocation, InvocationKind, TestSelection};
+use fairlead_core::plan::{CheckSelection, Invocation, InvocationKind, Quarantined, TestSelection};
 
 use crate::pattern::Pattern;
 use crate::planner::Context;
@@ -101,6 +101,7 @@ fn runner_invocations(
         kind: InvocationKind::Runner,
         cwd,
         argv,
+        quarantined: None,
     };
     match runner.invoke {
         Invoke::Once => {
@@ -183,19 +184,40 @@ fn check_files(
         .collect()
 }
 
+/// Every invocation, in order. A test or check `held` names runs alone, so
+/// its failure can be judged by itself; the rest of its runner's tests are
+/// then named, even in a plan that runs everything.
 pub fn invocations(
     cx: &Context,
     tests: &[TestSelection],
     checks: &[CheckSelection],
     all: bool,
+    held: &[Quarantined],
 ) -> Vec<Invocation> {
+    let is_held = |kind: InvocationKind, target: &str| {
+        held.iter().any(|q| q.kind == kind && q.target == target)
+    };
     let mut out = Vec::new();
     for runner in cx.config.tests.runners.items() {
-        let mine: Vec<&TestSelection> = tests
+        let (alone, mine): (Vec<&TestSelection>, Vec<&TestSelection>) = tests
             .iter()
             .filter(|t| t.runner.as_deref() == Some(runner.id.as_str()))
-            .collect();
-        out.extend(runner_invocations(cx, runner, &mine, all));
+            .partition(|t| is_held(InvocationKind::Runner, &t.path));
+        if alone.is_empty() {
+            out.extend(runner_invocations(cx, runner, &mine, all));
+            continue;
+        }
+        out.extend(runner_invocations(cx, runner, &mine, false));
+        for test in alone {
+            out.extend(
+                runner_invocations(cx, runner, &[test], false)
+                    .into_iter()
+                    .map(|i| Invocation {
+                        quarantined: Some(test.path.clone()),
+                        ..i
+                    }),
+            );
+        }
     }
     for selected in checks {
         let Some(check) = cx
@@ -222,6 +244,7 @@ pub fn invocations(
             kind: InvocationKind::Check,
             cwd: ".".into(),
             argv: expand(&check.command, &files, false, None),
+            quarantined: is_held(InvocationKind::Check, &check.id).then(|| check.id.clone()),
         });
     }
     out

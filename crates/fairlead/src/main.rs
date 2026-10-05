@@ -19,6 +19,7 @@ mod migrate_notes;
 mod plan_cmd;
 mod receipt_cmd;
 mod replay_cmd;
+mod step;
 
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
@@ -223,11 +224,18 @@ fn doctor_report(dir: &Path, opts: &LoadOptions) -> String {
         ),
         Err(e) => format!("invalid: {e}"),
     };
+    let here = fairlead_tests::quarantine::Here::detect(&graph_cmd::repo_root(dir));
+    let conditions: Vec<&str> = here.conditions.iter().map(|c| c.name()).collect();
     format!(
-        "fairlead {}\nplatform: {}-{}\nconfig: {}\n{hooks}",
+        "fairlead {}\nplatform: {}-{}\nconditions: {}\nconfig: {}\n{hooks}",
         env!("CARGO_PKG_VERSION"),
         std::env::consts::OS,
         std::env::consts::ARCH,
+        if conditions.is_empty() {
+            "none".to_string()
+        } else {
+            conditions.join(", ")
+        },
         config
     )
 }
@@ -252,6 +260,32 @@ fn owner_warnings(loaded: &Loaded) -> Vec<String> {
         return Vec::new();
     }
     fairlead_tests::testfiles::idle_owners(&check_tree(loaded), &loaded.config).unwrap_or_default()
+}
+
+/// The conditions detected here and whether each `[[quarantine]]` entry
+/// holds, so a person can see why one applies.
+fn quarantine_lines(loaded: &Loaded) -> Vec<String> {
+    use fairlead_tests::quarantine::{status, Here, Status};
+    let entries = loaded.config.quarantine.items();
+    if entries.is_empty() {
+        return Vec::new();
+    }
+    let root = if loaded.files.is_empty() {
+        graph_cmd::repo_root(&cwd())
+    } else {
+        loaded.root.clone()
+    };
+    let here = Here::detect(&root);
+    let mut out = vec![format!("here: {}", here.describe())];
+    for entry in entries {
+        let state = match status(entry, &here) {
+            Status::Holds(why) => format!("holds here ({}) until {}", why.join(", "), entry.until),
+            Status::Expired => format!("ended on {}, so a failure here counts", entry.until),
+            Status::Elsewhere(why) => format!("doesn't hold here: {why}"),
+        };
+        out.push(format!("quarantine {}: {state}", entry.target()));
+    }
+    out
 }
 
 fn check(loaded: &Loaded) -> ExitCode {
@@ -290,6 +324,9 @@ fn check(loaded: &Loaded) -> ExitCode {
             files.join(" + ")
         };
         println!("config ok: {source}");
+        for line in quarantine_lines(loaded) {
+            println!("{line}");
+        }
         return ExitCode::SUCCESS;
     }
     for p in &problems {

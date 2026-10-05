@@ -11,6 +11,7 @@ use fairlead_core::config::LoadOptions;
 use fairlead_core::plan::{Plan, VERSION};
 
 use crate::plan_cmd::{make, Changes};
+use crate::step::Outcome;
 
 #[derive(Clone, Copy, PartialEq, Eq, ValueEnum)]
 pub enum Format {
@@ -248,40 +249,27 @@ fn execute(
     let mut ran: Vec<crate::ci_report::Ran> = Vec::new();
     let mut judged: Vec<crate::ci_judge::Verdict> = Vec::new();
     let mut failed = Vec::new();
+    let mut held = 0;
     for inv in &plan.invocations {
         let at = std::time::Instant::now();
-        let Some((program, args)) = inv.argv.split_first() else {
-            eprintln!("fairlead: {} has no argv", inv.id);
-            failed.push(inv.id.clone());
-            ran.push(crate::ci_report::Ran::of(inv, false, at));
-            if fail_fast {
-                break;
-            }
-            continue;
-        };
         println!("fairlead: ({}) {}", inv.cwd, inv.argv.join(" "));
-        let mut cmd = Command::new(program);
-        cmd.args(args).current_dir(root.join(&inv.cwd));
-        let outcome = if judge.is_some() {
-            captured(&mut cmd)
-        } else {
-            cmd.status().map(|s| (s, String::new()))
-        };
-        let ok = matches!(&outcome, Ok((s, _)) if s.success());
-        if let Err(e) = &outcome {
-            eprintln!("fairlead: couldn't start {program}: {e}");
-        }
-        ran.push(crate::ci_report::Ran::of(inv, ok, at));
-        if !ok {
-            if let (Some(j), Ok((_, log))) = (&judge, &outcome) {
-                match j.judge(inv, log) {
-                    Ok(v) => judged.extend(v),
-                    Err(e) => eprintln!("fairlead: {e}"),
+        let entry = plan.quarantine_of(inv);
+        let (outcome, log) = crate::step::run("fairlead", &root, inv, entry, judge.is_some());
+        ran.push(crate::ci_report::Ran::of(inv, outcome, at));
+        match outcome {
+            Outcome::Passed => {}
+            Outcome::Held => held += 1,
+            Outcome::Failed => {
+                if let Some(j) = &judge {
+                    match j.judge(inv, &log) {
+                        Ok(v) => judged.extend(v),
+                        Err(e) => eprintln!("fairlead: {e}"),
+                    }
                 }
-            }
-            failed.push(inv.id.clone());
-            if fail_fast {
-                break;
+                failed.push(inv.id.clone());
+                if fail_fast {
+                    break;
+                }
             }
         }
     }
@@ -290,45 +278,20 @@ fn execute(
         crate::ci_report::write_results(&cwd.join(path), &plan, ran, &judged, started)?;
     }
     if failed.is_empty() {
-        println!("fairlead: {} invocations passed", plan.invocations.len());
+        let note = if held > 0 {
+            format!(" ({held} failed as quarantined, not provable here)")
+        } else {
+            String::new()
+        };
+        println!(
+            "fairlead: {} invocations passed{note}",
+            plan.invocations.len()
+        );
         Ok(ExitCode::SUCCESS)
     } else {
         eprintln!("fairlead: failed: {}", failed.join(", "));
         Ok(ExitCode::FAILURE)
     }
-}
-
-/// Runs a command with its output echoed as it comes and kept, so a failing
-/// runner's report can be read for the tests it names.
-fn captured(cmd: &mut Command) -> std::io::Result<(std::process::ExitStatus, String)> {
-    use std::io::{Read, Write};
-    use std::process::Stdio;
-    let mut child = cmd.stdout(Stdio::piped()).stderr(Stdio::piped()).spawn()?;
-    let log = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
-    let pump = |mut from: Box<dyn Read + Send>, err: bool| {
-        let log = log.clone();
-        std::thread::spawn(move || {
-            let mut buf = [0u8; 8192];
-            while let Ok(n) = from.read(&mut buf) {
-                if n == 0 {
-                    break;
-                }
-                let _ = if err {
-                    std::io::stderr().write_all(&buf[..n])
-                } else {
-                    std::io::stdout().write_all(&buf[..n])
-                };
-                log.lock().expect("log lock").extend_from_slice(&buf[..n]);
-            }
-        })
-    };
-    let out = pump(Box::new(child.stdout.take().expect("piped stdout")), false);
-    let err = pump(Box::new(child.stderr.take().expect("piped stderr")), true);
-    let status = child.wait()?;
-    let _ = out.join();
-    let _ = err.join();
-    let text = String::from_utf8_lossy(&log.lock().expect("log lock")).into_owned();
-    Ok((status, text))
 }
 
 #[cfg(test)]

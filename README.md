@@ -37,6 +37,9 @@ of trying things like a stranger.
   the memory stays true instead of growing into noise.
   *Since 0.2.0:* owner rules record which tests guard which code, and a
   quarantined test applies only while the evidence holds and until its date.
+  *Unreleased:* a `[[quarantine]]` entry records a test that lies on one
+  platform, such as a CRLF checkout or a path with a space. There, the plan
+  lists it as not provable here, and `done` excuses only the failure it expects.
 - **Set up once, never start cold.** The agent's first job is to learn
   the repository: its modules, test runners, rules, and the commands that prove
   a change is right. That goes into one checked config, so every session starts

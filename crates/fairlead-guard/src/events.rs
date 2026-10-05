@@ -51,6 +51,9 @@ pub struct Event {
 pub struct Step {
     pub id: String,
     pub passed: bool,
+    /// It failed as its `[[quarantine]]` entry expects, so it doesn't fail the gate.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub quarantined: bool,
     pub seconds: f64,
 }
 

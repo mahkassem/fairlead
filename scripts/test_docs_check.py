@@ -49,6 +49,8 @@ class DocsCheck(unittest.TestCase):
         for page in [self.root / "README.md", *(self.root / "docs/src").glob("*.md")]:
             text = page.read_text()
             page.write_text(text.replace("*Unreleased:*", f"*Since {self.version}:*"))
+        site = self.root / "site/index.html"
+        site.write_text(site.read_text().replace("unreleased:", f"since {self.version}:"))
         return f"v{self.version}"
 
     def test_the_docs_as_they_stand_pass(self):

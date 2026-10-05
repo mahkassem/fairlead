@@ -55,6 +55,13 @@
         },
         "kind": {
           "$ref": "#/$defs/InvocationKind"
+        },
+        "quarantined": {
+          "description": "The test file or check id this invocation runs alone because a\n`[[quarantine]]` entry holds it here; see `quarantined`.",
+          "type": [
+            "string",
+            "null"
+          ]
         }
       },
       "required": [
@@ -71,6 +78,47 @@
         "check"
       ],
       "type": "string"
+    },
+    "Quarantined": {
+      "description": "A selected test or check held here. It runs in an invocation of its\nown, and a failure whose output matches `signature` is not provable here.",
+      "properties": {
+        "here": {
+          "description": "What made the entry hold here: the OS and each condition it names.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "kind": {
+          "$ref": "#/$defs/InvocationKind"
+        },
+        "proved_in": {
+          "type": "string"
+        },
+        "reason": {
+          "type": "string"
+        },
+        "signature": {
+          "type": "string"
+        },
+        "target": {
+          "description": "The test file, or the check id, as the invocation names it.",
+          "type": "string"
+        },
+        "until": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "target",
+        "kind",
+        "here",
+        "signature",
+        "reason",
+        "proved_in",
+        "until"
+      ],
+      "type": "object"
     },
     "Reason": {
       "description": "The first reason a test or check was selected.",
@@ -386,6 +434,13 @@
     "plan_id": {
       "description": "Stable for the same config, tree, base and changes.",
       "type": "string"
+    },
+    "quarantined": {
+      "description": "Selected tests and checks a `[[quarantine]]` entry holds on the\nmachine that made the plan: not provable here.",
+      "items": {
+        "$ref": "#/$defs/Quarantined"
+      },
+      "type": "array"
     },
     "tests": {
       "items": {

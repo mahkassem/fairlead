@@ -36,19 +36,28 @@ pub struct Ran {
     pub cwd: String,
     pub argv: Vec<String>,
     pub passed: bool,
+    /// It failed as its `[[quarantine]]` entry expects: not provable where it ran.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub quarantined: bool,
     pub seconds: f64,
 }
 
 impl Ran {
-    pub fn of(inv: &Invocation, passed: bool, started: Instant) -> Ran {
+    pub fn of(inv: &Invocation, outcome: crate::step::Outcome, started: Instant) -> Ran {
         Ran {
             id: inv.id.clone(),
             kind: inv.kind.clone(),
             cwd: inv.cwd.clone(),
             argv: inv.argv.clone(),
-            passed,
+            passed: outcome == crate::step::Outcome::Passed,
+            quarantined: outcome == crate::step::Outcome::Held,
             seconds: tenths(started.elapsed().as_secs_f64()),
         }
+    }
+
+    /// A failure that counts; one its quarantine entry expects doesn't.
+    pub fn failed(&self) -> bool {
+        !self.passed && !self.quarantined
     }
 }
 
@@ -66,7 +75,7 @@ pub fn write_results(
     let results = Results {
         version: 1,
         plan_id: plan.plan_id.clone(),
-        passed: ran.iter().all(|r| r.passed) && ran.len() == plan.invocations.len(),
+        passed: ran.iter().all(|r| !r.failed()) && ran.len() == plan.invocations.len(),
         seconds: tenths(started.elapsed().as_secs_f64()),
         invocations: ran,
         judged: judged.to_vec(),
@@ -148,7 +157,7 @@ pub fn markdown(plan: &Plan, results: Option<&Results>, receipt: Option<&str>) -
     let checks = plan.checks.len();
     let headline = match results {
         Some(r) => {
-            let failed = r.invocations.iter().filter(|i| !i.passed).count();
+            let failed = r.invocations.iter().filter(|i| i.failed()).count();
             let outcome = if r.passed {
                 "passed".to_string()
             } else {
@@ -208,56 +217,82 @@ pub fn markdown(plan: &Plan, results: Option<&Results>, receipt: Option<&str>) -
             }
         ));
     }
-    if let Some(r) = results {
-        out.push_str("| Ran | Result | Time |\n|---|---|---|\n");
-        for i in &r.invocations {
-            let result = if i.passed { "passed" } else { "**failed**" };
+    if !plan.quarantined.is_empty() {
+        out.push_str("Not provable where the plan was made (`[[quarantine]]`):\n\n");
+        for q in &plan.quarantined {
             out.push_str(&format!(
-                "| `{}` in `{}` | {result} | {:.1} s |\n",
-                i.id,
-                dir(&i.cwd),
-                i.seconds
+                "- `{}` [{}]: {}; proved in {}, until {}\n",
+                q.target,
+                q.here.join(", "),
+                q.reason,
+                q.proved_in,
+                q.until
             ));
         }
         out.push('\n');
-        let failed: Vec<&Ran> = r.invocations.iter().filter(|i| !i.passed).collect();
-        if !failed.is_empty() {
-            out.push_str("To run a failed one again:\n\n```sh\n");
-            for i in failed {
-                out.push_str(&format!("(cd {} && {})\n", dir(&i.cwd), i.argv.join(" ")));
-            }
-            out.push_str("```\n\n");
-        }
-        let escaped: Vec<&crate::ci_judge::Verdict> =
-            r.judged.iter().filter(|v| v.fix.is_some()).collect();
-        if !escaped.is_empty() {
-            out.push_str(&format!(
-                "**{} escape{}**: failing tests the merge's plan left out.\n\n| Test | Rule that would have caught it |\n|---|---|\n",
-                escaped.len(),
-                if escaped.len() == 1 { "" } else { "s" }
-            ));
-            for v in &escaped {
-                out.push_str(&format!(
-                    "| `{}` | `{}` |\n",
-                    v.test,
-                    v.fix.as_deref().unwrap_or_default()
-                ));
-            }
-            out.push('\n');
-        }
-        let planned = r.judged.len() - escaped.len();
-        if planned > 0 {
-            out.push_str(&format!(
-                "{planned} failing test{} the merge's plan selected, so {} should have failed on the pull request too.\n\n",
-                if planned == 1 { "" } else { "s" },
-                if planned == 1 { "it" } else { "they" }
-            ));
-        }
+    }
+    if let Some(r) = results {
+        out.push_str(&results_section(r));
     }
     if let Some(text) = receipt {
         out.push_str("<details><summary>Receipt</summary>\n\n```text\n");
         out.push_str(text.trim_end());
         out.push_str("\n```\n\n</details>\n");
+    }
+    out
+}
+
+/// The table of what ran, how to run a failure again, and what the merge's
+/// plan left out.
+fn results_section(r: &Results) -> String {
+    let mut out = String::new();
+    out.push_str("| Ran | Result | Time |\n|---|---|---|\n");
+    for i in &r.invocations {
+        let result = match (i.passed, i.quarantined) {
+            (true, _) => "passed",
+            (false, true) => "failed as quarantined: not provable here",
+            (false, false) => "**failed**",
+        };
+        out.push_str(&format!(
+            "| `{}` in `{}` | {result} | {:.1} s |\n",
+            i.id,
+            dir(&i.cwd),
+            i.seconds
+        ));
+    }
+    out.push('\n');
+    let failed: Vec<&Ran> = r.invocations.iter().filter(|i| i.failed()).collect();
+    if !failed.is_empty() {
+        out.push_str("To run a failed one again:\n\n```sh\n");
+        for i in failed {
+            out.push_str(&format!("(cd {} && {})\n", dir(&i.cwd), i.argv.join(" ")));
+        }
+        out.push_str("```\n\n");
+    }
+    let escaped: Vec<&crate::ci_judge::Verdict> =
+        r.judged.iter().filter(|v| v.fix.is_some()).collect();
+    if !escaped.is_empty() {
+        out.push_str(&format!(
+            "**{} escape{}**: failing tests the merge's plan left out.\n\n| Test | Rule that would have caught it |\n|---|---|\n",
+            escaped.len(),
+            if escaped.len() == 1 { "" } else { "s" }
+        ));
+        for v in &escaped {
+            out.push_str(&format!(
+                "| `{}` | `{}` |\n",
+                v.test,
+                v.fix.as_deref().unwrap_or_default()
+            ));
+        }
+        out.push('\n');
+    }
+    let planned = r.judged.len() - escaped.len();
+    if planned > 0 {
+        out.push_str(&format!(
+            "{planned} failing test{} the merge's plan selected, so {} should have failed on the pull request too.\n\n",
+            if planned == 1 { "" } else { "s" },
+            if planned == 1 { "it" } else { "they" }
+        ));
     }
     out
 }
