@@ -282,6 +282,11 @@ fn local_file(root: &Path) -> Result<Option<PathBuf>, ConfigError> {
     one_of(root, "fairlead.local", "local")
 }
 
+/// One config file as written, before it's merged or typed.
+pub fn read_layer(path: &Path) -> Result<Value, ConfigError> {
+    read_file(path)
+}
+
 fn read_file(path: &Path) -> Result<Value, ConfigError> {
     let label = file_name(path);
     let text = std::fs::read_to_string(path).map_err(|e| error(&label, None, e.to_string()))?;
