@@ -199,6 +199,9 @@ pub fn extract(rel: &str, source: &[u8]) -> Extracted {
     if ext == "py" {
         return crate::python::extract(source);
     }
+    if matches!(ext, "java" | "kt") {
+        return crate::jvm::extract(rel, source);
+    }
     let Some(g) = grammar(rel) else {
         return Extracted::default();
     };

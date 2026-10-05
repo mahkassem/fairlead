@@ -8,6 +8,7 @@ pub mod extract;
 pub mod fs;
 pub mod golang;
 pub mod graph;
+pub mod jvm;
 pub mod php;
 pub mod provider;
 pub mod python;

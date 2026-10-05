@@ -67,7 +67,9 @@ impl Job {
 /// `(fail)` line and the two after it, the bun file header a failure sits
 /// under, and bun's summary line, which ends what the extractor reads.
 /// PHPUnit's section headers and numbered failures, and Pest's `FAILED`,
-/// keep the frames after them. Capped so one noisy job can't bloat the dataset.
+/// keep the frames after them. Surefire's `<<< ERROR!` lines and closing
+/// lists, the Gradle task header a `FAILED` line sits under, and Gradle's
+/// failed-task lines are kept too. Capped so one noisy job can't bloat the dataset.
 pub fn log_excerpt(log: &str) -> Vec<String> {
     const AFTER: usize = 2;
     const CAP: usize = 400;
@@ -75,10 +77,25 @@ pub fn log_excerpt(log: &str) -> Vec<String> {
     let mut keep = BTreeSet::new();
     let mut header = None;
     let mut frames_until = 0;
+    let mut task = None;
+    let mut surefire_list = false;
     for (i, line) in lines.iter().enumerate() {
         let cleaned = clean(line);
         if bun_header(&cleaned).is_some() {
             header = Some(i);
+        }
+        if cleaned.starts_with("> Task :") {
+            task = Some(i);
+        }
+        if cleaned.contains(" FAILED") && !cleaned.starts_with(char::is_whitespace) {
+            keep.extend(task);
+        }
+        surefire_list = match cleaned.trim_end() {
+            "[ERROR] Failures:" | "[ERROR] Errors:" => true,
+            l => surefire_list && crate::jvm::in_surefire_list(l),
+        };
+        if surefire_list || jvm_failure(&cleaned) {
+            keep.insert(i);
         }
         let unhandled = cleaned.trim() == "# Unhandled error between tests";
         let pytest_error =
@@ -161,6 +178,16 @@ fn go_file_line(line: &str) -> bool {
         && (rest.contains(" +0x")
             || rest.chars().all(|c| c.is_ascii_digit())
             || !line.starts_with(char::is_whitespace))
+}
+
+/// A Surefire test that errored, a Kotlin or Java compile error, or a
+/// Gradle task's failure and its report.
+fn jvm_failure(line: &str) -> bool {
+    line.starts_with("e: ") && (line.contains(".kt:") || line.contains(".kts:"))
+        || line.contains(".java:") && line.contains(": error:")
+        || line.contains("<<< ERROR!")
+        || line.contains("Execution failed for task '")
+        || line.contains("There were failing tests. See the report at")
 }
 
 /// How far after a PHP failure its frames are kept.
