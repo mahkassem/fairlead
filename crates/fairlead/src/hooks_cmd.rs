@@ -15,7 +15,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Map, Value};
 
 mod refresh;
-pub use refresh::{apply, claude_installed, stale_claude, stale_git, Refresh};
+pub use refresh::{apply, claude_installed, stale_agents, stale_git, Refresh};
 
 /// Runs the write stage, and does nothing where `fairlead` isn't installed,
 /// so a teammate without it can still work.
@@ -131,20 +131,14 @@ pub fn run(action: HooksAction, cwd: &Path) -> ExitCode {
         HooksTarget::Shared => "settings.json",
         HooksTarget::Local => "settings.local.json",
     };
-    let (file, manifest_name) = if target.codex {
-        (
-            root.join(".codex").join("hooks.json"),
-            "codex-hooks.json".to_string(),
-        )
+    let agent = if target.codex {
+        Agent::Codex
     } else if target.gemini {
-        (
-            root.join(".gemini").join("settings.json"),
-            "gemini-settings.json".to_string(),
-        )
+        Agent::Gemini
     } else {
-        (root.join(".claude").join(name), format!("claude-{name}"))
+        Agent::Claude
     };
-    let manifest = git_dir.join("fairlead").join("backups").join(manifest_name);
+    let (file, manifest) = agent_file(&root, &git_dir, agent, name);
     let lefthook = lefthook_file(&root);
     let lefthook_manifest = lefthook_manifest(&git_dir, &lefthook);
     let claude = !target.git;
@@ -154,13 +148,6 @@ pub fn run(action: HooksAction, cwd: &Path) -> ExitCode {
             && !target.codex
             && !target.gemini
             && (lefthook.exists() || !matches!(action, HooksAction::Install { .. })));
-    let agent = if target.codex {
-        Agent::Codex
-    } else if target.gemini {
-        Agent::Gemini
-    } else {
-        Agent::Claude
-    };
     let runner = package_runner(&root);
     let mut result = Ok(());
     if claude {
@@ -524,11 +511,24 @@ fn stages(config: &fairlead_core::config::Config) -> Stages {
     }
 }
 
-fn claude_manifest(git_dir: &Path, name: &str) -> PathBuf {
-    git_dir
-        .join("fairlead")
-        .join("backups")
-        .join(format!("claude-{name}"))
+/// An agent's hooks file and uninstall's record of it; `claude_name` picks
+/// Claude Code's shared or local settings.
+fn agent_file(root: &Path, git_dir: &Path, agent: Agent, claude_name: &str) -> (PathBuf, PathBuf) {
+    let (file, record) = match agent {
+        Agent::Claude => (
+            root.join(".claude").join(claude_name),
+            format!("claude-{claude_name}"),
+        ),
+        Agent::Codex => (
+            root.join(".codex").join("hooks.json"),
+            "codex-hooks.json".into(),
+        ),
+        Agent::Gemini => (
+            root.join(".gemini").join("settings.json"),
+            "gemini-settings.json".into(),
+        ),
+    };
+    (file, git_dir.join("fairlead").join("backups").join(record))
 }
 
 fn lefthook_manifest(git_dir: &Path, lefthook: &Path) -> PathBuf {
@@ -651,12 +651,10 @@ fn install(
         None => Map::new(),
     };
     if !installed(&settings).is_empty() {
-        // migrate refreshes Claude Code's settings only.
-        let hint = match agent {
-            Agent::Claude => "; `fairlead migrate` brings them to this version's",
-            _ => "",
-        };
-        println!("hooks: already installed in {}{hint}", file.display());
+        println!(
+            "hooks: already installed in {}; `fairlead migrate` brings them to this version's",
+            file.display()
+        );
         return Ok(());
     }
     add_ours(&mut settings, file, &stages, runner, agent)?;

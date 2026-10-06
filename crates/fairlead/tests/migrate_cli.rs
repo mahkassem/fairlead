@@ -210,3 +210,59 @@ fn a_repository_on_this_release_has_nothing_to_update() {
         "notes older than the floor showed:\n{out}"
     );
 }
+
+#[test]
+fn codex_and_gemini_hooks_from_an_older_release_are_brought_along() {
+    let dir = scratch("agents");
+    put(&dir, "fairlead.toml", "fairlead = \"0.8\"\n");
+    for agent in ["--gemini", "--codex"] {
+        let (code, out) = fairlead(&dir, &["hooks", "install", agent]);
+        assert_eq!(code, 0, "{out}");
+    }
+    let gemini = read(&dir, ".gemini/settings.json");
+    let codex = read(&dir, ".codex/hooks.json");
+    // Gemini CLI's nudge before it counted SKILL.md reads, and a Codex hook calling fairlead by name.
+    put(
+        &dir,
+        ".gemini/settings.json",
+        &gemini.replace("write_file|replace|read_file", "write_file|replace"),
+    );
+    let command = serde_json::from_str::<Value>(&codex).unwrap()["hooks"]["PreToolUse"][0]["hooks"]
+        [0]["command"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    put(
+        &dir,
+        ".codex/hooks.json",
+        &codex.replace(
+            &serde_json::to_string(&command).unwrap(),
+            "\"fairlead guard hook\"",
+        ),
+    );
+
+    let (code, out) = fairlead(&dir, &["migrate"]);
+    assert_eq!(code, 0, "{out}");
+    assert!(out.contains("would update .gemini/settings.json: Fairlead's hooks: the brief nudge matches `write_file|replace|read_file` instead of `write_file|replace`"), "{out}");
+    assert!(
+        out.contains(
+            "would update .codex/hooks.json: Fairlead's hooks: updates the hooks' commands"
+        ),
+        "{out}"
+    );
+
+    let (code, out) = fairlead(&dir, &["migrate", "--write"]);
+    assert_eq!(code, 0, "{out}");
+    assert_eq!(read(&dir, ".gemini/settings.json"), gemini);
+    assert_eq!(read(&dir, ".codex/hooks.json"), codex);
+    let (code, out) = fairlead(&dir, &["migrate", "--check"]);
+    assert_eq!(code, 0, "{out}");
+
+    for agent in ["--gemini", "--codex"] {
+        let (code, out) = fairlead(&dir, &["hooks", "uninstall", agent]);
+        assert_eq!(code, 0, "{out}");
+    }
+    for file in [".gemini/settings.json", ".codex/hooks.json"] {
+        assert!(!dir.join(file).exists(), "{file} outlived uninstall");
+    }
+}
