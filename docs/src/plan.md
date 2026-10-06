@@ -51,7 +51,8 @@ It still selects what it did before (everything for the root files, the whole pa
 - the change does more than move versions: a script, `workspaces`, `overrides`, a package added or removed, a version that becomes a `workspace:`, `file:`, `npm:` or git specifier, and anything that doesn't parse;
 - there's no base text (as with `--files`), the file was added, deleted or renamed, or there's no `bun.lock` at the head (npm, yarn and pnpm projects);
 - a moved package, or one depending on it, is how a `[[tests.runners]]` command runs, by its name or a command it installs (`version-bump-runs-everything`);
-- or a file matching `plan.run_all`, such as `vitest.config.ts`, imports one (`version-bump-runs-everything`).
+- a file matching `plan.run_all`, such as `vitest.config.ts`, imports one (`version-bump-runs-everything`);
+- or one is named in text where no import shows it: a file matching `plan.run_all` (other than a `package.json` or a lockfile) or the `scripts` of the root or a changed `package.json` holds its name, or a command it installs, as a whole word, bounded by quotes, `/`, whitespace, a shell or list separator or either end. That catches a `preset: 'ts-jest'`, a plugin list, `"types": ["vitest/globals"]` and a CLI a script runs; the warning names the file. A devDependency named only in the manifest and the lockfile still selects nothing.
 
 **Fairlead's own config** (`fairlead-config`). `fairlead.toml`, `fairlead.yaml` or a layer such as `fairlead.ci.toml`, at the root, selects nothing by itself: the plan is made with the new config. It used to fall to `tests.unreached`, since no test imports it. A config file you list in `plan.run_all` still selects everything.
 

@@ -198,7 +198,9 @@ fn version_bumps(
         .flatten()
         .collect();
     let affected = bump::dependents(&locks, seeds);
-    if let Some(warning) = named_by_a_runner(config, &locks, &affected) {
+    let named = named_by_a_runner(config, &locks, &affected)
+        .or_else(|| named_in_text(scan, changes, run_all, &locks, &affected));
+    if let Some(warning) = named {
         out.warnings.push(warning);
         return;
     }
@@ -305,9 +307,132 @@ fn named_by_a_runner(
     None
 }
 
+/// A moved package that config or a script names in text, with no import
+/// to find: a preset, a plugin list, a `types` entry, a command. It may
+/// change how any test runs, so the bump keeps selecting everything.
+fn named_in_text(
+    scan: &Scan,
+    changes: &[Change],
+    run_all: &[Pattern],
+    locks: &[&BunLock],
+    affected: &BTreeMap<String, String>,
+) -> Option<Warning> {
+    let words: Vec<(String, &str)> = affected
+        .keys()
+        .flat_map(|name| {
+            let bins = locks.iter().flat_map(|l| l.bins(name));
+            std::iter::once(name.clone())
+                .chain(bins)
+                .map(move |w| (w, name.as_str()))
+        })
+        .collect();
+    let read = |path: &str| std::fs::read_to_string(scan.tree.root.join(path)).ok();
+    // A manifest and a lockfile name every dependency; only scripts count.
+    let configs = scan.tree.files.iter().filter(|f| {
+        !f.ends_with("package.json") && !is_lockfile(f) && run_all.iter().any(|g| g.is_match(f))
+    });
+    let manifests = std::iter::once("package.json").chain(
+        changes
+            .iter()
+            .map(|c| c.path.as_str())
+            .filter(|p| p.ends_with("package.json")),
+    );
+    let texts = configs
+        .filter_map(|f| Some((f.as_str(), read(f)?)))
+        .chain(manifests.filter_map(|m| Some((m, scripts(&read(m)?)))));
+    for (path, text) in texts {
+        if let Some((word, name)) = words.iter().find(|(w, _)| names_word(&text, w)) {
+            let via = if word == name {
+                String::new()
+            } else {
+                format!(" (its command `{word}`)")
+            };
+            return Some(Warning {
+                code: "version-bump-runs-everything".into(),
+                path: Some(path.to_string()),
+                message: format!(
+                    "`{path}` names `{name}`{via}, whose version moved, so every test runs"
+                ),
+            });
+        }
+    }
+    None
+}
+
+/// The `scripts` values of a `package.json`, one per line; a manifest that
+/// doesn't parse is scanned whole.
+fn scripts(text: &str) -> String {
+    match serde_json::from_str::<Value>(text) {
+        Ok(value) => value
+            .get("scripts")
+            .and_then(Value::as_object)
+            .into_iter()
+            .flatten()
+            .filter_map(|(_, v)| v.as_str())
+            .collect::<Vec<_>>()
+            .join("\n"),
+        Err(_) => text.to_string(),
+    }
+}
+
+fn is_lockfile(path: &str) -> bool {
+    let name = path.rsplit('/').next().unwrap_or(path);
+    [
+        ".lock",
+        ".lockb",
+        "-lock.json",
+        "-lock.yaml",
+        "shrinkwrap.json",
+        ".sum",
+    ]
+    .iter()
+    .any(|end| name.ends_with(end))
+}
+
+/// Whether `word` is in `text` as a whole word: bounded by a quote, `/`,
+/// whitespace, a shell or list separator, or either end.
+fn names_word(text: &str, word: &str) -> bool {
+    let bound =
+        |c: Option<char>| c.is_none_or(|c| c.is_whitespace() || "\"'`/,;&|()[]{}=".contains(c));
+    text.match_indices(word).any(|(at, _)| {
+        bound(text[..at].chars().next_back()) && bound(text[at + word.len()..].chars().next())
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_name_counts_only_as_a_whole_word() {
+        for text in [
+            "preset: 'ts-jest'",
+            "ts-jest/presets",
+            "ts-jest",
+            "run ts-jest --x",
+            "a&&ts-jest",
+        ] {
+            assert!(names_word(text, "ts-jest"), "{text}");
+        }
+        for text in ["ts-jestish", "my-ts-jest", "ts-jest-x", "@ts-jest"] {
+            assert!(!names_word(text, "ts-jest"), "{text}");
+        }
+        assert!(names_word(r#"plugins: ["@s/kit/plugin"]"#, "@s/kit"));
+    }
+
+    #[test]
+    fn scripts_are_the_manifest_text_that_counts() {
+        let text =
+            r#"{ "devDependencies": { "tool": "1.0.0" }, "scripts": { "lint": "tool src" } }"#;
+        assert_eq!(scripts(text), "tool src");
+        assert_eq!(scripts("{ not json"), "{ not json");
+        assert!(
+            is_lockfile("bun.lock")
+                && is_lockfile("a/pnpm-lock.yaml")
+                && is_lockfile("go.work.sum")
+        );
+        assert!(!is_lockfile("jest.config.js"));
+    }
 
     #[test]
     fn a_workflow_run_only_by_hand_or_on_a_schedule_is_dispatch_only() {

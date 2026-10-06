@@ -357,3 +357,57 @@ fn a_workflow_with_another_trigger_at_either_side_selects_everything() {
     );
     assert!(plan.all);
 }
+
+/// Plans a bump of `tool` with `extra` files added to the fixture.
+fn plan_tool_bump(dir_name: &str, manifest: &str, extra: &[(&str, &str)]) -> Plan {
+    let (head_manifest, lock) = (bump(manifest, "tool"), bump(LOCK, "tool"));
+    let mut fixture = files(&head_manifest, &lock);
+    fixture.extend_from_slice(extra);
+    let dir = repo(dir_name, &fixture);
+    let changes = vec![modified("bun.lock"), modified("package.json")];
+    let at_base = base(&[("package.json", manifest), ("bun.lock", LOCK)]);
+    try_plan_with_base(&dir, &config(BUN), changes, at_base).unwrap()
+}
+
+#[test]
+fn a_bumped_package_a_run_all_file_names_in_a_string_selects_everything() {
+    let jest = ("jest.config.js", "module.exports = { preset: 'tool' };\n");
+    let plan = plan_tool_bump("bump-preset", MANIFEST, &[jest]);
+    assert!(plan.all);
+    assert_eq!(codes(&plan), ["version-bump-runs-everything"]);
+    assert_eq!(plan.warnings[0].path.as_deref(), Some("jest.config.js"));
+    let types = (
+        "tsconfig.json",
+        r#"{ "compilerOptions": { "types": ["tool/globals"] } }"#,
+    );
+    assert!(plan_tool_bump("bump-types", MANIFEST, &[types]).all);
+}
+
+#[test]
+fn a_bumped_package_a_script_runs_selects_everything() {
+    let manifest = MANIFEST.replace(
+        "\"private\": true,",
+        "\"private\": true,\n  \"scripts\": { \"lint\": \"tool-cli src\" },",
+    );
+    let plan = plan_tool_bump("bump-script", &manifest, &[]);
+    assert!(plan.all);
+    assert_eq!(codes(&plan), ["version-bump-runs-everything"]);
+    assert_eq!(plan.warnings[0].path.as_deref(), Some("package.json"));
+}
+
+#[test]
+fn a_dev_dependency_named_only_in_the_manifest_and_lock_still_selects_nothing() {
+    let manifest = MANIFEST.replace(
+        "\"private\": true,",
+        "\"private\": true,\n  \"scripts\": { \"test\": \"bun test\", \"gen\": \"toolbox run\" },",
+    );
+    let extra = [
+        ("tsconfig.json", r#"{ "compilerOptions": { "types": ["bun-types"] } }"#),
+        ("jest.config.js", "module.exports = { preset: 'toolish' };\n"),
+        (".github/workflows/ci.yml", "on: push\njobs:\n  t:\n    runs-on: ubuntu-latest\n    steps:\n      - run: bun test\n"),
+    ];
+    let plan = plan_tool_bump("bump-audit", &manifest, &extra);
+    assert!(!plan.all);
+    assert!(tests(&plan).is_empty(), "{:?}", tests(&plan));
+    assert_eq!(codes(&plan), ["version-bump-scoped", "version-bump-scoped"]);
+}
