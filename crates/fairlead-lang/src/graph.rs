@@ -59,6 +59,9 @@ pub struct Graph {
     pub unresolved: Vec<(u32, String)>,
     /// Every specifier that didn't resolve, uninstalled packages included.
     pub failed: Vec<(u32, String, EdgeKind)>,
+    /// Packages from outside the repository each file imports, by name:
+    /// what a dependency's version bump reaches.
+    pub external: Vec<(u32, String)>,
     /// Path-like literals naming no file in the tree, as repo paths.
     pub dangling: Vec<(u32, String)>,
     /// Package folders, parallel to `packages`.

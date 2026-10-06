@@ -460,7 +460,7 @@ mod tests {
 
     #[test]
     fn a_layer_for_a_later_version_names_the_version_before_its_unknown_keys() {
-        let later = json!({"fairlead": "99.0", "memory": {"dir": "x"}});
+        let later = json!({"fairlead": "99.0", "insights": {"dir": "x"}});
         let err = typed("fairlead.toml", later.clone())
             .map_err(|e| later_floor("fairlead.toml", &later).unwrap_or(e))
             .unwrap_err();
@@ -471,11 +471,11 @@ mod tests {
             "{err}"
         );
 
-        let current = json!({"fairlead": "0.1", "memory": {"dir": "x"}});
+        let current = json!({"fairlead": "0.1", "insights": {"dir": "x"}});
         assert!(later_floor("fairlead.toml", &current).is_none());
         let err = typed("fairlead.toml", current).unwrap_err();
-        assert!(err.message.contains("unknown field `memory`"), "{err}");
-        assert!(later_floor("fairlead.toml", &json!({"memory": {}})).is_none());
+        assert!(err.message.contains("unknown field `insights`"), "{err}");
+        assert!(later_floor("fairlead.toml", &json!({"insights": {}})).is_none());
     }
 
     #[test]

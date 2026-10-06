@@ -121,11 +121,11 @@ fn session(given: Option<String>) -> Option<String> {
 
 /// Where the change loop stands: the brief, the plan for what changed, the
 /// gate's record for this tree and whether a receipt was written for it.
-struct State {
-    brief: Option<Brief>,
-    now: Planned,
-    changed: Vec<String>,
-    gate: Gate,
+pub(crate) struct State {
+    pub(crate) brief: Option<Brief>,
+    pub(crate) now: Planned,
+    pub(crate) changed: Vec<String>,
+    pub(crate) gate: Gate,
     receipt_written: bool,
     /// The failing step's command, when the gate failed.
     failed_command: Option<String>,
@@ -133,8 +133,19 @@ struct State {
 
 fn state(cwd: &Path, base: Option<String>, session: Option<&str>) -> Result<State, String> {
     let root = crate::graph_cmd::repo_root(cwd);
+    let brief = Store::open(&root).and_then(|s| s.current(session));
+    state_for(cwd, brief, base)
+}
+
+/// Where the change loop stands for a brief found some other way, such as
+/// the newest on the branch.
+pub(crate) fn state_for(
+    cwd: &Path,
+    brief: Option<Brief>,
+    base: Option<String>,
+) -> Result<State, String> {
+    let root = crate::graph_cmd::repo_root(cwd);
     let store = Store::open(&root);
-    let brief = store.as_ref().and_then(|s| s.current(session));
     let base = brief.as_ref().and_then(|b| b.base.clone()).or(base);
     let now = make(cwd, &Changes::new(base, Vec::new(), Vec::new()))?;
     let changed: Vec<String> = now.plan.changed.iter().map(|c| c.path.clone()).collect();
@@ -195,23 +206,33 @@ fn gate(log: &str, tree: &str) -> Gate {
 }
 
 /// The one step that's due, in the words the Stop hook and the note use too.
-fn next_line(s: &State) -> String {
-    if s.changed.is_empty() {
+pub(crate) fn next_line(s: &State) -> String {
+    due(
+        !s.changed.is_empty(),
+        s.brief.is_some(),
+        &s.gate.state,
+        s.receipt_written,
+        s.failed_command.as_deref(),
+    )
+}
+
+/// The step for a change in this state. Fairlead never asks whether a pull
+/// request is open, so the draft and ready steps read right either way.
+fn due(changed: bool, briefed: bool, gate: &str, receipt: bool, failed: Option<&str>) -> String {
+    if !changed {
         return "next: nothing due; nothing has changed".into();
     }
-    if s.brief.is_none() {
+    if !briefed {
         return "next: brief: `fairlead brief <paths>` lists what the change reaches".into();
     }
-    match s.gate.state.as_str() {
-        "passed" if s.receipt_written => {
-            "next: nothing due; the gate passed and the receipt is written".into()
-        }
-        "passed" => "next: receipt: `fairlead receipt` compares the change with its brief".into(),
-        "failed" => match &s.failed_command {
+    match gate {
+        "passed" if receipt => "next: ready: the gate passed and the receipt is written; `gh pr ready` if the pull request is a draft".into(),
+        "passed" => "next: receipt: `fairlead receipt` compares the change with its brief; then `gh pr ready`".into(),
+        "failed" => match failed {
             Some(cmd) => format!("next: fix the failing step, `{cmd}`, then `fairlead done`"),
             None => "next: fix what `fairlead done` reported, then run it again".into(),
         },
-        _ => "next: done: `fairlead done` hasn't passed for the tree as it is now".into(),
+        _ => "next: done: `fairlead done` hasn't passed for this tree; no pull request yet? `gh pr create --draft`".into(),
     }
 }
 
@@ -405,7 +426,7 @@ pub fn text(r: &Receipt, all: bool) -> String {
 }
 
 /// The gate's state in words; a pass says how many steps were held.
-fn gate_line(g: &Gate) -> String {
+pub(crate) fn gate_line(g: &Gate) -> String {
     match g.state.as_str() {
         "passed" => format!(
             "passed for this tree at {} ({} step{}{}) in {:.0} s",
@@ -495,6 +516,32 @@ mod tests {
         let old = r#"{"state":"passed","at":"2026-09-29T14:02:00.000Z","steps":2,"seconds":10.5}"#;
         let g: Gate = serde_json::from_str(old).expect("an old gate parses");
         assert_eq!((g.steps, g.held), (2, 0));
+    }
+
+    #[test]
+    fn before_the_gate_passes_next_opens_the_pull_request_as_a_draft() {
+        let line = due(true, true, "not run", false, None);
+        assert!(line.starts_with("next: done: `fairlead done`"), "{line}");
+        assert!(
+            line.ends_with("no pull request yet? `gh pr create --draft`"),
+            "{line}"
+        );
+        let failed = due(true, true, "failed", false, Some("cargo test"));
+        assert!(!failed.contains("gh pr"), "{failed}");
+        assert!(!due(true, false, "not run", false, None).contains("gh pr"));
+        assert!(!due(false, true, "not run", false, None).contains("gh pr"));
+    }
+
+    #[test]
+    fn once_the_gate_passes_next_marks_the_pull_request_ready() {
+        assert_eq!(
+            due(true, true, "passed", false, None),
+            "next: receipt: `fairlead receipt` compares the change with its brief; then `gh pr ready`"
+        );
+        assert_eq!(
+            due(true, true, "passed", true, None),
+            "next: ready: the gate passed and the receipt is written; `gh pr ready` if the pull request is a draft"
+        );
     }
 
     #[test]

@@ -77,12 +77,12 @@ fairlead.toml: tests.unreachd: unknown field `unreachd`, expected one of ...
 | `tests.match` | `**/*.{test,spec}.{ts,tsx,js,jsx,mjs,cjs,mts,cts}` | Test files |
 | `tests.exclude` | `**/node_modules/**` | Paths that are never test files |
 | `tests.unreached` | `"module"` | What a changed file nothing reaches selects: `module`, `all` or `warn` |
-| `tests.runners` | `[]` | `id`, `match`, `exclude` (files under `match` left to another runner), `invoke` (`once` or `per-module`), `cwd`, `command`. *Since 0.7.1:* `all_command` (the argv when everything runs) and `exclude_arg` (an argv fragment that leaves one file out), below |
+| `tests.runners` | `[]` | `id`, `match`, `exclude` (files under `match` left to another runner), `invoke` (`once` or `per-module`), `cwd`, `command`. *Since 0.7.1:* `all_command` (the argv when everything runs) and `exclude_arg` (an argv fragment that leaves one file out), below. *Since 0.8.0:* `from`, the earliest [CI stage](ci.md#stages) it runs at, `ready` by default |
 | `tests.owners` | `[]` | Tests that don't import what they test: `match`, `covers`, and `overrides_run_all` to let a covered `plan.run_all` path select only those tests |
 | `tests.classes` | `[]` | `class` (`unit`, `own`, `demand`, `canary`) for a `match` |
-| `checks` | `[]` | Steps that aren't tests: `id`, `command`, `paths`, `modules`, `files` |
+| `checks` | `[]` | Steps that aren't tests: `id`, `command`, `paths`, `modules`, `files`. *Since 0.8.0:* `from`, the earliest [CI stage](ci.md#stages) it runs at, `draft` by default |
 | `quarantine` | `[]` | A test (`path`) or check (`check`) that fails on one platform whatever the change: `os`, `when` (`autocrlf`, `space-in-path`), `signature`, `reason`, `proved_in`, `until` ([Test plan](plan.md#tests-that-lie-on-one-platform)) |
-| `plan.run_all` | lockfiles, root manifests, tsconfig, runner and CI config | A changed path matching one selects everything |
+| `plan.run_all` | lockfiles, root manifests, tsconfig, runner and CI config | A changed path matching one selects everything. *Since 0.8.0:* except a change that only moves dependency versions and a workflow run only by hand or on a schedule ([Changes that don't run everything](plan.md#changes-that-dont-run-everything)) |
 | `plan.lockfile` | `"all"` | `all`: a changed lockfile selects everything; `scope` (opt-in): a changed root `pnpm-lock.yaml` selects the workspace packages whose resolved dependencies changed |
 | `plan.ignore` | root Markdown, the changesets tool's folder (`.changeset/**`), `docs/**`, READMEs, changelogs, licences | A changed path matching one that reaches no test selects nothing, instead of falling to `tests.unreached`; one that reaches tests still selects them, and a changed test file always runs |
 | `replay.provider` | `"github"` | Where CI history comes from |
@@ -104,7 +104,7 @@ fairlead.toml: tests.unreachd: unknown field `unreachd`, expected one of ...
 | `guard.test_names` | off | `files`, `exclude`, `file`, `titles_without`, `title_calls`. See [Guard rules](guard.md#test-names) |
 | `guard.citations` | off | `files`, `exclude`, `pattern` (with a `code` group), `headings_in`. See [Guard rules](guard.md#citations) |
 | `guard.migrations` | off | `files`, `immutable` (default `true`), `base`, `unique_prefix`. See [Guard rules](guard.md#migrations) |
-| `guard.commands` | `[]` | `match`, `reason`: commands an agent may not run. See [Guard rules](guard.md#commands) |
+| `guard.commands` | `[]` | `match`, `reason`: commands an agent may not run; `unless`, a regex that lets a matched command through (*Since 0.8.0*). See [Guard rules](guard.md#commands) |
 | `guard.external` | `[]` | `id`, `command`, `stages` (default `["check"]`, or `commit`), `ratchet`. See [Guard rules](guard.md#external-rules) |
 | `hooks.claude` | `"shared"` | Where `fairlead hooks install` puts the Claude Code hooks: `shared`, `.claude/settings.json`; `local`, `.claude/settings.local.json` |
 | `done.tests` | `"planned"` | What `fairlead done` runs of the plan's test invocations: `planned` or `none`. See [The done gate](done.md) |
@@ -114,6 +114,22 @@ fairlead.toml: tests.unreachd: unknown field `unreachd`, expected one of ...
 | `done.on_stop` | `"ask"` | What the Claude Code Stop hook does while the tree hasn't passed: `off`, `ask` (send the agent back once) or `require`. See [The done gate](done.md#the-stop-hook) |
 | `brief.per` | `"session"` | Whether a second `fairlead brief` in the same session adds its paths to the first (`session`) or stands alone (`call`). See [The brief](brief.md) |
 | `brief.nudge` | `true` | Whether `fairlead hooks install` adds the `PostToolUse` note after an edit made with no brief |
+| `brief.resume` | `true` | Whether `fairlead hooks install` adds the `SessionStart` hook that runs `fairlead resume`. See [Context and resume](context.md#the-sessionstart-hook). *Since 0.8.0* |
+| `memory.dir` | `".fairlead/lessons"` | Where the [lesson](lessons.md) files live. *Since 0.8.0* |
+| `memory.review_days` | `90` | Days from `added` to the `review_by` a new lesson gets |
+| `memory.max_lines` | `12` | The longest body a lesson may have |
+| `memory.cap` | `5` | Lessons a brief lists before "N more" |
+| `memory.learn` | `"write"` | What `fairlead learn` does: `write` the file to the working tree, or `ask`, which prints it for a person to save |
+| `skills.imports` | `1` | Hops along what a changed file imports, for [skills](skills.md) and lessons alike. *Since 0.8.0* |
+| `skills.importers` | `0` | Hops along the files that import a changed file; off by default |
+| `skills.cap` | `8` | Skills a brief lists before "N more" |
+| `skills.targets` | `["claude", "agents", "cursor"]` | The agents `skills sync` writes for |
+| `skills.routes` | `[]` | `{ skill, paths, modules, always }`: the SKILL.md and the code it applies to. See [Skills](skills.md) |
+| `agents.write` | `"block"` | What `fairlead agents sync` does: `block` keeps the marked block in each file; `never` writes nothing and prints it for a person to copy in. See [AGENTS.md and CLAUDE.md](agents.md). *Since 0.8.0* |
+| `agents.files` | `["AGENTS.md", "CLAUDE.md"]` | The files that carry the block, relative paths inside the repository |
+| `stages.environments` | `["main"]` | Branches, by name or glob, whose pushes are the merge stage. See [Stages](ci.md#stages). *Since 0.8.0* |
+| `stages.full_label` | `"run-everything"` | A pull request label that makes its runs the full stage |
+| `stages.reuse` | `true` | At merge, skip the ready stage's steps when the pull request passed them on the same tree |
 | `ci.comment` | `false` | Whether `fairlead ci report` also keeps one pull request comment up to date with the report. See [Plans in CI](ci.md#fairlead-ci-report---plan-path) |
 | `ci.escapes` | `"report"` | What a failing test the merged change's plan left out does once `ci run --judge` finds it: `"report"` lists it, `"fail"` also makes `ci report` exit 1. See [Escapes](ci.md#escapes---judge-path) |
 | `guard.comments` | off | `files`, `exclude`, `tests`, `migrations`, `block_length`, `density`, `history`, `item_codes`, `agent_phrases`, `block_marker`, and `ratchet` (default `false`). See [Guard rules](guard.md#comments) |

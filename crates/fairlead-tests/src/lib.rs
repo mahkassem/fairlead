@@ -2,6 +2,7 @@
 //! and their runners and classes, owner rules, and the plan that says which
 //! tests and checks a change can affect, each with the reason it's in.
 
+pub mod bump;
 pub mod checks;
 pub mod digest;
 pub mod explain;
@@ -16,6 +17,7 @@ pub mod quarantine;
 pub mod render;
 pub mod select;
 pub mod testfiles;
+pub mod trims;
 pub mod walk;
 
 pub use planner::{plan, Input};

@@ -55,6 +55,9 @@ pub struct Brief {
     /// The commit the change is measured from, when git has one.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub base: Option<String>,
+    /// The branch HEAD was on, so `resume` can find the brief from a new session.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub branch: Option<String>,
     pub paths: Vec<String>,
     /// Named paths that aren't in the tree yet.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -67,6 +70,23 @@ pub struct Brief {
     pub lessons: Section<Item>,
     pub skills: Section<Item>,
     pub done: Section<Item>,
+    /// Inputs the brief couldn't use, such as a lesson file it couldn't read.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub warnings: Vec<String>,
+    /// How many lessons the text lists before "N more".
+    #[serde(default = "lesson_cap")]
+    pub lesson_cap: usize,
+    /// How many skills the text lists before "N more".
+    #[serde(default = "skill_cap")]
+    pub skill_cap: usize,
+}
+
+fn skill_cap() -> usize {
+    8
+}
+
+fn lesson_cap() -> usize {
+    SHOWN
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -110,15 +130,39 @@ pub fn run(args: BriefArgs, cwd: &Path) -> ExitCode {
 }
 
 fn brief(args: &BriefArgs, cwd: &Path) -> Result<(), String> {
+    let (made, _) = build(
+        cwd,
+        &args.paths,
+        args.base.as_deref(),
+        args.session.clone(),
+        &args.sets,
+    )?;
+    if args.json {
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&made).expect("brief serializes")
+        );
+    } else {
+        print!("{}", text(&made, args.all));
+    }
+    Ok(())
+}
+
+/// The brief for `paths`, kept in the session's store and offered as an
+/// event, with the plan it was made from: what `brief` and `context` share.
+pub fn build(
+    cwd: &Path,
+    named: &[String],
+    base_arg: Option<&str>,
+    session: Option<String>,
+    sets: &[String],
+) -> Result<(Brief, Planned), String> {
     let root = crate::graph_cmd::repo_root(cwd);
-    let session = args
-        .session
-        .clone()
-        .or_else(|| std::env::var(SESSION_ENV).ok());
+    let session = session.or_else(|| std::env::var(SESSION_ENV).ok());
     let store = Store::open(&root);
-    let base = base(&root, args.base.as_deref());
-    let mut paths = args.paths.clone();
-    let loaded = fairlead_core::config::load(cwd, &LoadOptions::from_process(args.sets.clone()))
+    let base = base(&root, base_arg);
+    let mut paths = named.to_vec();
+    let loaded = fairlead_core::config::load(cwd, &LoadOptions::from_process(sets.to_vec()))
         .map_err(|e| e.to_string())?;
     let per = loaded.config.brief.per;
     let earlier = match (&store, per) {
@@ -137,7 +181,7 @@ fn brief(args: &BriefArgs, cwd: &Path) -> Result<(), String> {
                 .map(|p| root.join(p).display().to_string()),
         );
     }
-    let planned = make(cwd, &Changes::new(None, paths, args.sets.clone()))?;
+    let planned = make(cwd, &Changes::new(None, paths, sets.to_vec()))?;
     let now = timestamp(SystemTime::now());
     let id = match (&earlier, per) {
         (Some(b), _) => b.id.clone(),
@@ -149,23 +193,44 @@ fn brief(args: &BriefArgs, cwd: &Path) -> Result<(), String> {
     let created = earlier
         .as_ref()
         .map_or(now.clone(), |b| b.created_at.clone());
-    let made = assemble(&planned, &root, id, session, base, created, now)?;
+    let mut made = assemble(&planned, &root, id, session, base, created, now)?;
+    made.branch = git::branch(&root);
     if let Some(store) = &store {
         store.save(&made)?;
     }
-    if args.json {
-        println!(
-            "{}",
-            serde_json::to_string_pretty(&made).expect("brief serializes")
-        );
-    } else {
-        print!("{}", text(&made, args.all));
+    offer(&root, &made);
+    Ok((made, planned))
+}
+
+/// One `offer` event naming what the brief offered, for the hit rate:
+/// `skills report` sets it against what the agent then used.
+fn offer(root: &Path, brief: &Brief) {
+    let items: Vec<String> = brief
+        .lessons
+        .items
+        .iter()
+        .map(|i| format!("lesson:{}", i.name))
+        .chain(
+            brief
+                .skills
+                .items
+                .iter()
+                .map(|i| format!("skill:{}", i.name)),
+        )
+        .collect();
+    if items.is_empty() {
+        return;
     }
-    Ok(())
+    if let Some(log) = EventLog::open(root) {
+        let mut event = Event::new("offer", "brief", std::time::Duration::ZERO);
+        event.session = brief.session.clone();
+        event.items = items;
+        let _ = log.append(&event);
+    }
 }
 
 /// The merge base with `base`, or with the default branch.
-fn base(root: &Path, base: Option<&str>) -> Option<String> {
+pub fn base(root: &Path, base: Option<&str>) -> Option<String> {
     let base = match base {
         Some(b) => b.to_string(),
         None => git::default_base(root).ok()?,
@@ -221,6 +286,9 @@ fn assemble(
             })
     };
     let steps = crate::done_cmd::steps(planned)?;
+    let reach = crate::knowledge::reach(planned);
+    let offered = crate::knowledge::lessons(planned, root, &reach);
+    let routed = crate::knowledge::skills(planned, root, &reach);
     Ok(Brief {
         version: 1,
         id,
@@ -228,6 +296,7 @@ fn assemble(
         created_at,
         updated_at,
         base,
+        branch: None,
         paths,
         new,
         plan_id: plan.plan_id.clone(),
@@ -263,12 +332,20 @@ fn assemble(
                 .collect(),
         },
         lessons: Section {
-            source: "none recorded yet (K4)".into(),
-            items: Vec::new(),
+            source: format!("{} (fairlead lessons list)", planned.config.memory.dir),
+            items: offered
+                .lessons
+                .into_iter()
+                .map(|(n, w)| item(n, w))
+                .collect(),
         },
         skills: Section {
-            source: "none routed yet (K4)".into(),
-            items: Vec::new(),
+            source: "fairlead.toml [[skills.routes]]".into(),
+            items: routed
+                .lessons
+                .iter()
+                .map(|(n, w)| item(n.clone(), w.clone()))
+                .collect(),
         },
         done: Section {
             source: "fairlead.toml [done], done --dry-run".into(),
@@ -277,6 +354,19 @@ fn assemble(
                 .map(|s| item(s.id.clone(), s.argv.join(" ")))
                 .collect(),
         },
+        warnings: offered
+            .bad
+            .iter()
+            .map(|b| format!("[bad-lesson] {}: {}", b.path, b.reason))
+            .chain(
+                routed
+                    .bad
+                    .iter()
+                    .map(|b| format!("[bad-skill] {}: {}", b.path, b.reason)),
+            )
+            .collect(),
+        lesson_cap: planned.config.memory.cap,
+        skill_cap: planned.config.skills.cap,
     })
 }
 
@@ -302,11 +392,11 @@ pub fn text(b: &Brief, all: bool) -> String {
     let head = |out: &mut String, name: &str, summary: String, source: &str| {
         out.push_str(&format!("{name:<8} {summary:<56} {source}\n"));
     };
-    let list = |out: &mut String, items: &[Item], more: &str| {
+    let capped = |out: &mut String, items: &[Item], more: &str, cap: usize| {
         let shown = if all {
             items.len()
         } else {
-            items.len().min(SHOWN)
+            items.len().min(cap)
         };
         for i in &items[..shown] {
             out.push_str(&format!("  {:<44} {}\n", i.name, i.why));
@@ -315,6 +405,7 @@ pub fn text(b: &Brief, all: bool) -> String {
             out.push_str(&format!("  … {} more ({more})\n", items.len() - shown));
         }
     };
+    let list = |out: &mut String, items: &[Item], more: &str| capped(out, items, more, SHOWN);
     head(
         &mut out,
         "reaches",
@@ -367,14 +458,41 @@ pub fn text(b: &Brief, all: bool) -> String {
         or_none(rules.join(", ")),
         &b.rules.source,
     );
-    head(&mut out, "lessons", "none".into(), &b.lessons.source);
-    head(&mut out, "skills", "none".into(), &b.skills.source);
+    let n = b.lessons.items.len();
+    let lessons = match n {
+        0 => "none".to_string(),
+        1 => "1 lesson".to_string(),
+        n => format!("{n} lessons"),
+    };
+    head(&mut out, "lessons", lessons, &b.lessons.source);
+    capped(
+        &mut out,
+        &b.lessons.items,
+        "fairlead brief --all",
+        b.lesson_cap,
+    );
+    let n = b.skills.items.len();
+    let skills = match n {
+        0 => "none".to_string(),
+        1 => "1 skill".to_string(),
+        n => format!("{n} skills"),
+    };
+    head(&mut out, "skills", skills, &b.skills.source);
+    capped(
+        &mut out,
+        &b.skills.items,
+        "fairlead brief --all",
+        b.skill_cap,
+    );
     head(
         &mut out,
         "done",
         or_none(ids(&b.done.items)),
         &b.done.source,
     );
+    for w in &b.warnings {
+        out.push_str(&format!("warning  {w}\n"));
+    }
     out.push_str("next     edit, then: fairlead done\n");
     out
 }
@@ -412,6 +530,21 @@ impl Store {
             .filter(|b| b.session.as_deref() == session)
             .max_by(|a, b| a.updated_at.cmp(&b.updated_at))
     }
+
+    /// The newest brief of any session made on `branch`; a brief that
+    /// recorded no branch counts when it has the same base.
+    pub fn newest_on(&self, branch: Option<&str>, base: Option<&str>) -> Option<Brief> {
+        std::fs::read_dir(&self.dir)
+            .ok()?
+            .filter_map(Result::ok)
+            .filter_map(|e| std::fs::read_to_string(e.path()).ok())
+            .filter_map(|t| serde_json::from_str::<Brief>(&t).ok())
+            .filter(|b| match &b.branch {
+                Some(recorded) => Some(recorded.as_str()) == branch,
+                None => b.base.is_some() && b.base.as_deref() == base,
+            })
+            .max_by(|a, b| a.updated_at.cmp(&b.updated_at))
+    }
 }
 
 fn files(n: usize) -> String {
@@ -425,9 +558,11 @@ fn fnv(text: &str) -> u64 {
     })
 }
 
-/// The Claude Code PostToolUse hook: after the first edit of a session with
-/// no brief, one note saying how to get one. Never a deny, and silent on
-/// any error.
+/// The PostToolUse hook. After an edit: once per session with no brief, a
+/// note saying how to get one, and once per skill per session, the routed
+/// skill that applies to the file. After a skill is loaded (Claude Code's
+/// `Skill`, or a read of a SKILL.md), a `use` event for the hit rate. Never
+/// a deny, and silent on any error.
 pub fn nudge() -> ExitCode {
     let mut input = String::new();
     let _ = std::io::Read::read_to_string(&mut std::io::stdin(), &mut input);
@@ -441,33 +576,87 @@ pub fn nudge() -> ExitCode {
     ExitCode::SUCCESS
 }
 
-fn nudge_for(call: &serde_json::Value) -> Option<&'static str> {
+const READS: [&str; 3] = ["Read", "read_file", "read_many_files"];
+
+fn nudge_for(call: &serde_json::Value) -> Option<String> {
     let session = call["session_id"].as_str()?;
     let dir = call["cwd"]
         .as_str()
         .map(PathBuf::from)
         .or_else(|| std::env::current_dir().ok())?;
     let loaded = fairlead_core::config::load(&dir, &LoadOptions::from_process(Vec::new())).ok()?;
-    if !loaded.config.brief.nudge {
-        return None;
-    }
     let root = crate::graph_cmd::repo_root(&dir);
-    if Store::open(&root)?.current(Some(session)).is_some() {
+    let log = EventLog::open(&root)?;
+    let tool = call["tool_name"].as_str().unwrap_or("");
+    let input = &call["tool_input"];
+    let file = input["file_path"]
+        .as_str()
+        .or_else(|| input["absolute_path"].as_str())
+        .or_else(|| input["path"].as_str());
+    let (skills, _) = crate::knowledge::skill::load(&root, &loaded.config.skills);
+    let record = |stage: &'static str, decision: &'static str, items: Vec<String>| {
+        let mut event = Event::new(stage, decision, std::time::Duration::ZERO);
+        event.session = Some(session.to_string());
+        event.tool = Some(tool.to_string());
+        event.items = items;
+        let _ = log.append(&event);
+    };
+    if tool == "Skill" {
+        let name = input["skill"].as_str().or_else(|| input["name"].as_str())?;
+        let name = name.rsplit(':').next().unwrap_or(name);
+        record("use", "skill", vec![format!("skill:{name}")]);
         return None;
     }
-    let log = EventLog::open(&root)?;
-    let told = log
+    if READS.contains(&tool) {
+        let used = file.and_then(|f| crate::knowledge::skill::by_path(&skills, f))?;
+        record("use", "read", vec![format!("skill:{}", used.name)]);
+        return None;
+    }
+    let events: Vec<serde_json::Value> = log
         .read()
         .lines()
-        .filter_map(|l| serde_json::from_str::<serde_json::Value>(l).ok())
-        .any(|e| e["stage"] == "nudge" && e["session"] == session);
-    if told {
-        return None;
+        .filter_map(|l| serde_json::from_str(l).ok())
+        .filter(|e: &serde_json::Value| e["session"] == session)
+        .collect();
+    let mut notes = Vec::new();
+    let has_brief = Store::open(&root)?.current(Some(session)).is_some();
+    if loaded.config.brief.nudge && !has_brief && !events.iter().any(|e| e["stage"] == "nudge") {
+        record("nudge", "note", Vec::new());
+        notes.push(NUDGE.to_string());
     }
-    let mut event = Event::new("nudge", "note", std::time::Duration::ZERO);
-    event.session = Some(session.to_string());
-    let _ = log.append(&event);
-    Some(NUDGE)
+    if let Some(file) = file {
+        let rel = Path::new(file)
+            .strip_prefix(std::fs::canonicalize(&root).unwrap_or(root.clone()))
+            .or_else(|_| Path::new(file).strip_prefix(&root))
+            .map(|p| p.to_string_lossy().replace('\\', "/"))
+            .unwrap_or_else(|_| file.to_string());
+        let told: Vec<&str> = events
+            .iter()
+            .filter(|e| e["stage"] == "offer" && e["decision"] == "nudge")
+            .flat_map(|e| e["items"].as_array().into_iter().flatten())
+            .filter_map(|i| i.as_str())
+            .collect();
+        for s in skills
+            .iter()
+            .filter(|s| s.scope.paths.iter().any(|p| p.is_match(&rel)))
+        {
+            let item = format!("skill:{}", s.name);
+            if told.contains(&item.as_str()) {
+                continue;
+            }
+            record("offer", "nudge", vec![item]);
+            let about = if s.description.is_empty() {
+                String::new()
+            } else {
+                format!(": {}", s.description)
+            };
+            notes.push(format!(
+                "fairlead: the `{}` skill applies to {rel}{about} Load it before editing further ({}).",
+                s.name, s.path
+            ));
+        }
+    }
+    (!notes.is_empty()).then(|| notes.join("\n"))
 }
 
 #[cfg(test)]

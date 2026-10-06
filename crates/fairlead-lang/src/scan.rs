@@ -15,7 +15,7 @@ use crate::jvm;
 use crate::php;
 use crate::provider;
 use crate::python;
-use crate::resolve::{Resolver, Target};
+use crate::resolve::{package_name, Resolver, Target};
 use crate::rules::{RuleStats, Rules};
 use crate::tree::{normalize, parent, Tree};
 use crate::workspace::{self, Package};
@@ -27,6 +27,8 @@ struct FileResult {
     unresolved: Vec<String>,
     /// Specifiers that didn't resolve, with their edge kind.
     failed: Vec<(String, EdgeKind)>,
+    /// Packages from outside the repository the file imports, by name.
+    external: Vec<String>,
     /// Path-like literals naming files that aren't in the tree.
     dangling: Vec<String>,
     unknown: bool,
@@ -61,6 +63,8 @@ pub struct Scan {
     pub coverage: Option<crate::coverage::Report>,
     /// How PHP names resolve here, for turning a coverage run's test names into files.
     pub autoload: php::Autoload,
+    /// What the Java and Kotlin files declare.
+    pub jvm: jvm::Index,
 }
 
 pub fn build(root: &Path, config: &Config) -> std::io::Result<Scan> {
@@ -171,6 +175,7 @@ pub fn build(root: &Path, config: &Config) -> std::io::Result<Scan> {
         uncertain,
         coverage,
         autoload: named.autoload,
+        jvm: named.index,
     })
 }
 
@@ -295,6 +300,9 @@ fn add_results(
             .failed
             .extend(result.failed.into_iter().map(|(s, k)| (from, s, k)));
         graph
+            .external
+            .extend(result.external.into_iter().map(|p| (from, p)));
+        graph
             .dangling
             .extend(result.dangling.into_iter().map(|p| (from, p)));
         if result.unknown {
@@ -385,7 +393,14 @@ fn scan_file(
         match target {
             Target::File(to) => result.edges.push((to, (*kind).into())),
             Target::Package(name) => result.packages.push(name),
-            Target::External => {}
+            Target::External(installed) => {
+                let named = package_name(spec).map(str::to_string);
+                for name in named.into_iter().chain(installed) {
+                    if !result.external.contains(&name) {
+                        result.external.push(name);
+                    }
+                }
+            }
             Target::NotFound => result.failed.push((spec.clone(), (*kind).into())),
             Target::Unresolved => {
                 result.unresolved.push(spec.clone());

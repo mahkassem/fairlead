@@ -71,6 +71,10 @@ pub fn run() -> ExitCode {
         .get("tool_name")
         .and_then(Value::as_str)
         .map(String::from);
+    let session = call
+        .get("session_id")
+        .and_then(Value::as_str)
+        .map(String::from);
     let hook_event = call
         .get("hook_event_name")
         .and_then(Value::as_str)
@@ -80,6 +84,8 @@ pub fn run() -> ExitCode {
         let mut event = Event::new("write", decision, start.elapsed());
         event.event = Some("PreToolUse".into());
         event.tool = tool.clone();
+        // So `skills report` can tell an agent whose use it can't see by its tools.
+        event.session = session.clone();
         if let Some(o) = outcome {
             event.file = o.file.clone();
             event.added = o.found.len();

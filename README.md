@@ -92,6 +92,8 @@ of trying things like a stranger.
   Fairlead never needs a plugin for your stack.
 - **Monorepos, precisely.** pnpm, npm, yarn and bun workspaces. A pnpm lockfile
   change runs only the packages whose dependencies actually changed.
+  *Unreleased:* in a bun project, a dependency's version bump runs only the
+  tests of the files that import it, and nothing when nothing does.
 - **No install needed to read your code.** The import graph comes from source
   alone, with tsconfig paths, `go.mod` and composer's autoload resolved and
   parsed files cached, so a plan takes a fraction of a second.
@@ -122,9 +124,24 @@ This README documents Fairlead 0.7.1. Each command, by what it's for:
   `ci report` and the GitHub Action.
 - **Rules as the agent works:** `guard check`, the hooks `hooks install` adds,
   and `doctor`.
-- **The change loop:** `brief` before an edit, `done` before it's finished,
-  then `receipt` and `next`.
-- **Measuring:** `replay` and the benchmarks.
+- **The change loop:** `brief` before an edit, or `context` for the brief with
+  the lessons, skills, README and history to read; `done` before it's
+  finished, then `receipt` and `next`; `resume` picks up where the last
+  session on a branch stopped.
+- **Project memory:** `learn` writes a lesson, `import lessons` turns a lessons
+  document the team already keeps into one lesson per heading, and `lessons`
+  lists, reviews and checks them. The brief offers the ones a change reaches.
+- **Skills:** `[[skills.routes]]` scopes each SKILL.md, and the brief lists the
+  skills a change reaches. `import rules` turns path-scoped rule files into
+  skills and routes, and `skills sync` writes each skill where Claude Code,
+  Codex and Cursor load it.
+- **Finding things:** `find` searches lessons, skills, docs headings and
+  declared names, nearest the brief first.
+- **What agents read first:** `agents sync` keeps the loop, the always-on
+  lessons and the skill index in a marked block in AGENTS.md and CLAUDE.md.
+- **Measuring:** `replay`, the benchmarks, `skills eval`, which scores skill
+  routing on the repository's history, and `skills report`, the hit rate of
+  what routing offers against what agents load.
 - **Getting started:** `init` writes a first config from what the repository
   shows.
 - **The config:** `config check`, `show` and `schema`.

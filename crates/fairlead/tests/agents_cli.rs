@@ -1,0 +1,345 @@
+//! `fairlead agents sync` on a real repository: the block it keeps between
+//! the markers, bytes outside them left alone through sync, a change and
+//! `--clean`, `--check` on drift, `write = "never"`, the doctor's lines, the
+//! 40-line cap, and `[agents]` never moving a plan's config digest.
+
+use std::path::{Path, PathBuf};
+use std::process::Command;
+
+use serde_json::Value;
+
+fn command(dir: &Path, program: &str, args: &[&str]) -> Command {
+    // A clean environment, so a developer's FAIRLEAD_*, CI, git or session settings can't leak in.
+    let mut cmd = Command::new(program);
+    cmd.args(args).current_dir(dir).env_clear();
+    for keep in ["PATH", "SYSTEMROOT"] {
+        if let Some(value) = std::env::var_os(keep) {
+            cmd.env(keep, value);
+        }
+    }
+    cmd.env("HOME", dir)
+        .env("GIT_CONFIG_NOSYSTEM", "1")
+        .env("GIT_AUTHOR_NAME", "t")
+        .env("GIT_AUTHOR_EMAIL", "t@example.com")
+        .env("GIT_COMMITTER_NAME", "t")
+        .env("GIT_COMMITTER_EMAIL", "t@example.com");
+    cmd
+}
+
+fn git(dir: &Path, args: &[&str]) {
+    assert!(
+        command(dir, "git", args).output().unwrap().status.success(),
+        "git {args:?}"
+    );
+}
+
+fn fairlead(dir: &Path, args: &[&str]) -> (i32, String) {
+    let out = command(dir, env!("CARGO_BIN_EXE_fairlead"), args)
+        .output()
+        .unwrap();
+    let text =
+        String::from_utf8_lossy(&out.stdout).into_owned() + &String::from_utf8_lossy(&out.stderr);
+    (out.status.code().unwrap_or(-1), text)
+}
+
+const CONFIG: &str = r#"
+[[tests.runners]]
+id = "unit"
+match = ["test/**"]
+command = ["sh", "-c", "exit 0", "sh", "{files}"]
+
+[[skills.routes]]
+skill = ".claude/skills/forms/SKILL.md"
+paths = ["src/forms/**"]
+"#;
+
+/// An AGENTS.md with CRLF endings, unicode and no final newline.
+const AGENTS: &str = "# Working here\r\n\r\nÜnïcödé rules ✓ 日本語\r\n- keep it small";
+
+fn repo(name: &str, config: &str) -> PathBuf {
+    let dir = std::env::temp_dir().join(format!("fairlead-agents-{name}-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(dir.join("src/forms")).unwrap();
+    std::fs::create_dir_all(dir.join("test")).unwrap();
+    std::fs::create_dir_all(dir.join(".claude/skills/forms")).unwrap();
+    git(&dir, &["init", "-q", "-b", "main"]);
+    std::fs::write(dir.join("fairlead.toml"), config).unwrap();
+    std::fs::write(dir.join("src/forms/form.ts"), "export const f = 1;\n").unwrap();
+    std::fs::write(
+        dir.join("test/form.test.ts"),
+        "import { f } from '../src/forms/form';\n",
+    )
+    .unwrap();
+    std::fs::write(
+        dir.join(".claude/skills/forms/SKILL.md"),
+        "---\nname: forms\ndescription: How forms validate.\n---\nHow to.\n",
+    )
+    .unwrap();
+    std::fs::write(dir.join("AGENTS.md"), AGENTS).unwrap();
+    git(&dir, &["add", "-A"]);
+    git(&dir, &["commit", "-q", "-m", "init"]);
+    dir
+}
+
+fn lesson(dir: &Path, id: &str, title: &str) {
+    let lessons = dir.join(".fairlead/lessons");
+    std::fs::create_dir_all(&lessons).unwrap();
+    std::fs::write(
+        lessons.join(format!("{id}.md")),
+        format!(
+            "---\nid: {id}\ntitle: \"{title}\"\nalways: true\nadded: 2026-09-12\nevidence: [\"https://example.com/pr/1\"]\nsource: mistake\n---\nBody.\n"
+        ),
+    )
+    .unwrap();
+}
+
+fn read(dir: &Path, file: &str) -> String {
+    std::fs::read_to_string(dir.join(file)).unwrap()
+}
+
+/// The bytes before `<!-- fairlead:begin -->` and after `<!-- fairlead:end -->`.
+fn outside(text: &str) -> (String, String) {
+    let begin = text
+        .find("<!-- fairlead:begin -->")
+        .expect("a begin marker");
+    let end = text.find("<!-- fairlead:end -->").expect("an end marker") + 21;
+    (text[..begin].to_string(), text[end..].to_string())
+}
+
+#[test]
+fn sync_keeps_every_byte_outside_the_markers_through_a_change_and_clean() {
+    let dir = repo("bytes", CONFIG);
+    lesson(&dir, "settle-at-sign-off", "Leave settles at sign-off");
+    let (code, out) = fairlead(&dir, &["agents", "sync"]);
+    assert_eq!(code, 0, "{out}");
+    assert!(
+        out.contains("added the block at the end of AGENTS.md"),
+        "{out}"
+    );
+    assert!(out.contains("created CLAUDE.md with the block"), "{out}");
+
+    let agents = read(&dir, "AGENTS.md");
+    assert!(agents.starts_with(AGENTS), "{agents:?}");
+    assert!(!agents.ends_with('\n'), "no final newline stays none");
+    assert!(
+        !agents.replace("\r\n", "").contains('\n'),
+        "CRLF stays CRLF"
+    );
+    for line in [
+        "- Before an edit: `fairlead brief <paths>`",
+        "- Before you finish: `fairlead done`",
+        "`fairlead receipt`",
+        "`fairlead next`",
+        "- The pull request: open it as a draft, `gh pr create --draft`, and mark it ready, `gh pr ready`, once `fairlead done` passes.",
+        "`fairlead find <words>`",
+        "`fairlead learn`",
+        "- Leave settles at sign-off (settle-at-sign-off)",
+        "- forms: How forms validate. (.claude/skills/forms/SKILL.md)",
+        "Generated by `fairlead agents sync`",
+    ] {
+        assert!(agents.contains(line), "{line} in {agents}");
+    }
+    let claude = read(&dir, "CLAUDE.md");
+    assert!(
+        claude.starts_with("<!-- fairlead:begin -->\n")
+            && claude.ends_with("<!-- fairlead:end -->\n")
+    );
+
+    // Text a person writes after the block, then a change the block follows.
+    let edited = agents.clone() + "\r\nAfter the block — ✓\r\n";
+    std::fs::write(dir.join("AGENTS.md"), &edited).unwrap();
+    let kept = outside(&edited);
+    lesson(&dir, "money-is-integers", "Amounts are integers");
+    assert_eq!(fairlead(&dir, &["agents", "sync"]).0, 0);
+    let changed = read(&dir, "AGENTS.md");
+    assert!(changed.contains("- Amounts are integers (money-is-integers)"));
+    assert_eq!(outside(&changed), kept);
+    let (code, out) = fairlead(&dir, &["agents", "sync"]);
+    assert_eq!(
+        (code, read(&dir, "AGENTS.md")),
+        (0, changed.clone()),
+        "{out}"
+    );
+    assert!(out.contains("AGENTS.md is current"), "{out}");
+
+    let (code, out) = fairlead(&dir, &["agents", "sync", "--clean"]);
+    assert_eq!(code, 0, "{out}");
+    assert_eq!(
+        read(&dir, "AGENTS.md"),
+        format!("{AGENTS}\r\nAfter the block — ✓\r\n")
+    );
+    assert!(!dir.join("CLAUDE.md").exists(), "{out}");
+
+    std::fs::write(dir.join("AGENTS.md"), AGENTS).unwrap();
+    std::fs::write(dir.join("CLAUDE.md"), "").unwrap();
+    assert_eq!(fairlead(&dir, &["agents", "sync"]).0, 0);
+    assert_eq!(fairlead(&dir, &["agents", "sync", "--clean"]).0, 0);
+    assert_eq!(read(&dir, "AGENTS.md"), AGENTS, "byte for byte");
+    assert_eq!(
+        read(&dir, "CLAUDE.md"),
+        "",
+        "a file sync didn't create stays"
+    );
+}
+
+#[test]
+fn check_fails_on_a_missing_or_stale_block_and_writes_nothing() {
+    let dir = repo("check", CONFIG);
+    let (code, out) = fairlead(&dir, &["agents", "sync", "--check"]);
+    assert_eq!(code, 1, "{out}");
+    assert!(out.contains("AGENTS.md has no fairlead block"), "{out}");
+    assert!(out.contains("CLAUDE.md doesn't exist"), "{out}");
+    assert_eq!(read(&dir, "AGENTS.md"), AGENTS);
+    assert!(!dir.join("CLAUDE.md").exists());
+
+    assert_eq!(fairlead(&dir, &["agents", "sync"]).0, 0);
+    let (code, out) = fairlead(&dir, &["agents", "sync", "--check"]);
+    assert_eq!(code, 0, "{out}");
+    assert!(out.contains("current in AGENTS.md, CLAUDE.md"), "{out}");
+
+    lesson(&dir, "new-rule", "A new rule");
+    let before = read(&dir, "AGENTS.md");
+    let (code, out) = fairlead(&dir, &["agents", "sync", "--check"]);
+    assert_eq!(code, 1, "{out}");
+    assert!(out.contains("AGENTS.md's fairlead block is stale"), "{out}");
+    assert!(out.contains("CLAUDE.md's fairlead block is stale"), "{out}");
+    assert_eq!(read(&dir, "AGENTS.md"), before);
+}
+
+#[test]
+fn a_begin_marker_without_an_end_is_an_error_naming_the_file_and_left_untouched() {
+    let dir = repo("broken", CONFIG);
+    let broken = "# Rules\n<!-- fairlead:begin -->\nhalf a block\n";
+    std::fs::write(dir.join("CLAUDE.md"), broken).unwrap();
+    let (code, out) = fairlead(&dir, &["agents", "sync"]);
+    assert_eq!(code, 2, "{out}");
+    assert!(
+        out.contains("agents: CLAUDE.md: it has `<!-- fairlead:begin -->` but no `<!-- fairlead:end -->`; left untouched"),
+        "{out}"
+    );
+    assert_eq!(read(&dir, "CLAUDE.md"), broken);
+    assert!(
+        read(&dir, "AGENTS.md").contains("<!-- fairlead:end -->"),
+        "the other file is still synced"
+    );
+    assert_eq!(fairlead(&dir, &["agents", "sync", "--clean"]).0, 2);
+    assert_eq!(read(&dir, "CLAUDE.md"), broken);
+    let (code, out) = fairlead(&dir, &["agents", "sync", "--check"]);
+    assert_eq!(code, 1, "{out}");
+    assert!(out.contains("CLAUDE.md: it has"), "{out}");
+}
+
+#[test]
+fn write_never_writes_nothing_and_doctor_names_the_gap() {
+    let config = format!("{CONFIG}\n[agents]\nwrite = \"never\"\n");
+    let dir = repo("never", &config);
+    let (code, out) = fairlead(&dir, &["agents", "sync"]);
+    assert_eq!(code, 0, "{out}");
+    assert!(out.contains("<!-- fairlead:begin -->"), "{out}");
+    assert!(
+        out.contains(
+            "nothing was written; a person copies the block above into AGENTS.md, CLAUDE.md"
+        ),
+        "{out}"
+    );
+    assert_eq!(read(&dir, "AGENTS.md"), AGENTS);
+    assert!(!dir.join("CLAUDE.md").exists());
+    assert_eq!(fairlead(&dir, &["agents", "sync", "--clean"]).0, 0);
+    assert_eq!(fairlead(&dir, &["agents", "sync", "--check"]).0, 1);
+
+    let (code, out) = fairlead(&dir, &["doctor"]);
+    assert_eq!(code, 0, "{out}");
+    assert!(
+        out.contains("agents: AGENTS.md has no fairlead block; copy in the block `fairlead agents sync` prints"),
+        "{out}"
+    );
+    assert!(
+        out.contains("agents: CLAUDE.md doesn't exist; copy in"),
+        "{out}"
+    );
+}
+
+#[test]
+fn doctor_names_a_stale_block_and_then_that_it_is_current() {
+    let dir = repo(
+        "doctor",
+        &format!("{CONFIG}\n[agents]\nfiles = {{ replace = [\"AGENTS.md\"] }}\n"),
+    );
+    assert_eq!(fairlead(&dir, &["agents", "sync"]).0, 0);
+    assert!(
+        !dir.join("CLAUDE.md").exists(),
+        "only the files the config lists"
+    );
+    let (_, out) = fairlead(&dir, &["doctor"]);
+    assert!(
+        out.contains("agents: the fairlead block is current in AGENTS.md\n"),
+        "{out}"
+    );
+    lesson(&dir, "late", "A late lesson");
+    let (_, out) = fairlead(&dir, &["doctor"]);
+    assert!(
+        out.contains(
+            "agents: AGENTS.md's fairlead block is stale; `fairlead agents sync` writes it"
+        ),
+        "{out}"
+    );
+}
+
+#[test]
+fn the_block_stays_within_forty_lines_and_names_how_many_more() {
+    let dir = repo("cap", CONFIG);
+    for i in 0..45 {
+        lesson(&dir, &format!("rule-{i:02}"), &format!("Rule {i:02}"));
+    }
+    let (code, out) = fairlead(&dir, &["agents", "sync"]);
+    assert_eq!(code, 0, "{out}");
+    let claude = read(&dir, "CLAUDE.md");
+    assert_eq!(claude.lines().count(), 40, "{claude}");
+    let listed = claude.lines().filter(|l| l.starts_with("- Rule ")).count();
+    assert!(
+        claude.contains(&format!(
+            "- … {} more: `fairlead lessons list`",
+            45 - listed
+        )),
+        "{claude}"
+    );
+    assert!(
+        claude.contains("- forms: How forms validate."),
+        "the skill keeps its line"
+    );
+}
+
+#[test]
+fn a_file_outside_the_repository_is_a_config_problem() {
+    let dir = repo(
+        "outside",
+        &format!("{CONFIG}\n[agents]\nfiles = [\"../AGENTS.md\"]\n"),
+    );
+    let (code, out) = fairlead(&dir, &["config", "check"]);
+    assert_eq!(code, 1, "{out}");
+    assert!(
+        out.contains("agents.files[2]: must be a file path inside the repository"),
+        "{out}"
+    );
+    let (code, out) = fairlead(&dir, &["agents", "sync"]);
+    assert_eq!(code, 2, "{out}");
+    assert_eq!(read(&dir, "AGENTS.md"), AGENTS);
+}
+
+#[test]
+fn agents_settings_never_move_a_plan_id() {
+    let digest = |config: &str| {
+        let dir = repo(&format!("digest-{}", config.len()), config);
+        std::fs::write(dir.join("src/forms/form.ts"), "export const f = 2;\n").unwrap();
+        let (code, out) = fairlead(&dir, &["plan", "--base", "main", "--json"]);
+        assert_eq!(code, 0, "{out}");
+        let plan: Value = serde_json::from_str(&out).unwrap();
+        plan["config_digest"].as_str().unwrap().to_string()
+    };
+    assert_eq!(
+        digest(CONFIG),
+        digest(&format!(
+            "{CONFIG}\n[agents]\nwrite = \"never\"\nfiles = [\"docs/AGENTS.md\"]\n"
+        ))
+    );
+}

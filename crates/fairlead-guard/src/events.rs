@@ -45,6 +45,9 @@ pub struct Event {
     /// A `done` run's steps, by id, outcome and seconds; never their output.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub steps: Vec<Step>,
+    /// What an `offer` or `use` event is about, such as `skill:forms` or `lesson:settle`.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub items: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -75,6 +78,7 @@ impl Event {
             truncated: false,
             tree: None,
             steps: Vec::new(),
+            items: Vec::new(),
         }
     }
 
@@ -92,6 +96,7 @@ impl Event {
             session: None,
             rules: Vec::new(),
             steps: Vec::new(),
+            items: Vec::new(),
             truncated: true,
             ..self.clone()
         };

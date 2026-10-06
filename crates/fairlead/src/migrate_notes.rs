@@ -162,10 +162,18 @@ pub const SINCE: &[(&str, &str)] = &[
     ("graph.coverage", "0.5"),
     ("done", "0.6"),
     ("brief", "0.6"),
+    ("brief.resume", "0.8"),
     ("ci", "0.6"),
     ("quarantine", "0.7"),
     ("tests.runners.all_command", "0.7.1"),
     ("tests.runners.exclude_arg", "0.7.1"),
+    ("memory", "0.8"),
+    ("skills", "0.8"),
+    ("agents", "0.8"),
+    ("stages", "0.8"),
+    ("tests.runners.from", "0.8"),
+    ("checks.from", "0.8"),
+    ("guard.commands.unless", "0.8"),
 ];
 
 /// Top-level tables every released config format has had.

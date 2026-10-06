@@ -16,7 +16,7 @@ pub struct Problem {
     pub message: String,
 }
 
-fn problem(key: impl Into<String>, message: impl Into<String>) -> Problem {
+pub(super) fn problem(key: impl Into<String>, message: impl Into<String>) -> Problem {
     Problem {
         key: key.into(),
         message: message.into(),
@@ -89,6 +89,10 @@ pub fn validate(config: &Config) -> Vec<Problem> {
     graph_edges(config, &mut problems);
     graph_providers(config, &mut problems);
     guard(config, &mut problems);
+    memory(config, &mut problems);
+    skills(config, &mut problems);
+    super::stages::validate(config, &mut problems);
+    agents(config, &mut problems);
     problems
 }
 
@@ -192,6 +196,13 @@ fn guard(config: &Config, problems: &mut Vec<Problem>) {
             std::slice::from_ref(&c.matches),
             problems,
         );
+        if let Some(unless) = &c.unless {
+            regexes(
+                &format!("guard.commands[{i}].unless"),
+                std::slice::from_ref(unless),
+                problems,
+            );
+        }
         if c.reason.trim().is_empty() {
             problems.push(problem(
                 format!("guard.commands[{i}].reason"),
@@ -573,6 +584,89 @@ fn checks(config: &Config, problems: &mut Vec<Problem>) {
     }
 }
 
+fn memory(config: &Config, problems: &mut Vec<Problem>) {
+    let m = &config.memory;
+    let dir = std::path::Path::new(&m.dir);
+    if m.dir.trim().is_empty() || dir.is_absolute() || m.dir.split('/').any(|p| p == "..") {
+        problems.push(problem(
+            "memory.dir",
+            "must be a path inside the repository",
+        ));
+    }
+    for (key, value) in [("memory.max_lines", m.max_lines), ("memory.cap", m.cap)] {
+        if value == 0 {
+            problems.push(problem(key, "must be at least 1"));
+        }
+    }
+    if m.review_days == 0 {
+        problems.push(problem("memory.review_days", "must be at least 1"));
+    }
+}
+
+/// The agents `skills sync` can write for.
+pub const SKILL_TARGETS: [&str; 3] = ["claude", "agents", "cursor"];
+
+fn skills(config: &Config, problems: &mut Vec<Problem>) {
+    let s = &config.skills;
+    if s.cap == 0 {
+        problems.push(problem("skills.cap", "must be at least 1"));
+    }
+    if s.imports > 3 || s.importers > 3 {
+        problems.push(problem(
+            "skills.imports",
+            "hops past 3 offer nearly everything; 0 to 3",
+        ));
+    }
+    for (i, t) in s.targets.items().iter().enumerate() {
+        if !SKILL_TARGETS.contains(&t.as_str()) {
+            problems.push(problem(
+                format!("skills.targets[{i}]"),
+                format!("`{t}` isn't one of {}", SKILL_TARGETS.join(", ")),
+            ));
+        }
+    }
+    for (i, r) in s.routes.items().iter().enumerate() {
+        let key = format!("skills.routes[{i}]");
+        if !r.skill.ends_with("SKILL.md") || r.skill.starts_with('/') || r.skill.contains("..") {
+            problems.push(problem(
+                format!("{key}.skill"),
+                "must be a SKILL.md path inside the repository",
+            ));
+        }
+        if r.paths.is_empty() && r.modules.is_empty() && !r.always {
+            problems.push(problem(
+                key.clone(),
+                "needs a scope: `paths`, `modules` or `always = true`",
+            ));
+        }
+        globs(&format!("{key}.paths"), &r.paths, problems);
+    }
+    let skills: Vec<&str> = s.routes.items().iter().map(|r| r.skill.as_str()).collect();
+    for dup in duplicates(skills.into_iter()) {
+        problems.push(problem(
+            "skills.routes",
+            format!("`{dup}` is routed twice; give one route every scope"),
+        ));
+    }
+}
+
+/// A file the block goes in: relative, inside the repository, and a file.
+fn agents(config: &Config, problems: &mut Vec<Problem>) {
+    for (i, file) in config.agents.files.items().iter().enumerate() {
+        let path = std::path::Path::new(file);
+        let outside = path.is_absolute()
+            || file.starts_with(['/', '\\'])
+            || file.get(1..2) == Some(":")
+            || file.split(['/', '\\']).any(|p| p == "..");
+        if file.trim().is_empty() || outside || file.ends_with(['/', '\\']) {
+            problems.push(problem(
+                format!("agents.files[{i}]"),
+                "must be a file path inside the repository",
+            ));
+        }
+    }
+}
+
 fn replay(config: &Config, problems: &mut Vec<Problem>) {
     let runner_ids: BTreeSet<&str> = config
         .tests
@@ -781,6 +875,24 @@ mod tests {
             runner_problems("exclude_arg = [\"--ignore={file}\"]\n"),
             Vec::new()
         );
+    }
+
+    #[test]
+    fn agents_files_must_stay_inside_the_repository_and_write_takes_two_values() {
+        let keys = |files: &str| -> Vec<String> {
+            let config: Config =
+                toml::from_str(&format!("[agents]\nfiles = {files}\n")).expect("parses");
+            validate(&config).into_iter().map(|p| p.key).collect()
+        };
+        assert!(keys(r#"["AGENTS.md", "docs/AGENTS.md"]"#).is_empty());
+        assert_eq!(
+            keys(r#"["/etc/AGENTS.md", "../AGENTS.md", "", "docs/", "C:\\x.md"]"#),
+            (0..5)
+                .map(|i| format!("agents.files[{i}]"))
+                .collect::<Vec<_>>()
+        );
+        assert!(toml::from_str::<Config>("[agents]\nwrite = \"never\"\n").is_ok());
+        assert!(toml::from_str::<Config>("[agents]\nwrite = \"sometimes\"\n").is_err());
     }
 
     #[test]

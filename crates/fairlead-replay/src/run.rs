@@ -286,6 +286,7 @@ impl Replayer<'_> {
                 .collect();
         let input = Input {
             base_files: fairlead_tests::planner::base_files(&self.worktree.path, base, &changes),
+            everything: None,
             changes,
             base: Some(base.to_string()),
             head: head.to_string(),

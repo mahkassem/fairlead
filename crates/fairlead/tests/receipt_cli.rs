@@ -110,16 +110,32 @@ fn next_names_the_one_step_due_in_every_state_of_the_loop() {
     assert_eq!(fairlead(&dir, &["done"]).0, 0);
     assert!(next(&dir).starts_with("next: receipt:"), "{}", next(&dir));
     fairlead(&dir, &["receipt"]);
-    assert!(
-        next(&dir).contains("nothing due; the gate passed"),
-        "{}",
-        next(&dir)
-    );
+    assert!(next(&dir).starts_with("next: ready:"), "{}", next(&dir));
     std::fs::write(dir.join("src/a.ts"), "export const a = 3;\n").unwrap();
     assert!(
         next(&dir).starts_with("next: done:"),
         "an edit makes the pass stale"
     );
+}
+
+#[test]
+fn next_opens_a_draft_pull_request_before_the_gate_and_marks_it_ready_after() {
+    let dir = repo("draft");
+    fairlead(&dir, &["brief", "--base", "main", "src/a.ts"]);
+    std::fs::write(dir.join("src/a.ts"), "export const a = 2;\n").unwrap();
+    let before = next(&dir);
+    assert!(before.starts_with("next: done:"), "{before}");
+    assert!(before.contains("`gh pr create --draft`"), "{before}");
+    assert!(!before.contains("gh pr ready"), "{before}");
+    assert_eq!(fairlead(&dir, &["done"]).0, 0);
+    let after = next(&dir);
+    assert!(after.starts_with("next: receipt:"), "{after}");
+    assert!(after.contains("`gh pr ready`"), "{after}");
+    assert!(!after.contains("--draft"), "{after}");
+    let (code, out) = fairlead(&dir, &["receipt"]);
+    assert_eq!(code, 0, "{out}");
+    assert!(out.contains("next     ready:"), "{out}");
+    assert!(next(&dir).contains("`gh pr ready`"), "{}", next(&dir));
 }
 
 #[test]

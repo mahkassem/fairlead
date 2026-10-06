@@ -2,23 +2,38 @@
 //! adds `config`, K1.2 `graph`, K1.3 `plan`, `test --explain` and `ci`,
 //! K2.1 `guard`.
 
+mod agents_cmd;
 mod bench_cmd;
 mod brief_cmd;
 mod ci_cmd;
 mod ci_judge;
 mod ci_report;
+mod ci_workflow;
+mod context_cmd;
 mod coverage_cmd;
 mod done_cmd;
+mod find_cmd;
 mod graph_cmd;
 mod guard_cmd;
 mod hook_cmd;
 mod hooks_cmd;
+mod import_cmd;
+mod import_rules_cmd;
 mod init_cmd;
+mod knowledge;
+mod lessons_cmd;
 mod migrate_cmd;
 mod migrate_notes;
 mod plan_cmd;
 mod receipt_cmd;
 mod replay_cmd;
+mod resume_cmd;
+mod reuse;
+mod since_green;
+mod skills_cmd;
+mod skills_eval_cmd;
+mod skills_report_cmd;
+mod stage;
 mod step;
 
 use std::path::{Path, PathBuf};
@@ -113,6 +128,19 @@ enum Command {
         #[command(flatten)]
         args: brief_cmd::BriefArgs,
     },
+    /// The brief, then what to read before the edit: the lessons' bodies,
+    /// the skills to load, the nearest README and the commits that last
+    /// touched each file.
+    Context {
+        #[command(flatten)]
+        args: context_cmd::ContextArgs,
+    },
+    /// For a new session: the last brief on this branch, what changed since,
+    /// the done gate, `next` and the lessons the branch added.
+    Resume {
+        #[command(flatten)]
+        args: resume_cmd::ResumeArgs,
+    },
     /// After a change: what changed against the session's brief, the tests
     /// files outside it add, and the done gate for the tree as it is.
     Receipt {
@@ -125,13 +153,45 @@ enum Command {
         #[command(flatten)]
         args: receipt_cmd::NextArgs,
     },
+    /// Write one lesson: a scope, evidence, and who or what taught it.
+    Learn {
+        #[command(flatten)]
+        args: lessons_cmd::LearnArgs,
+    },
+    /// List the lessons, the ones due for review, or check them all.
+    Lessons {
+        #[command(subcommand)]
+        action: lessons_cmd::LessonsAction,
+    },
+    /// Bring in what a team already keeps, such as a lessons document.
+    Import {
+        #[command(subcommand)]
+        action: import_cmd::ImportAction,
+    },
+    /// Search the lessons, skills, docs headings and declared names, nearest
+    /// the session's brief first; `--symbol` finds where a name is declared.
+    Find {
+        #[command(flatten)]
+        args: find_cmd::FindArgs,
+    },
+    /// Keep a marked block in AGENTS.md and CLAUDE.md: the change loop's
+    /// commands, the always-on lessons and the skill index.
+    Agents {
+        #[command(subcommand)]
+        action: agents_cmd::AgentsAction,
+    },
     /// Bring the hooks, the config's version floor and the version pins to
     /// this release, and list what changed since that needs a person.
     Migrate {
         #[command(flatten)]
         args: migrate_cmd::MigrateArgs,
     },
-    /// Install, check or remove the Claude Code and git hooks that run the guard, the brief nudge and the Stop hook.
+    /// Write each routed skill in the format each agent loads, or check that they're in sync.
+    Skills {
+        #[command(subcommand)]
+        action: skills_cmd::SkillsAction,
+    },
+    /// Install, check or remove the Claude Code and git hooks that run the guard, the brief nudge, the Stop hook and `resume` at a session's start.
     Hooks {
         #[command(subcommand)]
         action: hooks_cmd::HooksAction,
@@ -211,7 +271,23 @@ fn doctor_hooks(dir: &Path, loaded: Option<&Loaded>) -> String {
 
 fn doctor_report(dir: &Path, opts: &LoadOptions) -> String {
     let loaded = config::load(dir, opts);
-    let hooks = doctor_hooks(dir, loaded.as_ref().ok());
+    let mut hooks = doctor_hooks(dir, loaded.as_ref().ok());
+    let mut agents = String::new();
+    if let Ok(l) = &loaded {
+        let root = graph_cmd::repo_root(dir);
+        if let Some(line) = lessons_cmd::doctor_line(&root, &l.config.memory) {
+            hooks.push_str(&line);
+        }
+        let root = if l.files.is_empty() {
+            graph_cmd::repo_root(dir)
+        } else {
+            l.root.clone()
+        };
+        if let Some(line) = skills_cmd::doctor_line(&root, &l.config) {
+            hooks.push_str(&line);
+        }
+        agents = agents_cmd::doctor_lines(&root, &l.config);
+    }
     let config = match loaded {
         Ok(loaded) if loaded.files.is_empty() => "none found; defaults apply".to_string(),
         Ok(loaded) if loaded.problems.is_empty() => {
@@ -227,7 +303,7 @@ fn doctor_report(dir: &Path, opts: &LoadOptions) -> String {
     let here = fairlead_tests::quarantine::Here::detect(&graph_cmd::repo_root(dir));
     let conditions: Vec<&str> = here.conditions.iter().map(|c| c.name()).collect();
     format!(
-        "fairlead {}\nplatform: {}-{}\nconditions: {}\nconfig: {}\n{hooks}",
+        "fairlead {}\nplatform: {}-{}\nconditions: {}\nconfig: {}\n{agents}{hooks}",
         env!("CARGO_PKG_VERSION"),
         std::env::consts::OS,
         std::env::consts::ARCH,
@@ -421,10 +497,18 @@ fn main() -> ExitCode {
         Some(Command::Graph { action, sets }) => graph_cmd::run(action, sets, &cwd()),
         Some(Command::Coverage { action }) => coverage_cmd::run(action, &cwd()),
         Some(Command::Guard { action, sets }) => guard_cmd::run(action, sets, &cwd()),
+        Some(Command::Learn { args }) => lessons_cmd::learn(args, &cwd()),
+        Some(Command::Lessons { action }) => lessons_cmd::run(action, &cwd()),
+        Some(Command::Import { action }) => import_cmd::run(action, &cwd()),
+        Some(Command::Skills { action }) => skills_cmd::run(action, &cwd()),
+        Some(Command::Find { args }) => find_cmd::run(args, &cwd()),
+        Some(Command::Agents { action }) => agents_cmd::run(action, &cwd()),
         Some(Command::Hooks { action }) => hooks_cmd::run(action, &cwd()),
         Some(Command::Migrate { args }) => migrate_cmd::run(args, &cwd()),
         Some(Command::Done { args }) => done_cmd::run(args, &cwd()),
         Some(Command::Brief { args }) => brief_cmd::run(args, &cwd()),
+        Some(Command::Context { args }) => context_cmd::run(args, &cwd()),
+        Some(Command::Resume { args }) => resume_cmd::run(args, &cwd()),
         Some(Command::Receipt { args }) => receipt_cmd::run(args, &cwd()),
         Some(Command::Next { args }) => receipt_cmd::run_next(args, &cwd()),
         Some(Command::Plan {

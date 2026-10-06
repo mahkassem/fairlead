@@ -15,6 +15,11 @@
 - [Plans in CI](ci.md)
 - [Guard rules](guard.md)
 - [The brief](brief.md)
+- [Lessons](lessons.md)
+- [Skills](skills.md)
+- [Find](find.md)
+- [AGENTS.md and CLAUDE.md](agents.md)
+- [Context and resume](context.md)
 - [The done gate](done.md)
 - [The receipt and next](receipt.md)
 

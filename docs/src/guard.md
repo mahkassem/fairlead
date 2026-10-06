@@ -158,6 +158,27 @@ reason = "Open a pull request instead; a forced push rewrites what others have."
 
 A shell command an agent may not run, with the reason it's told. The write
 stage's hook reads these; the check and commit stages don't run commands.
+`match` is a regex over the whole command line, so it also finds a command
+inside `a && b`, `a; b` or a pipe.
+
+*Since 0.8.0:* `unless` lets a matched command through when it also matches,
+since a regex here can't say "without this flag" (there is no lookahead).
+`config check` checks it as it checks `match`. This rule makes an agent open
+its pull request as a draft, which [`fairlead next`](receipt.md#next) also
+tells it to do, so a CI that runs only fast checks on a draft holds the rest
+until the change is ready:
+
+```toml
+[[guard.commands]]
+match = '\bgh\s+pr\s+create\b'
+unless = '\bgh\s+pr\s+create\b[^;&|\n]*\s(--draft|-d)([\s;&|]|$)'
+reason = "Open the pull request as a draft: gh pr create --draft. Mark it ready after fairlead done passes: gh pr ready."
+```
+
+`unless` reads the same whole line, so it ties the flag to the `gh pr create`
+part: `[^;&|\n]*` stops at the next command. `git push && gh pr create --draft`
+and `gh pr create -d` go through; `gh pr create --title x`, and
+`gh pr create --fill && git branch -d old`, are denied. It isn't on by default.
 
 ## External rules
 
@@ -189,13 +210,14 @@ fairlead hooks uninstall       # take them out again
 fairlead doctor                # the hooks, the binary on the PATH, and what the event log recorded
 ```
 
-`hooks install` adds three Claude Code hooks:
+`hooks install` adds four Claude Code hooks:
 
 | Hook | Runs | Does |
 |---|---|---|
 | `PreToolUse` | `fairlead guard hook` | The write stage below: denies an edit that breaks a rule, or adds a note |
-| `PostToolUse` | `fairlead guard nudge` | Once per session, after an edit made with no brief, says how to get one ([The brief](brief.md#the-note-after-an-edit)); off with `brief.nudge = false` |
+| `PostToolUse` | `fairlead guard nudge` | Once per session, after an edit made with no brief, says how to get one ([The brief](brief.md#the-note-after-an-edit)); off with `brief.nudge = false`. *Since 0.8.0:* after an edit, names the routed skill for the file once per session, and records a skill the agent loads ([Skills](skills.md#while-the-agent-works)) |
 | `Stop` | `fairlead guard stop` | Sends the agent back while the tree it leaves hasn't passed `fairlead done` ([The Stop hook](done.md#the-stop-hook)); off with `done.on_stop = "off"` |
+| `SessionStart` | `fairlead resume --hook` | *Since 0.8.0:* starts a session with where the last one on the branch stopped: the last brief, what changed, the gate and `next` ([The SessionStart hook](context.md#the-sessionstart-hook)); off with `brief.resume = false` |
 
 The hooks go where `hooks.claude` says: `"shared"` (the default) is the
 committed `.claude/settings.json`, so everyone who clones the repository and
@@ -244,8 +266,8 @@ manifest, it removes the entries by their command.
 
 ### Codex
 
-*Since 0.7.0:* `fairlead hooks install --codex` writes the same three hooks to
-`.codex/hooks.json`, which Codex reads in the same shape; `status` and
+*Since 0.7.0:* `fairlead hooks install --codex` writes the same hooks, all but
+`SessionStart`, to `.codex/hooks.json`, which Codex reads in the same shape; `status` and
 `uninstall` take `--codex` too. Codex edits files with one tool,
 `apply_patch`, whose patch can add, change, move or delete several files at
 once. The write hook reads the patch the way Codex applies it, lints each
@@ -262,8 +284,8 @@ lists them.
 
 ### Gemini CLI
 
-*Since 0.7.0:* `fairlead hooks install --gemini` merges the same three hooks
-into `.gemini/settings.json`, under Gemini CLI's names for the moments:
+*Since 0.7.0:* `fairlead hooks install --gemini` merges the same hooks, all
+but `SessionStart`, into `.gemini/settings.json`, under Gemini CLI's names for the moments:
 `BeforeTool` for the write stage, `AfterTool` for the brief nudge and
 `AfterAgent` for the Stop hook, which sends the agent back with its reason
 as a new prompt. Its timeouts are in milliseconds, and the edit matcher is

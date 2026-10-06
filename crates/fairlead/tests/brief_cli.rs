@@ -137,7 +137,14 @@ fn every_section_is_listed_with_its_source() {
         rules.contains("size") && rules.ends_with("fairlead.toml [guard.*]"),
         "{rules}"
     );
-    assert!(line("lessons").contains("(K4)") && line("skills").contains("(K4)"));
+    assert!(
+        line("lessons").ends_with(".fairlead/lessons (fairlead lessons list)"),
+        "{out}"
+    );
+    assert!(
+        line("skills").ends_with("fairlead.toml [[skills.routes]]"),
+        "{out}"
+    );
     assert!(line("done").contains("unit, typecheck, guard"), "{out}");
     assert_eq!(line("next"), "next     edit, then: fairlead done");
 

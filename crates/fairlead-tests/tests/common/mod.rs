@@ -74,6 +74,7 @@ pub fn try_plan_with_base(
             config_digest: "sha256:test".into(),
             tree_hash: "worktree:test".into(),
             base_files,
+            everything: None,
         },
     )
 }

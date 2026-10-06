@@ -236,6 +236,7 @@ Workspace packages, from `workspaces` in the root `package.json` or `packages` i
 - An import that lands in a package's build output (its tsconfig `outDir`, not in git) maps back to the same path under `rootDir`, whether or not a local build has put the output on disk.
 - A workspace import that still lands on a missing or git-ignored file becomes an edge to every file of that package, which is always safe.
 - A tsconfig that `extends` something that can't be read (a shared config published as a package, before install) is skipped for that file, and counted in `graph stats`.
+- *Since 0.8.0:* an import of a package from outside the repository is no edge, but the graph keeps its package name, from the specifier and, when it resolved into `node_modules`, from the folder it landed in. A plan uses it to find the files a [dependency's version bump](plan.md#changes-that-dont-run-everything) reaches, installed or not.
 
 Files larger than 256 KB, almost always generated, are scanned for import strings instead of parsed. The scan can't tell a comment from code, so it takes `from`, `import` and `require` only where they start a word, and only a specifier without whitespace, which no module name has: a doc comment reading `from "My booking"` isn't an import.
 
