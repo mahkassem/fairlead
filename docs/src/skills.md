@@ -37,7 +37,7 @@ The brief's skills row lists `skills.cap` (8) skills, each with its description 
 The `PostToolUse` hook `fairlead hooks install` adds does two more things when routes exist:
 
 - **After an edit**, it names the skill whose scope covers the edited file, with its description, once per skill per session.
-- **When a skill is loaded**, through Claude Code's `Skill` tool or a Gemini CLI `read_file` of a SKILL.md, it records a `use` event in `.git/fairlead/events.jsonl`. Each brief records an `offer` event with what it listed. Together they give routing a hit rate: what was offered, what was used, and what was used without being offered.
+- **When a skill is loaded**, through Claude Code's `Skill` tool or a Gemini CLI `read_file` of a SKILL.md, it records a `use` event in `.git/fairlead/events.jsonl`. Each brief records an `offer` event with what it listed. Together they give routing a hit rate: what was offered, what was used, and what was used without being offered; `fairlead skills report` reads it.
 
 Codex has no hook that sees a file being read, so a skill it loads isn't seen; its use is unmeasured rather than counted as a miss.
 
@@ -107,3 +107,36 @@ fairlead skills eval --since 2026-01-01 --json
 Always routes count as offered. Each method reports the commits scored, recall (needed skills offered over needed), the commits with every needed skill offered, skills offered per change, and precision (needed skills offered over offered). Recall at caps 5, 6, 8 and 10 cuts the default method's list where a brief with that `skills.cap` would, in the brief's order. `--json` prints the same numbers.
 
 The import graph is built once, from the working tree, so each commit is routed along today's imports rather than its own; a file that has since moved or gone is still matched by path. Commits come first-parent from HEAD, newest first: `--limit` (500) of them, or every one since `--since`.
+## Measuring routing: skills report
+
+`fairlead skills report` sets the offers against the uses, per session, so a team sees whether routing offers what agents load:
+
+```text
+$ fairlead skills report --since 2026-10-01
+skills report (since 2026-10-01): 4 sessions
+skills: offered in 3 sessions, an offered skill used in 1 (hit rate 33%); 1 miss (used before any offer)
+unmeasured: codex, whose hooks don't see a skill load; 1 session not counted as unused
+1 offer with no session, not counted
+
+  skill                    offered  used missed unused
+  forms                          3     1      0      1
+  money                          2     1      1      1
+
+lessons: offered in 3 sessions; use of lessons isn't measured: there's no event for it
+  lesson                   offered
+  settle                         2
+  tone                           1
+```
+
+Each column counts sessions:
+
+- **offered:** a brief or an edit nudge offered the skill;
+- **used:** a `use` event named it;
+- **missed:** it was used before any offer of it in that session. An offer later in the session doesn't turn a miss into a hit;
+- **unused:** it was offered and never used.
+
+The hit rate is the share of sessions with a skill offered in which an offered skill was used after its offer. A brief made with no session is counted apart, since no use can be set against it.
+
+Lessons reach the agent in the brief's text, and nothing records an agent reading one, so the report gives lessons' offers only. Codex's hooks see edits but not reads: a session whose events carry its `apply_patch` tool is listed as unmeasured, its offers count, and its skills are never counted as unused. With `.codex/hooks.json` installed, the report names Codex as unmeasured.
+
+`--since YYYY-MM-DD` (a UTC day) and `--session ID` narrow the window, `--all` lists every row instead of the first ten, and `--json` prints the same numbers. With no events yet, the report says how they get recorded: briefs record offers, and the `PostToolUse` hook records uses.

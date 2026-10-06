@@ -126,24 +126,20 @@ This README documents Fairlead 0.7.1. Each command, by what it's for:
   the lessons, skills, README and history to read; `done` before it's
   finished, then `receipt` and `next`; `resume` picks up where the last
   session on a branch stopped.
-- **Project memory:** `learn` writes a lesson, and `lessons` lists, reviews and
-  checks them; the brief offers the ones a change reaches, and the skills
-  `[[skills.routes]]` scope to it.
 - **Project memory:** `learn` writes a lesson, `import lessons` turns a lessons
   document the team already keeps into one lesson per heading, and `lessons`
-  lists, reviews and checks them; the brief offers the ones a change reaches.
-  `[[skills.routes]]` scope to it. `skills sync` writes each skill where
-  Claude Code, Codex and Cursor each load it.
-  `[[skills.routes]]` scope to it. `find` searches lessons, skills, docs
-  headings and declared names, nearest the brief first.
-  `[[skills.routes]]` scope to it. `agents sync` keeps the loop, the
-  always-on lessons and the skill index in a marked block in AGENTS.md and
-  CLAUDE.md.
-- **Measuring:** `replay` and the benchmarks.
-  `[[skills.routes]]` scope to it; `import rules` turns path-scoped rule
-  files into skills and routes.
-- **Measuring:** `replay`, the benchmarks, and `skills eval`, which scores
-  skill routing on the repository's history.
+  lists, reviews and checks them. The brief offers the ones a change reaches.
+- **Skills:** `[[skills.routes]]` scopes each SKILL.md, and the brief lists the
+  skills a change reaches. `import rules` turns path-scoped rule files into
+  skills and routes, and `skills sync` writes each skill where Claude Code,
+  Codex and Cursor load it.
+- **Finding things:** `find` searches lessons, skills, docs headings and
+  declared names, nearest the brief first.
+- **What agents read first:** `agents sync` keeps the loop, the always-on
+  lessons and the skill index in a marked block in AGENTS.md and CLAUDE.md.
+- **Measuring:** `replay`, the benchmarks, `skills eval`, which scores skill
+  routing on the repository's history, and `skills report`, the hit rate of
+  what routing offers against what agents load.
 - **Getting started:** `init` writes a first config from what the repository
   shows.
 - **The config:** `config check`, `show` and `schema`.

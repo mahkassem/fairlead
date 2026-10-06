@@ -819,3 +819,14 @@ fn strip(settings: &mut Map<String, Value>) {
         settings.remove("hooks");
     }
 }
+
+/// Whether `.codex/hooks.json` holds Fairlead's hooks: they see edits, never
+/// a read, so a skill Codex loads isn't recorded.
+pub fn codex_installed(root: &Path) -> bool {
+    let file = root.join(".codex").join("hooks.json");
+    read(&file)
+        .ok()
+        .flatten()
+        .and_then(|text| parse(&file, &text).ok())
+        .is_some_and(|settings| !installed(&settings).is_empty())
+}

@@ -26,9 +26,10 @@ mod migrate_notes;
 mod plan_cmd;
 mod receipt_cmd;
 mod replay_cmd;
-mod skills_cmd;
 mod resume_cmd;
+mod skills_cmd;
 mod skills_eval_cmd;
+mod skills_report_cmd;
 mod step;
 
 use std::path::{Path, PathBuf};

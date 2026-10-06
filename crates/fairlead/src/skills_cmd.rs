@@ -31,6 +31,8 @@ pub enum SkillsAction {
         #[arg(long)]
         json: bool,
     },
+    /// Routing's hit rate from the event log: per skill and lesson, how often it was offered, used, used without an offer, and offered but not used.
+    Report(crate::skills_report_cmd::ReportArgs),
 }
 
 fn config_at(cwd: &Path) -> Result<(PathBuf, Config), String> {
@@ -45,6 +47,12 @@ fn config_at(cwd: &Path) -> Result<(PathBuf, Config), String> {
 }
 
 pub fn run(action: SkillsAction, cwd: &Path) -> ExitCode {
+    if let SkillsAction::Report(args) = action {
+        return crate::skills_report_cmd::run(
+            crate::skills_report_cmd::SkillsAction::Report(args),
+            cwd,
+        );
+    }
     if let SkillsAction::Eval { since, limit, json } = action {
         return crate::skills_eval_cmd::run(
             crate::skills_eval_cmd::SkillsAction::Eval { since, limit, json },
@@ -62,7 +70,7 @@ pub fn run(action: SkillsAction, cwd: &Path) -> ExitCode {
         SkillsAction::Sync { clean: true, .. } => clean(&root),
         SkillsAction::Sync { check: true, .. } => check(&root, &config),
         SkillsAction::Sync { .. } => write(&root, &config),
-        SkillsAction::Eval { .. } => unreachable!("handled above"),
+        SkillsAction::Eval { .. } | SkillsAction::Report(_) => unreachable!("handled above"),
     }
 }
 

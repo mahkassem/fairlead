@@ -1,10 +1,10 @@
 //! What an agent should know for a change: lessons now, skills and docs
 //! with K4.3 on, each picked by the same router from what the change reaches.
 
-pub mod import;
+pub mod block;
 pub mod bm25;
 pub mod corpus;
-pub mod block;
+pub mod import;
 pub mod lesson;
 pub mod route;
 pub mod secrets;
