@@ -742,6 +742,8 @@ pub struct Brief {
     pub per: BriefPer,
     /// A one-line note, once per session, after the first edit made with no brief.
     pub nudge: bool,
+    /// Whether `hooks install` adds the `SessionStart` hook that runs `fairlead resume`.
+    pub resume: bool,
 }
 
 impl Default for Brief {
@@ -749,6 +751,7 @@ impl Default for Brief {
         Brief {
             per: BriefPer::Session,
             nudge: true,
+            resume: true,
         }
     }
 }

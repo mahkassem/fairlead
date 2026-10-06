@@ -114,6 +114,7 @@ fairlead.toml: tests.unreachd: unknown field `unreachd`, expected one of ...
 | `done.on_stop` | `"ask"` | What the Claude Code Stop hook does while the tree hasn't passed: `off`, `ask` (send the agent back once) or `require`. See [The done gate](done.md#the-stop-hook) |
 | `brief.per` | `"session"` | Whether a second `fairlead brief` in the same session adds its paths to the first (`session`) or stands alone (`call`). See [The brief](brief.md) |
 | `brief.nudge` | `true` | Whether `fairlead hooks install` adds the `PostToolUse` note after an edit made with no brief |
+| `brief.resume` | `true` | Whether `fairlead hooks install` adds the `SessionStart` hook that runs `fairlead resume`. See [Context and resume](context.md#the-sessionstart-hook). *Since 0.8.0* |
 | `memory.dir` | `".fairlead/lessons"` | Where the [lesson](lessons.md) files live. *Since 0.8.0* |
 | `memory.review_days` | `90` | Days from `added` to the `review_by` a new lesson gets |
 | `memory.max_lines` | `12` | The longest body a lesson may have |

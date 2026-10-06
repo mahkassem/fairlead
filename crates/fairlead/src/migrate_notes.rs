@@ -162,6 +162,7 @@ pub const SINCE: &[(&str, &str)] = &[
     ("graph.coverage", "0.5"),
     ("done", "0.6"),
     ("brief", "0.6"),
+    ("brief.resume", "0.8"),
     ("ci", "0.6"),
     ("quarantine", "0.7"),
     ("tests.runners.all_command", "0.7.1"),

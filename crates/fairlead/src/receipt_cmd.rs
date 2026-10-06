@@ -121,11 +121,11 @@ fn session(given: Option<String>) -> Option<String> {
 
 /// Where the change loop stands: the brief, the plan for what changed, the
 /// gate's record for this tree and whether a receipt was written for it.
-struct State {
-    brief: Option<Brief>,
-    now: Planned,
-    changed: Vec<String>,
-    gate: Gate,
+pub(crate) struct State {
+    pub(crate) brief: Option<Brief>,
+    pub(crate) now: Planned,
+    pub(crate) changed: Vec<String>,
+    pub(crate) gate: Gate,
     receipt_written: bool,
     /// The failing step's command, when the gate failed.
     failed_command: Option<String>,
@@ -133,8 +133,19 @@ struct State {
 
 fn state(cwd: &Path, base: Option<String>, session: Option<&str>) -> Result<State, String> {
     let root = crate::graph_cmd::repo_root(cwd);
+    let brief = Store::open(&root).and_then(|s| s.current(session));
+    state_for(cwd, brief, base)
+}
+
+/// Where the change loop stands for a brief found some other way, such as
+/// the newest on the branch.
+pub(crate) fn state_for(
+    cwd: &Path,
+    brief: Option<Brief>,
+    base: Option<String>,
+) -> Result<State, String> {
+    let root = crate::graph_cmd::repo_root(cwd);
     let store = Store::open(&root);
-    let brief = store.as_ref().and_then(|s| s.current(session));
     let base = brief.as_ref().and_then(|b| b.base.clone()).or(base);
     let now = make(cwd, &Changes::new(base, Vec::new(), Vec::new()))?;
     let changed: Vec<String> = now.plan.changed.iter().map(|c| c.path.clone()).collect();
@@ -195,7 +206,7 @@ fn gate(log: &str, tree: &str) -> Gate {
 }
 
 /// The one step that's due, in the words the Stop hook and the note use too.
-fn next_line(s: &State) -> String {
+pub(crate) fn next_line(s: &State) -> String {
     if s.changed.is_empty() {
         return "next: nothing due; nothing has changed".into();
     }
@@ -405,7 +416,7 @@ pub fn text(r: &Receipt, all: bool) -> String {
 }
 
 /// The gate's state in words; a pass says how many steps were held.
-fn gate_line(g: &Gate) -> String {
+pub(crate) fn gate_line(g: &Gate) -> String {
     match g.state.as_str() {
         "passed" => format!(
             "passed for this tree at {} ({} step{}{}) in {:.0} s",
