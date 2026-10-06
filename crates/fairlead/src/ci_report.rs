@@ -188,6 +188,21 @@ pub fn markdown(plan: &Plan, results: Option<&Results>, receipt: Option<&str>) -
         plan.changed.len(),
         if plan.changed.len() == 1 { "" } else { "s" }
     ));
+    if let Some(stage) = plan.stage {
+        let later: Vec<String> = plan
+            .deferred
+            .iter()
+            .map(|d| format!("`{}` (from {}, {} selected)", d.id, d.from, d.selected))
+            .collect();
+        out.push_str(&format!("Stage: {stage}."));
+        if !later.is_empty() {
+            out.push_str(&format!(
+                " Waiting for a later stage: {}.",
+                later.join(", ")
+            ));
+        }
+        out.push_str("\n\n");
+    }
     let mut why: BTreeMap<&str, usize> = BTreeMap::new();
     for t in &plan.tests {
         *why.entry(reason_class(&t.reason)).or_default() += 1;

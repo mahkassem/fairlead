@@ -24,8 +24,9 @@ pub enum Target {
     /// A workspace package whose target isn't on disk (build output, say):
     /// the edge goes to the whole package.
     Package(String),
-    /// A package outside the repository, or a runtime builtin.
-    External,
+    /// A package outside the repository, by the name it's installed under
+    /// when it resolved into `node_modules`, or a runtime builtin.
+    External(Option<String>),
     /// A bare specifier that didn't resolve and names no workspace package:
     /// usually a package that isn't installed, but possibly an alias.
     NotFound,
@@ -120,10 +121,12 @@ impl Resolver {
             Ok(resolution) => {
                 let real = self.fs.real(resolution.path());
                 match tree.rel(&real) {
-                    Some(rel) if rel.split('/').any(|p| p == "node_modules") => Target::External,
+                    Some(rel) if rel.split('/').any(|p| p == "node_modules") => {
+                        Target::External(installed_name(&rel))
+                    }
                     Some(rel) if tree.contains(&rel) => Target::File(rel),
                     Some(rel) => self.ignored(tree, &real, &rel),
-                    None => Target::External,
+                    None => Target::External(None),
                 }
             }
             Err(_) => self.unresolved(spec),
@@ -181,6 +184,13 @@ impl Resolver {
     }
 }
 
+/// The package a path inside `node_modules` belongs to, from its last
+/// `node_modules` folder: what an alias or a path mapping really loads.
+fn installed_name(rel: &str) -> Option<String> {
+    let (_, inside) = rel.rsplit_once("node_modules/")?;
+    package_name(inside).map(str::to_string)
+}
+
 /// The package a bare specifier names: `a` or `@scope/a`. `None` when it
 /// can't be a package name, such as a path alias like `@/lib` or `~/x`.
 pub fn package_name(spec: &str) -> Option<&str> {
@@ -212,5 +222,18 @@ mod tests {
         assert_eq!(package_name("node:fs"), Some("node:fs"));
         assert_eq!(package_name("@/lib/utils"), None);
         assert_eq!(package_name("~/x"), None);
+    }
+
+    #[test]
+    fn an_installed_name_comes_from_the_last_node_modules_folder() {
+        assert_eq!(
+            installed_name("node_modules/a/node_modules/@s/b/index.js").as_deref(),
+            Some("@s/b")
+        );
+        assert_eq!(
+            installed_name("node_modules/.pnpm/x@1.0.0/node_modules/x/lib/i.js").as_deref(),
+            Some("x")
+        );
+        assert_eq!(installed_name("src/a.ts"), None);
     }
 }

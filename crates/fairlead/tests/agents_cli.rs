@@ -130,6 +130,7 @@ fn sync_keeps_every_byte_outside_the_markers_through_a_change_and_clean() {
         "- Before you finish: `fairlead done`",
         "`fairlead receipt`",
         "`fairlead next`",
+        "- The pull request: open it as a draft, `gh pr create --draft`, and mark it ready, `gh pr ready`, once `fairlead done` passes.",
         "`fairlead find <words>`",
         "`fairlead learn`",
         "- Leave settles at sign-off (settle-at-sign-off)",

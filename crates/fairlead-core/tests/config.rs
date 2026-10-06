@@ -646,6 +646,14 @@ fn test_names_citations_migrations_commands_and_external_rules_are_validated() {
     );
     assert_eq!(
         keys(concat!(
+            "[[guard.commands]]\nmatch = \"gh pr create\"\nunless = \"(\"\nreason = \"r\"\n",
+            "[[guard.commands]]\nmatch = \"gh pr create\"\nunless = \"x*\"\nreason = \"r\"\n",
+            "[[guard.commands]]\nmatch = \"gh pr create\"\nunless = \"--draft\"\nreason = \"r\"\n",
+        )),
+        ["guard.commands[0].unless[0]", "guard.commands[1].unless[0]"]
+    );
+    assert_eq!(
+        keys(concat!(
             "[[guard.external]]\nid = \"design\"\ncommand = [\"x\"]\n",
             "[[guard.external]]\nid = \"design\"\ncommand = []\nstages = []\n",
             "[[guard.external]]\nid = \"history\"\ncommand = [\"y\"]\n",
@@ -687,5 +695,22 @@ fn the_write_hook_needs_a_budget_and_runs_no_external_rules() {
     assert_eq!(
         config.hooks.claude,
         fairlead_core::config::HooksTarget::Local
+    );
+}
+
+#[test]
+fn a_command_rule_without_unless_serializes_without_it() {
+    let config: Config = toml::from_str(concat!(
+        "[[guard.commands]]\nmatch = \"rm -rf\"\nreason = \"no\"\n",
+        "[[guard.commands]]\nmatch = \"gh pr create\"\nunless = \"--draft\"\nreason = \"draft\"\n",
+    ))
+    .unwrap();
+    let json = serde_json::to_value(&config.guard.commands).unwrap();
+    assert_eq!(
+        json,
+        serde_json::json!([
+            {"match": "rm -rf", "reason": "no"},
+            {"match": "gh pr create", "unless": "--draft", "reason": "draft"},
+        ])
     );
 }

@@ -158,6 +158,27 @@ reason = "Open a pull request instead; a forced push rewrites what others have."
 
 A shell command an agent may not run, with the reason it's told. The write
 stage's hook reads these; the check and commit stages don't run commands.
+`match` is a regex over the whole command line, so it also finds a command
+inside `a && b`, `a; b` or a pipe.
+
+*Since 0.8.0:* `unless` lets a matched command through when it also matches,
+since a regex here can't say "without this flag" (there is no lookahead).
+`config check` checks it as it checks `match`. This rule makes an agent open
+its pull request as a draft, which [`fairlead next`](receipt.md#next) also
+tells it to do, so a CI that runs only fast checks on a draft holds the rest
+until the change is ready:
+
+```toml
+[[guard.commands]]
+match = '\bgh\s+pr\s+create\b'
+unless = '\bgh\s+pr\s+create\b[^;&|\n]*\s(--draft|-d)([\s;&|]|$)'
+reason = "Open the pull request as a draft: gh pr create --draft. Mark it ready after fairlead done passes: gh pr ready."
+```
+
+`unless` reads the same whole line, so it ties the flag to the `gh pr create`
+part: `[^;&|\n]*` stops at the next command. `git push && gh pr create --draft`
+and `gh pr create -d` go through; `gh pr create --title x`, and
+`gh pr create --fill && git branch -d old`, are denied. It isn't on by default.
 
 ## External rules
 

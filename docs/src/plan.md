@@ -14,7 +14,7 @@ The working tree is always the head: in CI that's the checked-out commit. The ba
 ## How a plan is built
 
 1. **Changed paths.** `git diff --name-status --find-renames` from the base to the working tree, plus untracked files. A rename counts both paths; its old path counts as deleted.
-2. **Run everything.** A changed path matching `plan.run_all` selects every test and check. The defaults are lockfiles, root manifests, tsconfig files, test-runner and task-runner config, and CI workflows. With `plan.lockfile = "scope"` (opt-in for now), a root `pnpm-lock.yaml` is the exception when it can be read: see [Lockfile changes](#lockfile-changes).
+2. **Run everything.** A changed path matching `plan.run_all` selects every test and check. The defaults are lockfiles, root manifests, tsconfig files, test-runner and task-runner config, and CI workflows. With `plan.lockfile = "scope"` (opt-in for now), a root `pnpm-lock.yaml` is the exception when it can be read: see [Lockfile changes](#lockfile-changes). *Since 0.8.0:* a change that only moves dependency versions, an edit to Fairlead's own config and a workflow that runs only by hand or on a schedule are exceptions too: see [Changes that don't run everything](#changes-that-dont-run-everything).
 3. **Ignored paths.** A changed path matching `plan.ignore` still selects every test it reaches through the files that depend on it. When it reaches none, it's listed under `ignored` and selects nothing, where it would otherwise fall to `tests.unreached`. That holds for source files too, imported or not: a unit test's fake, or a dev tool's code, reaches no end-to-end spec. A changed test file is never ignored. So a layer that plans a different kind of test (say `--env e2e`) can list the unit tests, their fakes and dev tools here. The defaults are root Markdown, the changesets tool's folder (`.changeset/**`), `docs/**`, READMEs, changelogs and licences.
 4. **Deleted files.** A deleted file goes back into the graph as a phantom, joined to every import that now fails but would resolve to it, every path literal that names it, and its package, so whatever depended on it still counts.
 5. **Package manifests.** A changed `<package>/package.json` counts as every file in that package changing.
@@ -38,7 +38,27 @@ It still selects everything when:
 
 A lockfile change that reaches no package selects nothing and says so in a `lockfile-scoped-to-nothing` warning.
 
-Other lockfiles (`package-lock.json`, `yarn.lock`, `bun.lock`) always select everything.
+Other lockfiles (`package-lock.json`, `yarn.lock`, `bun.lockb`) always select everything, and so does a `bun.lock` change that's more than versions moving (below).
+
+## Changes that don't run everything
+
+*Since 0.8.0:* three kinds of change match `plan.run_all` or reach no test, yet can't change what a test does. Each says what it did in a warning, so `fairlead plan` and `--explain` aren't silent about it.
+
+**Dependency versions moving** (`version-bump-scoped`). A root or workspace `package.json`, or the root `bun.lock`, whose change only moves versions selects the files that import the moved packages, and the tests that reach those, instead of everything. Only moving versions means the parsed JSON differs only in the version strings of `dependencies`, `devDependencies`, `peerDependencies` and `optionalDependencies` entries, and in the package's own `version`; for `bun.lock`, only in package entries' resolved versions, integrity and dependency versions, and in each workspace's dependency versions. A package that depends on a moved one, by name in the base or the head `bun.lock`, counts as moved too, since it loads the new version. The import graph keeps every bare import from outside the repository, whether it resolved into `node_modules` or the package isn't installed, so an import names the package even without an install. A test's chain starts at `package.json (left-pad)`. A package nothing imports, such as a command-line devDependency, selects nothing, and a package's own `version` alone selects nothing either.
+
+It still selects what it did before (everything for the root files, the whole package for a workspace manifest) when:
+
+- the change does more than move versions: a script, `workspaces`, `overrides`, a package added or removed, a version that becomes a `workspace:`, `file:`, `npm:` or git specifier, and anything that doesn't parse;
+- there's no base text (as with `--files`), the file was added, deleted or renamed, or there's no `bun.lock` at the head (npm, yarn and pnpm projects);
+- a moved package, or one depending on it, is how a `[[tests.runners]]` command runs, by its name or a command it installs (`version-bump-runs-everything`);
+- a file matching `plan.run_all`, such as `vitest.config.ts`, imports one (`version-bump-runs-everything`);
+- or one is named in text where no import shows it: a file matching `plan.run_all` (other than a `package.json` or a lockfile) or the `scripts` of the root or a changed `package.json` holds its name, or a command it installs, as a whole word, bounded by quotes, `/`, whitespace, a shell or list separator or either end. That catches a `preset: 'ts-jest'`, a plugin list, `"types": ["vitest/globals"]` and a CLI a script runs; the warning names the file. A devDependency named only in the manifest and the lockfile still selects nothing.
+
+**Fairlead's own config** (`fairlead-config`). `fairlead.toml`, `fairlead.yaml` or a layer such as `fairlead.ci.toml`, at the root, selects nothing by itself: the plan is made with the new config. It used to fall to `tests.unreached`, since no test imports it. A config file you list in `plan.run_all` still selects everything.
+
+**A workflow run only by hand or on a schedule** (`workflow-dispatch-only`). A `.github/workflows/*.yml` or `*.yaml` file whose only triggers are `workflow_dispatch` and `schedule` can't change a pull request's or a push's run, so it selects nothing by itself. The `on:` key is read at the head and at the base (a deleted file only at the base, an added one only at the head). If either side has any other trigger, `workflow_call` and `workflow_run` included, or doesn't parse, or the base text is missing, it selects everything as before.
+
+Checks and owner rules whose `paths` match one of these files still see it change.
 
 ## Modules
 

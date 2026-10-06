@@ -80,7 +80,7 @@
       </div>
       <div class="facts">
         <div><h3>Any test runner</h3><p>A runner is one command in your config, so your stack never waits for a plugin.</p></div>
-        <div><h3>Monorepos, precisely</h3><p>A pnpm lockfile change runs only the packages whose dependencies changed.</p></div>
+        <div><h3>Monorepos, precisely</h3><p>A pnpm lockfile change runs only the packages whose dependencies changed, and, with bun, a dependency's version bump only the tests of the files that import it.</p></div>
         <div><h3>No install to read your code</h3><p>The import graph comes from source alone, cached, in a fraction of a second.</p></div>
         <div><h3>Private by default</h3><p>The CLI sends nothing you didn't ask for: no telemetry, and it never phones home.</p></div>
       </div>

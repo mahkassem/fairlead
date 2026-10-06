@@ -6,7 +6,7 @@
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-use crate::config::TestClass;
+use crate::config::{CiStage, TestClass};
 
 #[derive(
     Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, JsonSchema,
@@ -62,6 +62,33 @@ pub struct Plan {
     /// machine that made the plan: not provable here.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub quarantined: Vec<Quarantined>,
+    /// The CI stage the plan was cut down to, when one applies.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stage: Option<CiStage>,
+    /// Runners and checks the stage leaves for a later one.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub deferred: Vec<Deferred>,
+    /// At merge, the pull request that passed the ready stage's steps on
+    /// this exact tree, and the steps skipped for it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reused: Option<Reused>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct Reused {
+    pub pull_request: u64,
+    pub steps: Vec<String>,
+}
+
+/// A runner or check whose `from` stage is later than the plan's.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct Deferred {
+    pub id: String,
+    pub kind: InvocationKind,
+    pub from: CiStage,
+    /// Test files or checks it would have run, so "deferred" and "reached
+    /// nothing" read differently.
+    pub selected: usize,
 }
 
 /// A selected test or check held here. It runs in an invocation of its

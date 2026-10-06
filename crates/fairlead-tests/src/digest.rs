@@ -14,8 +14,8 @@ fn hex(bytes: &[u8]) -> String {
 
 /// Sections that never change a plan, left out of its digest altogether, so
 /// adding one doesn't change the digest of every plan made before it.
-const NOT_PLANNED: [&str; 8] = [
-    "guard", "hooks", "done", "brief", "ci", "memory", "skills", "agents",
+const NOT_PLANNED: [&str; 9] = [
+    "guard", "hooks", "done", "brief", "ci", "memory", "skills", "agents", "stages",
 ];
 
 pub fn config_digest(config: &Config) -> String {
@@ -24,6 +24,16 @@ pub fn config_digest(config: &Config) -> String {
         for key in NOT_PLANNED {
             map.remove(key);
         }
+        // A step's `from` says when it runs, not what it proves, so moving it
+        // keeps a tree's reuse proof and the base of a since-green plan.
+        let drop_from = |list: Option<&mut serde_json::Value>| {
+            let steps = list.and_then(|l| l.as_array_mut()).into_iter().flatten();
+            for step in steps.filter_map(|s| s.as_object_mut()) {
+                step.remove("from");
+            }
+        };
+        drop_from(map.get_mut("tests").and_then(|t| t.get_mut("runners")));
+        drop_from(map.get_mut("checks"));
     }
     let json = serde_json::to_vec(&value).expect("config serializes");
     format!("sha256:{}", hex(&Sha256::digest(json)))
@@ -59,6 +69,16 @@ pub fn plan_id(
     format!("pl_{}", &hex(&hasher.finalize())[..16])
 }
 
+/// A plan id for the same inputs cut down to one CI stage, so a draft plan
+/// and a ready plan of one tree never share an id.
+pub fn with_stage(plan_id: &str, stage: &str) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(plan_id.as_bytes());
+    hasher.update([0]);
+    hasher.update(stage.as_bytes());
+    format!("pl_{}", &hex(&hasher.finalize())[..16])
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -89,6 +109,40 @@ mod tests {
             released,
             "sections that never change a plan"
         );
+    }
+
+    #[test]
+    fn stages_and_a_steps_from_leave_the_digest_alone() {
+        use fairlead_core::config::{CiStage, Runner, Stages};
+        let runner = |from| Runner {
+            id: "e2e".into(),
+            matches: vec!["e2e/**".into()],
+            exclude: Vec::new(),
+            invoke: Default::default(),
+            cwd: None,
+            command: vec!["playwright".into(), "test".into()],
+            all_command: None,
+            exclude_arg: None,
+            from,
+        };
+        let mut config = Config::default();
+        config.tests.runners = vec![runner(None)].into();
+        let before = config_digest(&config);
+        config.tests.runners = vec![runner(Some(CiStage::Merge))].into();
+        config.stages = Some(Stages::default());
+        assert_eq!(config_digest(&config), before);
+        assert_eq!(
+            config_digest(&Config::default()),
+            "sha256:7eff5b583b350526d891c873a741620ab5faab28c4f4dcece469b1a327dc29d3"
+        );
+    }
+
+    #[test]
+    fn a_stage_gives_a_plan_its_own_id() {
+        let id = plan_id("sha256:x", "t", None, &[]);
+        assert_ne!(with_stage(&id, "draft"), with_stage(&id, "ready"));
+        assert_eq!(with_stage(&id, "draft"), with_stage(&id, "draft"));
+        assert!(with_stage(&id, "draft").starts_with("pl_"));
     }
 
     #[test]

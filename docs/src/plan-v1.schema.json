@@ -37,6 +37,58 @@
       ],
       "type": "object"
     },
+    "CiStage": {
+      "description": "The stages of a change, earliest first. A step runs at its `from` stage\nand every later one.",
+      "oneOf": [
+        {
+          "const": "draft",
+          "description": "A draft pull request.",
+          "type": "string"
+        },
+        {
+          "const": "ready",
+          "description": "A pull request ready for review, or a push to a branch that isn't an environment.",
+          "type": "string"
+        },
+        {
+          "const": "merge",
+          "description": "A push to an environment branch.",
+          "type": "string"
+        },
+        {
+          "const": "full",
+          "description": "A scheduled or manual run, or a pull request carrying the full label.",
+          "type": "string"
+        }
+      ]
+    },
+    "Deferred": {
+      "description": "A runner or check whose `from` stage is later than the plan's.",
+      "properties": {
+        "from": {
+          "$ref": "#/$defs/CiStage"
+        },
+        "id": {
+          "type": "string"
+        },
+        "kind": {
+          "$ref": "#/$defs/InvocationKind"
+        },
+        "selected": {
+          "description": "Test files or checks it would have run, so \"deferred\" and \"reached\nnothing\" read differently.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "id",
+        "kind",
+        "from",
+        "selected"
+      ],
+      "type": "object"
+    },
     "Invocation": {
       "properties": {
         "argv": {
@@ -288,6 +340,26 @@
         }
       ]
     },
+    "Reused": {
+      "properties": {
+        "pull_request": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "steps": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "pull_request",
+        "steps"
+      ],
+      "type": "object"
+    },
     "Status": {
       "enum": [
         "added",
@@ -410,6 +482,13 @@
       "description": "`sha256:` of the merged config.",
       "type": "string"
     },
+    "deferred": {
+      "description": "Runners and checks the stage leaves for a later one.",
+      "items": {
+        "$ref": "#/$defs/Deferred"
+      },
+      "type": "array"
+    },
     "fairlead_version": {
       "type": "string"
     },
@@ -441,6 +520,28 @@
         "$ref": "#/$defs/Quarantined"
       },
       "type": "array"
+    },
+    "reused": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Reused"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "At merge, the pull request that passed the ready stage's steps on\nthis exact tree, and the steps skipped for it."
+    },
+    "stage": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/CiStage"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "The CI stage the plan was cut down to, when one applies."
     },
     "tests": {
       "items": {

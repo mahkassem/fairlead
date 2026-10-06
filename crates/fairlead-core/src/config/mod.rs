@@ -5,6 +5,7 @@ mod agents;
 mod knowledge;
 mod load;
 mod quarantine;
+mod stages;
 mod validate;
 
 pub use agents::{Agents, AgentsWrite};
@@ -14,6 +15,7 @@ pub use load::{
     LOCAL_NAMES, PROJECT_NAMES,
 };
 pub use quarantine::{Condition, Os, PlatformQuarantine};
+pub use stages::{CiStage, Stages};
 pub use validate::{is_date, plan_globs, validate, Problem, GUARD_RULES};
 
 use schemars::JsonSchema;
@@ -95,6 +97,10 @@ pub struct Config {
     pub memory: Memory,
     pub skills: Skills,
     pub agents: Agents,
+    /// When each runner and check runs in CI; left out of the digest, and
+    /// absent unless a layer sets it.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub stages: Option<Stages>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
@@ -281,6 +287,9 @@ pub struct Runner {
     /// a run of everything can leave out what runs alone.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub exclude_arg: Option<Vec<String>>,
+    /// The earliest CI stage this runner runs at; `ready` when unset.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub from: Option<CiStage>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, JsonSchema)]
@@ -334,6 +343,9 @@ pub struct Check {
     /// What `{files}` expands to, if the command uses it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub files: Option<CheckFiles>,
+    /// The earliest CI stage this check runs at; `draft` when unset.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub from: Option<CiStage>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
@@ -610,6 +622,10 @@ pub struct CommandRule {
     /// A regex over the whole command line.
     #[serde(rename = "match")]
     pub matches: String,
+    /// A regex over the same line that lets a matched command through, since
+    /// the regex crate has no lookahead to say "without this flag".
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub unless: Option<String>,
     /// Why, shown to the agent.
     pub reason: String,
 }

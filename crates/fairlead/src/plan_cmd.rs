@@ -16,20 +16,36 @@ pub struct Changes {
     /// The branch or commit to compare with; its merge base with HEAD is used.
     /// Defaults to the remote's default branch.
     #[arg(long)]
-    base: Option<String>,
+    pub base: Option<String>,
     /// Plan for these paths instead of asking git.
     #[arg(long, num_args = 1..)]
     files: Vec<String>,
     /// Override a config value for this run.
     #[arg(long = "set", value_name = "KEY=VALUE")]
     sets: Vec<String>,
+    /// Plan everything whatever changed, for this reason; a full CI stage sets it.
+    #[arg(skip)]
+    pub everything: Option<String>,
 }
 
 impl Changes {
     /// The changes a caller names itself, as `--base`, `--files` and `--set` would.
     pub fn new(base: Option<String>, files: Vec<String>, sets: Vec<String>) -> Changes {
-        Changes { base, files, sets }
+        Changes {
+            base,
+            files,
+            sets,
+            everything: None,
+        }
     }
+}
+
+/// The config a plan of `changes` reads, with its `--set` values, for a
+/// caller that decides something before planning.
+pub fn config_for(cwd: &Path, changes: &Changes) -> Result<Config, String> {
+    config::load(cwd, &LoadOptions::from_process(changes.sets.clone()))
+        .map(|l| l.config)
+        .map_err(|e| e.to_string())
 }
 
 pub struct Planned {
@@ -116,6 +132,7 @@ pub fn make(cwd: &Path, changes: &Changes) -> Result<Planned, String> {
     let cwd = std::fs::canonicalize(cwd).unwrap_or_else(|_| cwd.to_path_buf());
     let mut scan = build(&root, &loaded.config)
         .map_err(|e| format!("could not read {}: {e}", root.display()))?;
+    let changes_everything = changes.everything.clone();
     let (changes, base) = if changes.files.is_empty() {
         let base = match &changes.base {
             Some(b) => b.clone(),
@@ -140,6 +157,7 @@ pub fn make(cwd: &Path, changes: &Changes) -> Result<Planned, String> {
     };
     let input = Input {
         base_files,
+        everything: changes_everything,
         changes,
         base,
         head,
