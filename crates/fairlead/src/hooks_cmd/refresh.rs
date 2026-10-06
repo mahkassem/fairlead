@@ -7,8 +7,9 @@ use fairlead_guard::lefthook;
 use serde_json::{Map, Value};
 
 use super::{
-    add_ours, claude_manifest, git_run, installed, is_ours, lefthook_file, lefthook_manifest,
-    package_runner, parse, pretty, read, read_manifest, stages, strip, write, Agent, SESSION_EVENT,
+    add_ours, agent_file, git_run, installed, is_ours, lefthook_file, lefthook_manifest,
+    package_runner, parse, pretty, read, read_manifest, stages, strip, write, Agent, EVENTS,
+    SESSION_EVENT,
 };
 
 /// One hooks file that isn't what this version would install, and what it would be.
@@ -27,7 +28,7 @@ fn ours(settings: &Map<String, Value>) -> Vec<(String, String, String, u64)> {
     let Some(hooks) = settings.get("hooks").and_then(Value::as_object) else {
         return out;
     };
-    for event in ["PreToolUse", "PostToolUse", "Stop", SESSION_EVENT] {
+    for event in EVENTS.concat().into_iter().chain([SESSION_EVENT]) {
         for group in hooks
             .get(event)
             .and_then(Value::as_array)
@@ -65,9 +66,11 @@ fn difference(
     want: &[(String, String, String, u64)],
 ) -> String {
     let name = |e: &(String, String, String, u64)| match e.0.as_str() {
-        "PreToolUse" if e.1 == "Bash" => "the shell-command guard".to_string(),
-        "PreToolUse" => "the edit guard".to_string(),
-        "PostToolUse" => "the brief nudge".to_string(),
+        "PreToolUse" | "BeforeTool" if e.1 == "Bash" || e.1 == "run_shell_command" => {
+            "the shell-command guard".to_string()
+        }
+        "PreToolUse" | "BeforeTool" => "the edit guard".to_string(),
+        "PostToolUse" | "AfterTool" => "the brief nudge".to_string(),
         SESSION_EVENT => "the session resume".to_string(),
         _ => "the Stop hook".to_string(),
     };
@@ -107,16 +110,22 @@ fn difference(
     parts.join(", ")
 }
 
-/// Each Claude Code settings file holding Fairlead's hooks that differ from
-/// what this version's `hooks install` writes for this config.
-pub fn stale_claude(
+/// Each agent's hooks file, Claude Code's two, Codex's and Gemini CLI's,
+/// holding Fairlead's hooks that differ from what this version's
+/// `hooks install` writes for this config.
+pub fn stale_agents(
     root: &Path,
     git_dir: &Path,
     config: &fairlead_core::config::Config,
 ) -> Result<Vec<Refresh>, String> {
     let mut out = Vec::new();
-    for name in ["settings.json", "settings.local.json"] {
-        let file = root.join(".claude").join(name);
+    for (agent, name) in [
+        (Agent::Claude, "settings.json"),
+        (Agent::Claude, "settings.local.json"),
+        (Agent::Codex, ""),
+        (Agent::Gemini, ""),
+    ] {
+        let (file, manifest) = agent_file(root, git_dir, agent, name);
         let Some(text) = read(&file)? else { continue };
         let settings = parse(&file, &text)?;
         if installed(&settings).is_empty() {
@@ -129,7 +138,7 @@ pub fn stale_claude(
             &file,
             &stages(config),
             package_runner(root),
-            Agent::Claude,
+            agent,
         )?;
         let (had, wanted) = (ours(&settings), ours(&want));
         if had == wanted {
@@ -137,7 +146,7 @@ pub fn stale_claude(
         }
         out.push(Refresh {
             what: difference(&had, &wanted),
-            manifest: claude_manifest(git_dir, name),
+            manifest,
             file,
             before: text,
             after: pretty(&want),

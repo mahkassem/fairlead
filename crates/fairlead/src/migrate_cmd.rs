@@ -312,7 +312,7 @@ fn updates(root: &Path, loaded: &Loaded) -> Result<(Vec<Update>, Option<String>,
     let mut out = Vec::new();
     let mut claude = false;
     if let Some(git_dir) = fairlead_guard::git::git_dir(root) {
-        for refresh in hooks_cmd::stale_claude(root, &git_dir, &loaded.config)? {
+        for refresh in hooks_cmd::stale_agents(root, &git_dir, &loaded.config)? {
             out.push(Update {
                 file: refresh.file.clone(),
                 what: format!("Fairlead's hooks: {}", refresh.what),
