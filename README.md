@@ -126,7 +126,8 @@ This README documents Fairlead 0.7.1. Each command, by what it's for:
   then `receipt` and `next`.
 - **Project memory:** `learn` writes a lesson, and `lessons` lists, reviews and
   checks them; the brief offers the ones a change reaches, and the skills
-  `[[skills.routes]]` scope to it.
+  `[[skills.routes]]` scope to it. `skills sync` writes each skill where
+  Claude Code, Codex and Cursor each load it.
 - **Measuring:** `replay` and the benchmarks.
 - **Getting started:** `init` writes a first config from what the repository
   shows.

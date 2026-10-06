@@ -21,6 +21,7 @@ mod migrate_notes;
 mod plan_cmd;
 mod receipt_cmd;
 mod replay_cmd;
+mod skills_cmd;
 mod step;
 
 use std::path::{Path, PathBuf};
@@ -143,6 +144,11 @@ enum Command {
         #[command(flatten)]
         args: migrate_cmd::MigrateArgs,
     },
+    /// Write each routed skill in the format each agent loads, or check that they're in sync.
+    Skills {
+        #[command(subcommand)]
+        action: skills_cmd::SkillsAction,
+    },
     /// Install, check or remove the Claude Code and git hooks that run the guard, the brief nudge and the Stop hook.
     Hooks {
         #[command(subcommand)]
@@ -226,6 +232,14 @@ fn doctor_report(dir: &Path, opts: &LoadOptions) -> String {
     let mut hooks = doctor_hooks(dir, loaded.as_ref().ok());
     if let Ok(l) = &loaded {
         if let Some(line) = lessons_cmd::doctor_line(&graph_cmd::repo_root(dir), &l.config.memory) {
+            hooks.push_str(&line);
+        }
+        let root = if l.files.is_empty() {
+            graph_cmd::repo_root(dir)
+        } else {
+            l.root.clone()
+        };
+        if let Some(line) = skills_cmd::doctor_line(&root, &l.config) {
             hooks.push_str(&line);
         }
     }
@@ -440,6 +454,7 @@ fn main() -> ExitCode {
         Some(Command::Guard { action, sets }) => guard_cmd::run(action, sets, &cwd()),
         Some(Command::Learn { args }) => lessons_cmd::learn(args, &cwd()),
         Some(Command::Lessons { action }) => lessons_cmd::run(action, &cwd()),
+        Some(Command::Skills { action }) => skills_cmd::run(action, &cwd()),
         Some(Command::Hooks { action }) => hooks_cmd::run(action, &cwd()),
         Some(Command::Migrate { args }) => migrate_cmd::run(args, &cwd()),
         Some(Command::Done { args }) => done_cmd::run(args, &cwd()),

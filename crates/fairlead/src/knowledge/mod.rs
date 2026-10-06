@@ -5,6 +5,7 @@ pub mod lesson;
 pub mod route;
 pub mod secrets;
 pub mod skill;
+pub mod sync;
 
 use std::cmp::Reverse;
 use std::path::Path;
