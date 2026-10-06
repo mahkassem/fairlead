@@ -163,11 +163,17 @@ fn first_sentence(body: &str) -> String {
         .skip_while(|l| l.is_empty())
         .take_while(|l| !l.is_empty())
         .collect();
-    let text = paragraph.join(" ");
-    let sentence = text
-        .find(". ")
-        .map_or(text.as_str(), |end| &text[..end + 1]);
-    short(sentence, 200)
+    // Emphasis markers would end up mid-sentence, and a rule that opens with
+    // a bold lead such as "An endpoint." needs the next sentence to say much.
+    let text = paragraph.join(" ").replace("**", "").replace("__", "");
+    let mut end = 0;
+    while end < text.len() {
+        end = text[end..].find(". ").map_or(text.len(), |i| end + i + 1);
+        if text[..end].chars().count() >= 40 {
+            break;
+        }
+    }
+    short(text[..end].trim(), 200)
 }
 
 fn as_list(value: Option<&Value>) -> Vec<String> {
@@ -496,7 +502,10 @@ mod tests {
         .unwrap();
         assert!(always.always);
         assert!(always.paths.is_empty());
-        assert_eq!(always.description, "Tabs.", "the body's first sentence");
+        assert_eq!(
+            always.description, "Tabs. Always tabs.",
+            "sentences until it says enough"
+        );
     }
 
     #[test]
@@ -510,6 +519,16 @@ mod tests {
     }
 
     #[test]
+    fn a_bold_lead_is_unwrapped_and_too_short_a_sentence_takes_the_next() {
+        let r = rule(
+            "api.md",
+            "---\npaths: [\"src/**\"]\n---\n\n**An endpoint.** Define the group in one file. Then more.\n",
+        )
+        .unwrap();
+        assert_eq!(r.description, "An endpoint. Define the group in one file.");
+    }
+
+    #[test]
     fn the_description_falls_back_to_one_line_of_the_body() {
         let long = format!("{} end.", "word ".repeat(80));
         let r = rule(
@@ -518,7 +537,7 @@ mod tests {
         )
         .unwrap();
         assert_eq!(r.name, "n-deep", "a nested file's directory joins its name");
-        assert_eq!(r.description, "Heading line more of it.");
+        assert_eq!(r.description, "Heading line more of it. Second.");
         let r = rule("long.md", &format!("---\npaths: src/**\n---\n{long}\n")).unwrap();
         assert!(r.description.chars().count() <= 201, "{}", r.description);
         assert!(!r.description.contains('\n'));
