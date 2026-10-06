@@ -68,6 +68,16 @@ pub struct Plan {
     /// Runners and checks the stage leaves for a later one.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub deferred: Vec<Deferred>,
+    /// At merge, the pull request that passed the ready stage's steps on
+    /// this exact tree, and the steps skipped for it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reused: Option<Reused>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct Reused {
+    pub pull_request: u64,
+    pub steps: Vec<String>,
 }
 
 /// A runner or check whose `from` stage is later than the plan's.

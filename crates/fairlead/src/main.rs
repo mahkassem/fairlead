@@ -27,6 +27,7 @@ mod plan_cmd;
 mod receipt_cmd;
 mod replay_cmd;
 mod resume_cmd;
+mod reuse;
 mod skills_cmd;
 mod skills_eval_cmd;
 mod skills_report_cmd;

@@ -181,6 +181,9 @@ fn plan(
     if let Some(s) = resolved.stage {
         stage::apply(&mut planned.plan, &planned.config, s);
     }
+    if let Some(line) = crate::reuse::apply(&mut planned.plan, &planned.config, event.as_ref()) {
+        println!("{line}");
+    }
     let runs = stage::run_outputs(&planned.plan, &planned.config)?;
     let json = serde_json::to_string_pretty(&planned.plan).expect("plan prints");
     let path = cwd.join(out);
@@ -277,6 +280,13 @@ fn outputs(plan: &Plan, path: &Path, runs: &[(String, bool)]) -> String {
         output_block("checks", &checks.join(" ")),
         output_block("tests", &plan.tests.len().to_string()),
         output_block("stage", plan.stage.map_or("", |s| s.name())),
+        output_block(
+            "reused",
+            &plan
+                .reused
+                .as_ref()
+                .map_or(String::new(), |r| r.pull_request.to_string()),
+        ),
     ]
     .into_iter()
     .chain(
@@ -326,7 +336,9 @@ fn execute(
 ) -> Result<ExitCode, String> {
     let mut plan = read_plan(cwd, plan_path)?;
     pick.check(cwd, &plan)?;
+    let planned = plan.invocations.len();
     plan.invocations.retain(|i| pick.wants(&i.id));
+    let ran_all = plan.invocations.len() == planned;
     let root = crate::graph_cmd::repo_root(cwd);
     let merge = judge.map(|p| read_plan(cwd, p)).transpose()?;
     let config = match &merge {
@@ -372,6 +384,15 @@ fn execute(
     crate::ci_judge::print(&judged);
     if let Some(path) = results {
         crate::ci_report::write_results(&cwd.join(path), &plan, ran, &judged, started)?;
+    }
+    if failed.is_empty() && held == 0 {
+        let config = fairlead_core::config::load(cwd, &LoadOptions::from_process(Vec::new()));
+        if let Some(line) = config
+            .ok()
+            .and_then(|l| crate::reuse::record(&plan, &l.config, ran_all))
+        {
+            println!("{line}");
+        }
     }
     if failed.is_empty() {
         let note = if held > 0 {

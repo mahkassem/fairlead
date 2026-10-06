@@ -340,6 +340,26 @@
         }
       ]
     },
+    "Reused": {
+      "properties": {
+        "pull_request": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "steps": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "pull_request",
+        "steps"
+      ],
+      "type": "object"
+    },
     "Status": {
       "enum": [
         "added",
@@ -500,6 +520,17 @@
         "$ref": "#/$defs/Quarantined"
       },
       "type": "array"
+    },
+    "reused": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Reused"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "At merge, the pull request that passed the ready stage's steps on\nthis exact tree, and the steps skipped for it."
     },
     "stage": {
       "anyOf": [

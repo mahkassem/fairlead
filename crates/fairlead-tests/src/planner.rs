@@ -268,6 +268,7 @@ pub fn plan(scan: &mut Scan, config: &Config, input: Input) -> Result<Plan, Stri
         quarantined,
         stage: None,
         deferred: Vec::new(),
+        reused: None,
     })
 }
 

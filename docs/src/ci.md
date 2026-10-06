@@ -55,6 +55,7 @@ A missing merge base fails with exit code 2, never an empty plan: fetch more his
 | `checks` | the selected check ids, space-separated |
 | `tests` | how many test files are selected |
 | `stage` | *Since 0.8.0:* the plan's [stage](#stages), empty without one |
+| `reused` | *Since 0.8.0:* at merge, the pull request whose passing run of this exact tree the [ready steps were reused](#reuse-at-merge) from, empty otherwise |
 | `run_<id>` | *Since 0.8.0:* `true` or `false` for every runner and check: whether this plan runs it. An id's characters other than letters, digits and `_` become `_`, so `desktop-build` is `run_desktop_build`; two ids that become one name fail the plan |
 
 Nothing is keyed to a runner name or folder layout. `invocations` can feed a job matrix with `fromJSON`; pass each argv to a program through an environment variable rather than writing it into a `run:` line, which would let a path in the plan be read as shell syntax. For most projects, `fairlead ci run --plan` in one job is simpler.
@@ -103,6 +104,14 @@ Outside GitHub Actions, `auto` is `ready`. The first line of output says which s
 The plan still decides which tests run; the stage decides whether a runner or check runs at all. A later stage's steps leave the plan's invocations, tests and checks and are listed in its `deferred`, each with its `from` and how many tests or checks it would have run, so a step waiting for its stage reads differently from one the change didn't reach. `full` plans everything whatever changed. Each stage of a tree has its own `plan_id`. `[stages]` and `from` are left out of `config_digest`: they say when a step runs, not what it proves.
 
 A config with no `[stages]` and no `from` plans exactly as before, with no stage and the same plan ids. So does `--stage none`.
+
+### Reuse at merge
+
+With `stages.reuse` (on by default once `[stages]` is set), a merge doesn't run again what its pull request already passed on the same bytes:
+
+- At the ready stage, once `ci run` has run every step of the plan and all of them passed, it sets the commit status `fairlead/tree` on the pull request's head commit, saying which tree it tested and the config digest it planned with. That needs `statuses: write` on the job. Without it, or without a token, the run still passes and says the merge will run these steps again.
+- At the merge stage, `ci plan` finds the pull request the pushed commit came from and reads that status. When the pushed tree and the config digest are exactly the ones it recorded, the ready stage's steps leave the plan, the plan's `reused` names the pull request and the steps, and the run says `reuse: #7 passed this tree; skipping unit`. The merge stage's own steps, such as end-to-end, still run.
+- Anything else runs them: another tree (the base moved before the merge, so the merged bytes were never tested together), another config, a run that skipped some of its steps with `--only` or `--except`, a failed or held step, a working tree that isn't a commit, or an API error. A merge commit, a squash and a rebase all give the same tree when the base hadn't moved.
 
 ## `fairlead ci run --plan PATH`
 
