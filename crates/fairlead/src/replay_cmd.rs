@@ -39,8 +39,10 @@ pub enum ReplayAction {
         #[arg(long = "workflow", value_name = "NAME")]
         workflows: Vec<String>,
         /// Also record this event's runs: `push`, the default branch's push
-        /// runs, where a failure the merge's plan left out is an escape.
-        /// Repeat for several; pull_request and merge_group are always read.
+        /// runs, where a failure the merge's plan left out is an escape, or
+        /// `schedule`, its scheduled full runs, where a failure no push's plan
+        /// reached since the last green one is. Repeat for several;
+        /// pull_request and merge_group are always read.
         #[arg(long = "event", value_name = "EVENT")]
         events: Vec<String>,
     },

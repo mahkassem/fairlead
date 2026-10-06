@@ -1,5 +1,6 @@
 //! `replay fetch`: every completed pull request and merge queue run in the
-//! window, and with `push` the default branch's push runs, each attempt as
+//! window, and with `push` or `schedule` the default branch's push or
+//! scheduled runs, each attempt as
 //! its own row, so a job that failed and then passed
 //! on a re-run is visible as flaky. Failed jobs keep their failure-level
 //! annotations and log excerpts; rows already recorded are skipped before
@@ -22,7 +23,7 @@ const ANNOTATION_CAP: usize = 10;
 /// The events recorded unless others are asked for.
 pub const EVENTS: [&str; 2] = ["pull_request", "merge_group"];
 /// Every event a row can come from.
-pub const KNOWN_EVENTS: [&str; 3] = ["pull_request", "merge_group", "push"];
+pub const KNOWN_EVENTS: [&str; 4] = ["pull_request", "merge_group", "push", "schedule"];
 
 pub struct Options<'a> {
     pub repo: &'a str,
@@ -442,16 +443,17 @@ pub fn fetch(http: &dyn Http, opts: &Options, seen: &BTreeSet<(u64, u32)>) -> (V
                 )),
             );
         }
-        // Only the default branch's pushes: that's where a merged change lands.
-        let branch = if event == "push" {
+        // Only the default branch's pushes and schedules: that's where a
+        // merged change lands.
+        let branch = if event == "push" || event == "schedule" {
             match lookups.branch(http, opts.repo) {
                 Ok(Some(b)) if plain_ref(&b) => b,
                 Ok(_) => {
                     return (
                         rows,
-                        Stop::Error(
-                            "the repository has no default branch to read pushes from".into(),
-                        ),
+                        Stop::Error(format!(
+                            "the repository has no default branch to read `{event}` runs from"
+                        )),
                     )
                 }
                 Err(e) => return (rows, Stop::Error(e)),
@@ -509,7 +511,10 @@ fn row_of(
         .flatten()
         .map(|j| job_of(http, opts.repo, j))
         .collect::<Result<Vec<Job>, String>>()?;
-    let (pr, base_sha) = if event == "push" {
+    // A scheduled run's base is the last green one, which replay finds.
+    let (pr, base_sha) = if event == "schedule" {
+        (None, None)
+    } else if event == "push" {
         push_pull_and_base(http, opts, &head_sha, lookups)?
     } else if event == "merge_group" {
         merge_queue_branch(str_of(run, "head_branch"))

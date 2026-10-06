@@ -862,3 +862,112 @@ fn a_default_branch_push_is_judged_by_its_merge_and_a_failure_it_left_out_is_an_
     );
     assert!(text.contains("\n  escape  run 4 attempt 1"), "{text}");
 }
+
+#[test]
+fn a_scheduled_run_counts_a_failure_no_push_since_the_last_green_one_reached_as_an_escape() {
+    let dir = std::env::temp_dir().join(format!("fairlead-replay-sched-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    git(&dir, &["init", "-q", "-b", "main"]);
+    write(&dir, "src/a.ts", "export const a = 1;\n");
+    write(&dir, "src/b.ts", "export const b = 1;\n");
+    write(&dir, "test/a.test.ts", "import { a } from '../src/a';\n");
+    write(&dir, "test/b.test.ts", "import { b } from '../src/b';\n");
+    let base = commit(&dir, "base");
+    let edit = |path: &str, text: &str| {
+        write(&dir, path, text);
+        commit(&dir, path)
+    };
+    let p1 = edit("src/a.ts", "export const a = 2;\n");
+    let p2 = edit("src/b.ts", "export const b = 2;\n");
+    edit("README.md", "# notes\n");
+    let p4 = edit("docs/x.md", "# x\n");
+    let fail_a = " FAIL  test/a.test.ts > a works";
+    let fail_b = " FAIL  test/b.test.ts > b works";
+    let nightly = |run: u64, head: &str, day: u32, job: Job| {
+        let mut r = row(run, 1, run, head, "", day, vec![job]);
+        r.event = "schedule".into();
+        r.pr = None;
+        r.base_sha = None;
+        r
+    };
+    let mut merged = row(20, 1, 42, &p1, "", 10, vec![job("test", "success", &[])]);
+    merged.event = "push".into();
+    merged.base_sha = None;
+    let rows = vec![
+        nightly(1, &base, 9, job("test", "success", &[])),
+        merged,
+        // Only p1 since the green night, and it changed a, not b.
+        nightly(2, &p1, 10, job("test", "failure", &[fail_b])),
+        // Still red, so judged from night 1: p2 changed b.
+        nightly(3, &p2, 11, job("test", "failure", &[fail_b])),
+        nightly(4, &p2, 12, job("test", "success", &[])),
+        nightly(5, &p2, 13, job("test", "failure", &[fail_a])),
+        // p3 and p4 changed only Markdown since night 4.
+        nightly(6, &p4, 14, job("test", "failure", &[fail_a])),
+        // A job no earlier night passed.
+        nightly(7, &p4, 14, job("lint", "failure", &[])),
+    ];
+    let mut config: Config =
+        toml::from_str(&CONFIG.replace("job = \"^test$\"", "job = \"^(test|lint)$\"")).unwrap();
+    config.graph.cache = false;
+    let wt_path =
+        std::env::temp_dir().join(format!("fairlead-replay-sched-wt-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&wt_path);
+    let replayer = Replayer {
+        clone: &dir,
+        worktree: Worktree::open(&dir, &wt_path, &base).unwrap(),
+        config: &config,
+        sources: Sources::new(&config).unwrap(),
+    };
+    let window = Window::ending("2026-09-16", 10).unwrap();
+    let replayed = replay(&replayer, &rows, &window);
+    let outcomes: Vec<(u64, String, String)> = replayed
+        .failures
+        .iter()
+        .map(|f| (f.run_id, format!("{:?}", f.outcome), f.detail.clone()))
+        .collect();
+    let short = |sha: &str| sha[..9].to_string();
+    assert_eq!(
+        outcomes,
+        [
+            (
+                2,
+                "Miss".into(),
+                "push ".to_string() + &short(&p1) + " (PR 42)"
+            ),
+            (3, "Hit".into(), String::new()),
+            (
+                5,
+                "Unconfirmed".into(),
+                "an earlier scheduled run passed it on the same tree".into()
+            ),
+            (
+                6,
+                "Miss".into(),
+                format!("one of 2 pushes in {}..{}", short(&p2), short(&p4))
+            ),
+            (
+                7,
+                "Unavailable".into(),
+                "no earlier scheduled run in the window passed the job".into()
+            ),
+        ],
+        "{:?}",
+        replayed.failures
+    );
+    assert_eq!(replayed.failures[1].changed, ["src/a.ts", "src/b.ts"]);
+    let r = report("example/repo", &window, 30, &replayed);
+    let nights = &r.by_event["schedule"];
+    assert_eq!((nights.hits, nights.misses, nights.unconfirmed), (1, 2, 1));
+    let text = fairlead_replay::report::text(&r);
+    assert!(
+        text.contains("schedule (full runs): hits 1  escapes 2  unconfirmed 1"),
+        "{text}"
+    );
+    assert!(text.contains("\n  escape  run 2 attempt 1"), "{text}");
+    assert!(
+        text.contains(&format!("introduced: push {} (PR 42)", short(&p1))),
+        "{text}"
+    );
+}

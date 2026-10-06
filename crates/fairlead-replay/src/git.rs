@@ -129,6 +129,22 @@ pub fn first_parent(clone: &Path, sha: &str) -> Option<String> {
         .filter(|s| !s.is_empty())
 }
 
+/// The first-parent commits after `base` up to `head`, oldest first: the
+/// pushes the branch took between them.
+pub fn first_parent_range(clone: &Path, base: &str, head: &str) -> Option<Vec<String>> {
+    let out = git_local(
+        clone,
+        &[
+            "rev-list",
+            "--first-parent",
+            "--reverse",
+            &format!("{base}..{head}"),
+        ],
+    )
+    .ok()?;
+    Some(out.lines().map(str::to_string).collect())
+}
+
 pub fn tree_of(clone: &Path, sha: &str) -> Option<String> {
     git_local(clone, &["rev-parse", &format!("{sha}^{{tree}}")]).ok()
 }

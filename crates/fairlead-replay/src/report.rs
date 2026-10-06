@@ -14,7 +14,8 @@ use crate::window::Window;
 pub struct Miss {
     pub run_id: u64,
     pub attempt: u32,
-    /// `push` for a failure on the default branch the merge's plan left out.
+    /// `push` for a failure on the default branch the merge's plan left out,
+    /// `schedule` for one a scheduled full run caught that no push's plan reached.
     pub event: String,
     pub pr: Option<u64>,
     pub head_sha: String,
@@ -22,6 +23,9 @@ pub struct Miss {
     pub changed: Vec<String>,
     /// An owner rule that would have selected it.
     pub fix: String,
+    /// For a scheduled run's escape: the push it came in with, or the range.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub introduced: Option<String>,
 }
 
 /// Recall for the runs of one event, such as `merge_group`.
@@ -105,6 +109,11 @@ pub fn dir_glob(path: &str) -> String {
     }
 }
 
+/// On the default branch, a miss is a failure that got past the plan.
+fn escape(event: &str) -> bool {
+    event == "push" || event == crate::run::SCHEDULE
+}
+
 fn miss(f: &Failure) -> Miss {
     let target = match &f.target {
         Target::Test(p) => p.clone(),
@@ -131,6 +140,8 @@ fn miss(f: &Failure) -> Miss {
         target,
         changed: f.changed.clone(),
         fix,
+        introduced: (f.event == crate::run::SCHEDULE && !f.detail.is_empty())
+            .then(|| f.detail.clone()),
     }
 }
 
@@ -349,11 +360,10 @@ pub fn text(r: &Report) -> String {
         r.flaky, r.unconfirmed, r.unattributed, r.unavailable, r.errors, r.ignored
     );
     for (event, e) in &r.by_event {
-        // On the default branch a miss is a failure that got past the plan.
-        let (label, missed) = if event == "push" {
-            ("push (after merge)", "escapes")
-        } else {
-            (event.as_str(), "misses")
+        let (label, missed) = match event.as_str() {
+            "push" => ("push (after merge)", "escapes"),
+            crate::run::SCHEDULE => ("schedule (full runs)", "escapes"),
+            other => (other, "misses"),
         };
         let _ = writeln!(
             out,
@@ -397,13 +407,16 @@ pub fn text(r: &Report) -> String {
         let _ = writeln!(
             out,
             "\n  {}  run {} attempt {} (PR {})  {}",
-            if m.event == "push" { "escape" } else { "miss" },
+            if escape(&m.event) { "escape" } else { "miss" },
             m.run_id,
             m.attempt,
             m.pr.map_or("-".into(), |p| p.to_string()),
             m.target
         );
         let _ = writeln!(out, "        changed: {}", m.changed.join(", "));
+        if let Some(introduced) = &m.introduced {
+            let _ = writeln!(out, "        introduced: {introduced}");
+        }
         let _ = writeln!(out, "        fix: {}", m.fix);
     }
     out
