@@ -76,7 +76,7 @@ fn a_dry_run_prints_the_skills_and_routes_and_writes_nothing() {
     for want in [
         "skill .claude/skills/api/SKILL.md from .claude/rules/api.md (src/api/**)",
         "How API handlers validate",
-        "skipped .claude/rules/notes.md: no scope",
+        "skill .claude/skills/notes/SKILL.md from .claude/rules/notes.md (always)",
         "# fairlead import rules .claude/rules\n[[skills.routes]]\nskill = \".claude/skills/api/SKILL.md\"\npaths = [\"src/api/**\"]",
         "nothing written",
         "rule files stay where they are",

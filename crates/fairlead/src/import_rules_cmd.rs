@@ -195,7 +195,7 @@ pub fn parse(source: &str, rel: &str, text: &str) -> Result<Rule, String> {
     let (front, body) = lesson::split(text).unwrap_or(("", text));
     let fields = fields(front);
     let get = |k: &str| fields.iter().find(|(key, _)| key == k).map(|(_, v)| v);
-    let always =
+    let mut always =
         matches!(get("alwaysApply"), Some(Value::One(v)) if v.eq_ignore_ascii_case("true"));
     let mut paths: Vec<String> = as_list(get("paths"))
         .into_iter()
@@ -206,8 +206,11 @@ pub fn parse(source: &str, rel: &str, text: &str) -> Result<Rule, String> {
     paths.dedup();
     if always {
         paths.clear();
+    } else if paths.is_empty() && !cursor {
+        // Claude Code loads a rule with no `paths` for every session, so it stays always-on.
+        always = true;
     } else if paths.is_empty() {
-        return Err("no scope: no `paths` or `globs`, and not `alwaysApply`".into());
+        return Err("no scope: no `globs`, and not `alwaysApply`".into());
     }
     for p in &paths {
         Pattern::new(p).map_err(|e| format!("glob `{p}`: {e}"))?;
@@ -497,11 +500,11 @@ mod tests {
     }
 
     #[test]
-    fn a_rule_without_a_scope_is_skipped_with_the_reason() {
-        let none = rule("notes.md", "---\ndescription: Notes\n---\nB.\n").unwrap_err();
-        assert!(none.starts_with("no scope"), "{none}");
-        let bare = rule("plain.md", "Just text.\n").unwrap_err();
-        assert!(bare.starts_with("no scope"), "{bare}");
+    fn a_claude_rule_without_paths_stays_always_and_a_cursor_one_is_skipped() {
+        let none = rule("notes.md", "---\ndescription: Notes\n---\nB.\n").unwrap();
+        assert!(none.always && none.paths.is_empty());
+        let bare = rule("plain.md", "Just text.\n").unwrap();
+        assert!(bare.always);
         let off = rule("off.mdc", "---\nalwaysApply: false\n---\nB.\n").unwrap_err();
         assert!(off.starts_with("no scope"), "{off}");
     }
