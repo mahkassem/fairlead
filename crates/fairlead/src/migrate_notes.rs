@@ -147,6 +147,19 @@ pub const RELEASES: &[(&str, &[Note])] = &[
             applies: always,
         }],
     ),
+    (
+        "0.8.0",
+        &[
+            Note {
+                text: "`hooks install` adds `Skill` to the edit hook's matcher, so loading a skill counts as a use, and a SessionStart hook that runs `fairlead resume --hook`. `migrate --write` brings both to hooks installed before; set `brief.resume = false` first to leave out the SessionStart hook.",
+                applies: has_claude_hooks,
+            },
+            Note {
+                text: "Lessons, skill routes and the AGENTS.md block are new and stay off until a repository adds them. `fairlead import lessons` and `import rules` start from a lessons document and rule files a team already keeps (see Lessons and Skills).",
+                applies: always,
+            },
+        ],
+    ),
 ];
 
 /// Config tables and keys by the release that added them. The top-level

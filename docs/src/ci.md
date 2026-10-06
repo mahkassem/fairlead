@@ -16,7 +16,7 @@ jobs:
           fetch-depth: 0                                    # history for the merge base
           persist-credentials: false
       - id: plan
-        uses: mahkassem/fairlead@v0.7.1
+        uses: mahkassem/fairlead@v0.8.0
         with:
           command: >-
             ci plan --format github

@@ -62,7 +62,9 @@ of trying things like a stranger.
 - **The right skills for the code in front of it.** A frontend change
   shouldn't come with database advice. Fairlead picks the skills that apply to
   what a change reaches, just as it picks tests, and checks the agent used them.
-  *Coming in K4* ([#43](https://github.com/mahkassem/fairlead/issues/43)).
+  *Since 0.8.0:* `[[skills.routes]]` scopes each skill, the brief lists the
+  ones a change reaches, `skills sync` writes them where each agent loads
+  them, and `skills report` measures whether the agent used them.
 - **Measured, not guessed.** Good and bad are numbers: whether the plan would
   have caught real CI failures, rework, escaped defects, tokens and cost.
   *Since 0.2.0:* `fairlead replay` re-plans real failures from a repository's
@@ -114,7 +116,7 @@ selected test classes.
 
 ## What it does
 
-This README documents Fairlead 0.7.1. Each command, by what it's for:
+This README documents Fairlead 0.8.0. Each command, by what it's for:
 
 - **The test plan:** `plan`, `test --explain`, the import graph (`graph`) and
   coverage maps (`coverage import`).
@@ -151,8 +153,12 @@ The [quick start](#quick-start) shows the first few, and the
 
 ## Status
 
-Pre-alpha. The latest release, v0.7.1, lets a runner say what "everything"
-means (`all_command`) and keeps a run of everything whole around a held test
+Pre-alpha. The latest release, v0.8.0, adds memory and skills: lessons in
+`.fairlead/lessons/` written by `fairlead learn` or imported from a document a
+team already keeps, skills routed by what a change reaches, `fairlead find`,
+`fairlead context` and `resume`, and a block in AGENTS.md and CLAUDE.md that
+`agents sync` keeps current. v0.7.1 let a runner say what "everything" means
+(`all_command`) and kept a run of everything whole around a held test
 (`exclude_arg`). v0.7.0 brought the hooks to Codex and Gemini
 CLI, reads Java and Kotlin in the graph and Maven and Gradle in replay, and
 adds `fairlead init` for a first config, `fairlead migrate` for an upgrade, and
