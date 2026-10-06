@@ -13,6 +13,7 @@ mod graph_cmd;
 mod guard_cmd;
 mod hook_cmd;
 mod hooks_cmd;
+mod import_rules_cmd;
 mod init_cmd;
 mod knowledge;
 mod lessons_cmd;
@@ -21,6 +22,7 @@ mod migrate_notes;
 mod plan_cmd;
 mod receipt_cmd;
 mod replay_cmd;
+mod skills_eval_cmd;
 mod step;
 
 use std::path::{Path, PathBuf};
@@ -142,6 +144,16 @@ enum Command {
     Migrate {
         #[command(flatten)]
         args: migrate_cmd::MigrateArgs,
+    },
+    /// Bring in what a team already has: rule files as skills and routes.
+    Import {
+        #[command(subcommand)]
+        action: import_rules_cmd::ImportAction,
+    },
+    /// Measure skill routing on the repository's history.
+    Skills {
+        #[command(subcommand)]
+        action: skills_eval_cmd::SkillsAction,
     },
     /// Install, check or remove the Claude Code and git hooks that run the guard, the brief nudge and the Stop hook.
     Hooks {
@@ -441,6 +453,8 @@ fn main() -> ExitCode {
         Some(Command::Learn { args }) => lessons_cmd::learn(args, &cwd()),
         Some(Command::Lessons { action }) => lessons_cmd::run(action, &cwd()),
         Some(Command::Hooks { action }) => hooks_cmd::run(action, &cwd()),
+        Some(Command::Import { action }) => import_rules_cmd::run(action, &cwd()),
+        Some(Command::Skills { action }) => skills_eval_cmd::run(action, &cwd()),
         Some(Command::Migrate { args }) => migrate_cmd::run(args, &cwd()),
         Some(Command::Done { args }) => done_cmd::run(args, &cwd()),
         Some(Command::Brief { args }) => brief_cmd::run(args, &cwd()),
