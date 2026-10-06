@@ -267,7 +267,8 @@ fn offered_draft_rule() -> String {
         env!("CARGO_MANIFEST_DIR"),
         "/../../docs/src/guard.md"
     ))
-    .unwrap();
+    .unwrap()
+    .replace("\r\n", "\n");
     page.split("```toml\n")
         .filter_map(|b| b.split("```").next())
         .find(|b| b.contains("unless ="))
