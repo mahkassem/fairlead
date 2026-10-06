@@ -255,6 +255,11 @@ pub fn plan(scan: &mut Scan, config: &Config, input: Input) -> Result<Plan, Stri
         input.base.as_deref(),
         &input.changes,
     );
+    // Running everything on request is another plan of the same changes.
+    let plan_id = match &input.everything {
+        Some(why) => crate::digest::with_stage(&plan_id, why),
+        None => plan_id,
+    };
     Ok(Plan {
         version: VERSION,
         plan_id,

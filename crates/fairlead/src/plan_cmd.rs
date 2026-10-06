@@ -16,7 +16,7 @@ pub struct Changes {
     /// The branch or commit to compare with; its merge base with HEAD is used.
     /// Defaults to the remote's default branch.
     #[arg(long)]
-    base: Option<String>,
+    pub base: Option<String>,
     /// Plan for these paths instead of asking git.
     #[arg(long, num_args = 1..)]
     files: Vec<String>,
