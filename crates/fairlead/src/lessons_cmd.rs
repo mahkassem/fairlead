@@ -58,7 +58,7 @@ pub enum LessonsAction {
     Check,
 }
 
-fn memory_at(cwd: &Path) -> Result<(std::path::PathBuf, Memory), String> {
+pub(crate) fn memory_at(cwd: &Path) -> Result<(std::path::PathBuf, Memory), String> {
     let loaded = fairlead_core::config::load(cwd, &LoadOptions::from_process(Vec::new()))
         .map_err(|e| e.to_string())?;
     let root = if loaded.files.is_empty() {
