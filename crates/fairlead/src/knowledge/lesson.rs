@@ -34,6 +34,10 @@ pub struct Front {
     pub modules: Vec<String>,
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub always: bool,
+    /// Offered only when `fairlead find` matches it, never by a brief: for a
+    /// lesson that names no code, such as one imported from a document.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub search: bool,
     pub added: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub review_by: Option<String>,
@@ -135,8 +139,9 @@ pub fn check(front: &Front, body: &str, memory: &Memory) -> Vec<String> {
     if front.title.trim().is_empty() || front.title.contains('\n') {
         problems.push("`title` must be one line".into());
     }
-    if front.paths.is_empty() && front.modules.is_empty() && !front.always {
-        problems.push("a scope is needed: `paths`, `modules` or `always: true`".into());
+    if front.paths.is_empty() && front.modules.is_empty() && !front.always && !front.search {
+        problems
+            .push("a scope is needed: `paths`, `modules`, `always: true` or `search: true`".into());
     }
     for p in &front.paths {
         if let Err(e) = Pattern::new(p) {
@@ -265,6 +270,9 @@ pub fn render(front: &Front, body: &str) -> String {
     }
     if front.always {
         out.push_str("always: true\n");
+    }
+    if front.search {
+        out.push_str("search: true\n");
     }
     out.push_str(&format!("added: {}\n", front.added));
     if let Some(r) = &front.review_by {

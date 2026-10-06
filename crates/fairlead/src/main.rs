@@ -13,6 +13,7 @@ mod graph_cmd;
 mod guard_cmd;
 mod hook_cmd;
 mod hooks_cmd;
+mod import_cmd;
 mod init_cmd;
 mod knowledge;
 mod lessons_cmd;
@@ -136,6 +137,11 @@ enum Command {
     Lessons {
         #[command(subcommand)]
         action: lessons_cmd::LessonsAction,
+    },
+    /// Bring in what a team already keeps, such as a lessons document.
+    Import {
+        #[command(subcommand)]
+        action: import_cmd::ImportAction,
     },
     /// Bring the hooks, the config's version floor and the version pins to
     /// this release, and list what changed since that needs a person.
@@ -440,6 +446,7 @@ fn main() -> ExitCode {
         Some(Command::Guard { action, sets }) => guard_cmd::run(action, sets, &cwd()),
         Some(Command::Learn { args }) => lessons_cmd::learn(args, &cwd()),
         Some(Command::Lessons { action }) => lessons_cmd::run(action, &cwd()),
+        Some(Command::Import { action }) => import_cmd::run(action, &cwd()),
         Some(Command::Hooks { action }) => hooks_cmd::run(action, &cwd()),
         Some(Command::Migrate { args }) => migrate_cmd::run(args, &cwd()),
         Some(Command::Done { args }) => done_cmd::run(args, &cwd()),
