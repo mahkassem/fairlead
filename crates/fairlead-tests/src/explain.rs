@@ -4,22 +4,73 @@ use std::collections::{HashMap, VecDeque};
 
 use fairlead_core::config::{Config, TestClass};
 use fairlead_core::plan::{Plan, Reason};
-use fairlead_lang::Scan;
+use fairlead_lang::resolve::package_name;
+use fairlead_lang::{EdgeKind, Graph, Scan};
 
 use crate::modules::Modules;
 use crate::quarantine::{status, Here, Status};
 use crate::render;
 use crate::testfiles::discover;
+use crate::walk::is_local;
 
-fn chain(reason: &Reason) -> String {
+fn chain(reason: &Reason, graph: &Graph) -> String {
     match reason {
         Reason::Import { chain } => {
             let mut lines = vec![chain[0].clone()];
-            lines.extend(chain[1..].iter().map(|f| format!("  -> {f}")));
+            lines.extend(
+                chain
+                    .windows(2)
+                    .map(|pair| match hop(graph, &pair[0], &pair[1]) {
+                        Some(why) => format!("  -> {}  ({why})", pair[1]),
+                        None => format!("  -> {}", pair[1]),
+                    }),
+            );
             lines.join("\n")
         }
         other => render::reason(other),
     }
+}
+
+/// Why `to` depends on `from` when it isn't a plain import, so a hop the
+/// walk adds conservatively doesn't read like one.
+fn hop(graph: &Graph, from: &str, to: &str) -> Option<String> {
+    let (f, t) = (graph.id(from)?, graph.id(to)?);
+    match graph.importers(f).into_iter().find(|(i, _)| *i == t) {
+        Some((_, Some(EdgeKind::Import))) => None,
+        Some((_, Some(kind))) => Some(kind.label().to_string()),
+        Some((_, None)) => {
+            let package = graph.package_name_of(f)?;
+            let spec = graph
+                .unresolved
+                .iter()
+                .find(|(file, s)| *file == t && package_name(s) == Some(package));
+            Some(match spec {
+                Some((_, s)) => {
+                    format!("unresolved import `{s}`, kept as a dependency on package {package}")
+                }
+                None => format!("depends on package {package}"),
+            })
+        }
+        None => whole_module(graph, t),
+    }
+}
+
+/// Why a file depends on every file in its module, if it does.
+fn whole_module(graph: &Graph, id: u32) -> Option<String> {
+    let why = if let Some((_, s)) = graph
+        .unresolved
+        .iter()
+        .find(|(file, s)| *file == id && is_local(s))
+    {
+        format!("unresolved import `{s}`")
+    } else if graph.unknown.contains(&id) {
+        "a dynamic import with no literal path".to_string()
+    } else if graph.tsconfig_fallbacks.contains(&id) {
+        "its tsconfig couldn't be applied".to_string()
+    } else {
+        return None;
+    };
+    Some(format!("{why}, so it depends on its whole module"))
 }
 
 /// Every file `id` depends on, directly or not, with the file each was
@@ -90,7 +141,7 @@ fn selection(plan: &Plan, scan: &Scan, config: &Config, target: &str) -> Result<
         return Ok(format!(
             "{target} is selected ({}):\n{}",
             class_name(test.class),
-            chain(&test.reason)
+            chain(&test.reason, &scan.graph)
         ));
     }
     if let Some(check) = plan.checks.iter().find(|c| c.id == target) {

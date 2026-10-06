@@ -29,6 +29,25 @@ pub enum EdgeKind {
     Rule,
 }
 
+impl EdgeKind {
+    /// How a reader names the edge: in `graph why` and `test --explain`.
+    pub fn label(self) -> &'static str {
+        match self {
+            EdgeKind::Import => "import",
+            EdgeKind::TypeImport => "type import",
+            EdgeKind::Dynamic => "dynamic import",
+            EdgeKind::Require => "require",
+            EdgeKind::Mock => "mock",
+            EdgeKind::PathLiteral => "path literal",
+            EdgeKind::Snapshot => "snapshot",
+            EdgeKind::Provider => "provider",
+            EdgeKind::Coverage => "coverage",
+            EdgeKind::Manifest => "manifest",
+            EdgeKind::Rule => "[[graph.edges]] rule",
+        }
+    }
+}
+
 impl From<SpecKind> for EdgeKind {
     fn from(kind: SpecKind) -> Self {
         match kind {
@@ -156,6 +175,12 @@ impl Graph {
     pub fn add_edge_unchecked(&mut self, from: u32, to: u32, kind: EdgeKind) {
         self.deps[from as usize].push((to, kind));
         self.rdeps[to as usize].push((from, kind));
+    }
+
+    /// The workspace package a file sits in.
+    pub fn package_name_of(&self, id: u32) -> Option<&str> {
+        let p = self.package_of.get(id as usize).copied().flatten()?;
+        Some(self.packages[p as usize].as_str())
     }
 
     pub fn is_barrier(&self, id: u32) -> bool {

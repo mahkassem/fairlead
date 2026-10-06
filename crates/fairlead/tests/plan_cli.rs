@@ -123,6 +123,51 @@ fn explain_gives_the_chain_for_a_selected_test_and_the_gap_for_another() {
 }
 
 #[test]
+fn explain_names_each_hop_that_isnt_a_plain_import() {
+    let dir = project("explain-hops");
+    write(
+        &dir,
+        "src/api.ts",
+        "import { g } from './gen/missing';\nexport const api = g;\n",
+    );
+    write(
+        &dir,
+        "src/types.ts",
+        "import type { api } from './api';\nexport type T = typeof api;\n",
+    );
+    write(
+        &dir,
+        "test/pricing.test.ts",
+        "import type { T } from '../src/types';\nimport { b } from '../src/b';\n",
+    );
+    git(&dir, &["add", "-A"]);
+    git(&dir, &["commit", "-q", "-m", "api"]);
+    write(&dir, "src/a.ts", "export const a = 4;\n");
+    let out = fairlead_in(
+        &dir,
+        &[
+            "test",
+            "--base",
+            "main",
+            "--explain",
+            "test/pricing.test.ts",
+        ],
+    );
+    let out = String::from_utf8_lossy(&out.stdout).to_string();
+    assert!(
+        out.contains(
+            "-> src/api.ts  (unresolved import `./gen/missing`, so it depends on its whole module)"
+        ),
+        "{out}"
+    );
+    assert!(out.contains("-> src/types.ts  (type import)"), "{out}");
+    assert!(
+        out.contains("-> test/pricing.test.ts  (type import)"),
+        "{out}"
+    );
+}
+
+#[test]
 fn explicit_files_plan_without_git() {
     let dir = project("files");
     let out = fairlead_in(&dir.join("src"), &["plan", "--files", "b.ts", "--json"]);
