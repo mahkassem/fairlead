@@ -90,6 +90,17 @@ fn difference(
     if !dropped.is_empty() {
         parts.push(format!("drops {}", dropped.join(" and ")));
     }
+    // A hook in both whose matcher changed, such as the nudge learning a tool.
+    for w in want {
+        if let Some(h) = had.iter().find(|h| name(h) == name(w) && h.1 != w.1) {
+            parts.push(format!(
+                "{} matches `{}` instead of `{}`",
+                name(w),
+                w.1,
+                h.1
+            ));
+        }
+    }
     if parts.is_empty() {
         parts.push("updates the hooks' commands".into());
     }

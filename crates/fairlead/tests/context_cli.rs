@@ -366,12 +366,22 @@ fn hooks_install_status_and_uninstall_include_and_remove_session_start() {
         .as_object_mut()
         .unwrap()
         .remove("SessionStart");
+    older["hooks"]["PostToolUse"][0]["matcher"] = json!("Edit|Write|MultiEdit");
     write(&dir, ".claude/settings.json", &older.to_string());
     let (_, out) = fairlead(&dir, &["migrate"]);
     assert!(out.contains("adds the session resume"), "{out}");
+    assert!(
+        out.contains("the brief nudge matches `Edit|Write|MultiEdit|Skill` instead of `Edit|Write|MultiEdit`"),
+        "{out}"
+    );
     let (code, out) = fairlead(&dir, &["migrate", "--write"]);
     assert_eq!(code, 0, "{out}");
-    assert!(settings(&dir)["hooks"]["SessionStart"].is_array());
+    let upgraded = settings(&dir);
+    assert!(upgraded["hooks"]["SessionStart"].is_array());
+    assert_eq!(
+        upgraded["hooks"]["PostToolUse"][0]["matcher"],
+        "Edit|Write|MultiEdit|Skill"
+    );
 
     let (code, out) = fairlead(&dir, &["hooks", "uninstall"]);
     assert_eq!(code, 0, "{out}");
