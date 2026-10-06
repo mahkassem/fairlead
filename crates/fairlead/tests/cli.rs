@@ -340,3 +340,20 @@ fn replay_run_prints_progress_on_stderr_and_the_same_report_with_or_without_it()
         "the JSON report doesn't change"
     );
 }
+
+#[cfg(unix)]
+#[test]
+fn a_reader_that_stops_early_ends_the_run_quietly_with_the_sigpipe_status() {
+    use std::process::Stdio;
+    let mut child = Command::new(env!("CARGO_BIN_EXE_fairlead"))
+        .args(["config", "schema"])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    drop(child.stdout.take());
+    let out = child.wait_with_output().unwrap();
+    let err = String::from_utf8_lossy(&out.stderr);
+    assert!(!err.contains("panicked"), "{err}");
+    assert_eq!(out.status.code(), Some(141), "{err}");
+}

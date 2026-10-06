@@ -478,7 +478,30 @@ fn fail(e: &ConfigError) -> ExitCode {
     ExitCode::FAILURE
 }
 
+/// A reader that stops early, such as `head`, closes the pipe under a
+/// print, and with SIGPIPE ignored the print panics. End the way a process
+/// killed by SIGPIPE does instead: quietly, with 141, never 0, so a gate cut
+/// short isn't read as a pass. Every other panic keeps the default report.
+#[cfg(unix)]
+fn end_quietly_on_a_closed_pipe() {
+    let report = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        let payload = info.payload();
+        let message = payload
+            .downcast_ref::<String>()
+            .map(String::as_str)
+            .or_else(|| payload.downcast_ref::<&str>().copied())
+            .unwrap_or("");
+        if message.starts_with("failed printing to std") && message.ends_with("(os error 32)") {
+            std::process::exit(141);
+        }
+        report(info);
+    }));
+}
+
 fn main() -> ExitCode {
+    #[cfg(unix)]
+    end_quietly_on_a_closed_pipe();
     let cli = Cli::parse();
     if let Some(name) = &cli.environment {
         // Set before any thread starts, so every config load sees it.
