@@ -232,7 +232,7 @@ fn build(
         }
         let paths = doc::paths(&section.heading, &section.body, known);
         if paths.is_empty() {
-            notes.push("no path in the text; offered for every change".into());
+            notes.push("no path in the text; found only by search".into());
         }
         let full = format!("{source}#{}", section.anchor);
         let mut evidence = vec![full.clone()];
@@ -249,10 +249,13 @@ fn build(
         let front = Front {
             id,
             title: doc::title(&section.heading, &section.body),
-            always: paths.is_empty(),
+            always: false,
+            search: paths.is_empty(),
             paths,
             modules: Vec::new(),
-            review_by: lesson::add_days(&added, i64::from(memory.review_days)),
+            // No review date: one from the import day would differ on every
+            // re-import, and one from blame would make an old document due at once.
+            review_by: None,
             added,
             evidence,
             check: None,
@@ -320,7 +323,7 @@ fn reason_kind(reasons: &[String]) -> &'static str {
 }
 
 fn summary(import: &Import) -> String {
-    let with_paths = import.made.iter().filter(|m| !m.front.always).count();
+    let with_paths = import.made.iter().filter(|m| !m.front.search).count();
     let mut kinds: Vec<&str> = Vec::new();
     for s in &import.skipped {
         let k = reason_kind(&s.reasons);
@@ -334,7 +337,7 @@ fn summary(import: &Import) -> String {
         format!(" ({})", kinds.join(", "))
     };
     format!(
-        "import: {}: {} headings → {} lessons, {with_paths} with paths, {} always, {} skipped{why}",
+        "import: {}: {} headings → {} lessons, {with_paths} with paths, {} found only by search, {} skipped{why}",
         import.source,
         import.headings,
         import.made.len(),
@@ -358,8 +361,8 @@ fn print_text(import: &Import, write: bool, memory: &Memory) {
         );
     }
     for m in &import.made {
-        let scope = if m.front.always {
-            "always".to_string()
+        let scope = if m.front.search {
+            "search".to_string()
         } else {
             m.front.paths.join(", ")
         };
@@ -482,7 +485,7 @@ mod tests {
         assert_eq!(import.skipped.len(), 1);
         assert_eq!(import.made.len() + import.skipped.len(), import.headings);
         assert!(summary(&import).contains(
-            "4 headings → 3 lessons, 0 with paths, 3 always, 1 skipped (no text under the heading)"
+            "4 headings → 3 lessons, 0 with paths, 3 found only by search, 1 skipped (no text under the heading)"
         ));
     }
 

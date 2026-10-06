@@ -32,7 +32,7 @@ confirmed_by: "a-reviewer"
 A decision that costs money happens at the final stage, and nowhere else.
 ```
 
-- **Scope:** `paths` (globs), `modules` (module names), or `always: true`. At least one is needed.
+- **Scope:** `paths` (globs), `modules` (module names), `always: true`, or `search: true` for a lesson that names no code: `fairlead find` turns it up, and no brief offers it. At least one is needed.
 - **Evidence:** at least one link to where it was learned: a pull request, a CI run, a review.
 - **Source:** where it came from. Something learned has to be confirmed or seen to fail:
   - `person`: a person confirmed it, and `confirmed_by` names them;
@@ -73,9 +73,9 @@ fairlead import lessons docs/LESSONS.md --json   # the lessons it would write, a
 
 - **id:** the heading as a slug. A heading used twice gets `-2`, `-3`, and the dry run says so.
 - **title:** the heading, unless the heading only names the lesson, such as a code (`AB12`) or a slug (`keep-diffs-small`). Then the title is the first sentence under it, at most 100 characters, and the heading stays the id.
-- **paths:** each backticked path in the heading or its text that names a file or directory in the repository. A directory becomes `dir/**`, and a backticked glob counts when it matches a file. A path that doesn't exist, or text in a fenced code block, doesn't count. With no path, the lesson is `always: true`, and the dry run flags it: "no path in the text; offered for every change".
+- **paths:** each backticked path in the heading or its text that names a file or directory in the repository. A directory becomes `dir/**`, and a backticked glob counts when it matches a file. A path that doesn't exist, or text in a fenced code block, doesn't count. With no path, the lesson is `search: true`: `fairlead find` turns it up, but no brief offers it, since a document whose lessons name no code would otherwise put the same few in every brief. The dry run flags each one: "no path in the text; found only by search". Give it `paths` to have briefs offer it.
 - **evidence:** the document itself at the heading's anchor, such as `docs/LESSONS.md#ab12`, so it's never empty, then every link in the text.
-- **added:** the date `git blame` gives the heading's line, in UTC, or today when the document isn't committed. `review_by` is that plus `memory.review_days`, so a lesson from an old document can be due for review the day it's imported.
+- **added:** the date `git blame` gives the heading's line, in UTC, or today when the document isn't committed. An imported lesson has no `review_by`, so it's never due until a person reviews it and sets one. A date from the import day would change on every re-import, and one from blame would make an old document due all at once.
 - **source:** `imported`.
 - **The body:** the text under the heading. Longer than `memory.max_lines`, it keeps the first lines and ends with `Full text: docs/LESSONS.md#ab12`, still within the cap.
 

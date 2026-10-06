@@ -117,7 +117,7 @@ fn a_lessons_document_becomes_one_lesson_per_heading_and_reimports_unchanged() {
     let (code, out) = fairlead(&dir, &["import", "lessons", "docs/LESSONS.md"]);
     assert_eq!(code, 1, "a skipped heading exits 1: {out}");
     assert!(
-        out.contains("import: docs/LESSONS.md: 8 headings → 7 lessons, 4 with paths, 3 always, 1 skipped (a secret or personal data)"),
+        out.contains("import: docs/LESSONS.md: 8 headings → 7 lessons, 4 with paths, 3 found only by search, 1 skipped (a secret or personal data)"),
         "{out}"
     );
     assert!(
@@ -133,7 +133,7 @@ fn a_lessons_document_becomes_one_lesson_per_heading_and_reimports_unchanged() {
         "{out}"
     );
     assert!(
-        out.contains("house-style-2  [always]  House style"),
+        out.contains("house-style-2  [search]  House style"),
         "{out}"
     );
     assert!(
@@ -141,11 +141,11 @@ fn a_lessons_document_becomes_one_lesson_per_heading_and_reimports_unchanged() {
         "{out}"
     );
     assert!(
-        out.contains("keep-diffs-small  [always]  Small diffs are reviewed well."),
+        out.contains("keep-diffs-small  [search]  Small diffs are reviewed well."),
         "{out}"
     );
     assert!(
-        out.contains("no path in the text; offered for every change"),
+        out.contains("no path in the text; found only by search"),
         "{out}"
     );
     assert!(
@@ -182,7 +182,7 @@ fn a_lessons_document_becomes_one_lesson_per_heading_and_reimports_unchanged() {
     );
     let ab12 = &files[0].1;
     assert!(
-        ab12.starts_with("---\nid: ab12\ntitle: \"Totals are computed once, at the end.\"\npaths: [\"src/a.ts\"]\nadded: 2026-01-15\nreview_by: 2026-04-15\nevidence: [\"docs/LESSONS.md#ab12\", \"https://example.com/pr/12\"]\nsource: imported\n---\n"),
+        ab12.starts_with("---\nid: ab12\ntitle: \"Totals are computed once, at the end.\"\npaths: [\"src/a.ts\"]\nadded: 2026-01-15\nevidence: [\"docs/LESSONS.md#ab12\", \"https://example.com/pr/12\"]\nsource: imported\n---\n"),
         "{ab12}"
     );
     let long = &files[5].1;

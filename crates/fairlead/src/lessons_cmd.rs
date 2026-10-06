@@ -26,6 +26,9 @@ pub struct LearnArgs {
     /// Offer it for every change.
     #[arg(long)]
     always: bool,
+    /// Offer it only when `fairlead find` matches it, for a lesson that names no code.
+    #[arg(long)]
+    search: bool,
     /// A link to where it was learned: a pull request, a CI run, a review; repeat for more.
     #[arg(long = "evidence", value_name = "LINK", required = true)]
     evidence: Vec<String>,
@@ -99,6 +102,7 @@ fn learn_inner(args: LearnArgs, cwd: &Path) -> Result<(), String> {
         paths: args.paths,
         modules: args.modules,
         always: args.always,
+        search: args.search,
         review_by: lesson::add_days(&added, i64::from(memory.review_days)),
         added,
         evidence: args.evidence,
@@ -221,6 +225,9 @@ fn scope_text(f: &Front) -> String {
     parts.extend(f.modules.iter().map(|m| format!("module {m}")));
     if f.always {
         parts.push("always".into());
+    }
+    if f.search {
+        parts.push("search only".into());
     }
     parts.join(", ")
 }
