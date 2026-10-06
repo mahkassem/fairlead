@@ -103,6 +103,32 @@ pub fn head(root: &Path) -> Option<String> {
         .map(|s| s.trim().to_string())
 }
 
+/// The branch HEAD is on, or `None` when it's detached.
+pub fn branch(root: &Path) -> Option<String> {
+    git(root, &["symbolic-ref", "--short", "-q", "HEAD"])
+        .ok()
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+}
+
+/// The last `n` commits that touched `path`, as `hash date subject`.
+pub fn recent_commits(root: &Path, path: &str, n: usize) -> Vec<String> {
+    let count = format!("-{n}");
+    git(
+        root,
+        &[
+            "log",
+            &count,
+            "--format=%h %ad %s",
+            "--date=short",
+            "--",
+            path,
+        ],
+    )
+    .map(|out| out.lines().map(str::to_string).collect())
+    .unwrap_or_default()
+}
+
 /// Whether a boolean git setting is true for the repository, as git reads it.
 pub fn config_true(root: &Path, key: &str) -> bool {
     git(root, &["config", "--get", key]).is_ok_and(|v| {

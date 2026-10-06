@@ -7,6 +7,7 @@ mod brief_cmd;
 mod ci_cmd;
 mod ci_judge;
 mod ci_report;
+mod context_cmd;
 mod coverage_cmd;
 mod done_cmd;
 mod graph_cmd;
@@ -21,6 +22,7 @@ mod migrate_notes;
 mod plan_cmd;
 mod receipt_cmd;
 mod replay_cmd;
+mod resume_cmd;
 mod step;
 
 use std::path::{Path, PathBuf};
@@ -115,6 +117,19 @@ enum Command {
         #[command(flatten)]
         args: brief_cmd::BriefArgs,
     },
+    /// The brief, then what to read before the edit: the lessons' bodies,
+    /// the skills to load, the nearest README and the commits that last
+    /// touched each file.
+    Context {
+        #[command(flatten)]
+        args: context_cmd::ContextArgs,
+    },
+    /// For a new session: the last brief on this branch, what changed since,
+    /// the done gate, `next` and the lessons the branch added.
+    Resume {
+        #[command(flatten)]
+        args: resume_cmd::ResumeArgs,
+    },
     /// After a change: what changed against the session's brief, the tests
     /// files outside it add, and the done gate for the tree as it is.
     Receipt {
@@ -143,7 +158,7 @@ enum Command {
         #[command(flatten)]
         args: migrate_cmd::MigrateArgs,
     },
-    /// Install, check or remove the Claude Code and git hooks that run the guard, the brief nudge and the Stop hook.
+    /// Install, check or remove the Claude Code and git hooks that run the guard, the brief nudge, the Stop hook and `resume` at a session's start.
     Hooks {
         #[command(subcommand)]
         action: hooks_cmd::HooksAction,
@@ -444,6 +459,8 @@ fn main() -> ExitCode {
         Some(Command::Migrate { args }) => migrate_cmd::run(args, &cwd()),
         Some(Command::Done { args }) => done_cmd::run(args, &cwd()),
         Some(Command::Brief { args }) => brief_cmd::run(args, &cwd()),
+        Some(Command::Context { args }) => context_cmd::run(args, &cwd()),
+        Some(Command::Resume { args }) => resume_cmd::run(args, &cwd()),
         Some(Command::Receipt { args }) => receipt_cmd::run(args, &cwd()),
         Some(Command::Next { args }) => receipt_cmd::run_next(args, &cwd()),
         Some(Command::Plan {

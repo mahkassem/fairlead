@@ -55,6 +55,9 @@ pub struct Brief {
     /// The commit the change is measured from, when git has one.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub base: Option<String>,
+    /// The branch HEAD was on, so `resume` can find the brief from a new session.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub branch: Option<String>,
     pub paths: Vec<String>,
     /// Named paths that aren't in the tree yet.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -127,15 +130,39 @@ pub fn run(args: BriefArgs, cwd: &Path) -> ExitCode {
 }
 
 fn brief(args: &BriefArgs, cwd: &Path) -> Result<(), String> {
+    let (made, _) = build(
+        cwd,
+        &args.paths,
+        args.base.as_deref(),
+        args.session.clone(),
+        &args.sets,
+    )?;
+    if args.json {
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&made).expect("brief serializes")
+        );
+    } else {
+        print!("{}", text(&made, args.all));
+    }
+    Ok(())
+}
+
+/// The brief for `paths`, kept in the session's store and offered as an
+/// event, with the plan it was made from: what `brief` and `context` share.
+pub fn build(
+    cwd: &Path,
+    named: &[String],
+    base_arg: Option<&str>,
+    session: Option<String>,
+    sets: &[String],
+) -> Result<(Brief, Planned), String> {
     let root = crate::graph_cmd::repo_root(cwd);
-    let session = args
-        .session
-        .clone()
-        .or_else(|| std::env::var(SESSION_ENV).ok());
+    let session = session.or_else(|| std::env::var(SESSION_ENV).ok());
     let store = Store::open(&root);
-    let base = base(&root, args.base.as_deref());
-    let mut paths = args.paths.clone();
-    let loaded = fairlead_core::config::load(cwd, &LoadOptions::from_process(args.sets.clone()))
+    let base = base(&root, base_arg);
+    let mut paths = named.to_vec();
+    let loaded = fairlead_core::config::load(cwd, &LoadOptions::from_process(sets.to_vec()))
         .map_err(|e| e.to_string())?;
     let per = loaded.config.brief.per;
     let earlier = match (&store, per) {
@@ -154,7 +181,7 @@ fn brief(args: &BriefArgs, cwd: &Path) -> Result<(), String> {
                 .map(|p| root.join(p).display().to_string()),
         );
     }
-    let planned = make(cwd, &Changes::new(None, paths, args.sets.clone()))?;
+    let planned = make(cwd, &Changes::new(None, paths, sets.to_vec()))?;
     let now = timestamp(SystemTime::now());
     let id = match (&earlier, per) {
         (Some(b), _) => b.id.clone(),
@@ -166,20 +193,13 @@ fn brief(args: &BriefArgs, cwd: &Path) -> Result<(), String> {
     let created = earlier
         .as_ref()
         .map_or(now.clone(), |b| b.created_at.clone());
-    let made = assemble(&planned, &root, id, session, base, created, now)?;
+    let mut made = assemble(&planned, &root, id, session, base, created, now)?;
+    made.branch = git::branch(&root);
     if let Some(store) = &store {
         store.save(&made)?;
     }
     offer(&root, &made);
-    if args.json {
-        println!(
-            "{}",
-            serde_json::to_string_pretty(&made).expect("brief serializes")
-        );
-    } else {
-        print!("{}", text(&made, args.all));
-    }
-    Ok(())
+    Ok((made, planned))
 }
 
 /// One `offer` event naming what the brief offered, for the hit rate:
@@ -210,7 +230,7 @@ fn offer(root: &Path, brief: &Brief) {
 }
 
 /// The merge base with `base`, or with the default branch.
-fn base(root: &Path, base: Option<&str>) -> Option<String> {
+pub fn base(root: &Path, base: Option<&str>) -> Option<String> {
     let base = match base {
         Some(b) => b.to_string(),
         None => git::default_base(root).ok()?,
@@ -276,6 +296,7 @@ fn assemble(
         created_at,
         updated_at,
         base,
+        branch: None,
         paths,
         new,
         plan_id: plan.plan_id.clone(),
@@ -507,6 +528,21 @@ impl Store {
             .filter_map(|e| std::fs::read_to_string(e.path()).ok())
             .filter_map(|t| serde_json::from_str::<Brief>(&t).ok())
             .filter(|b| b.session.as_deref() == session)
+            .max_by(|a, b| a.updated_at.cmp(&b.updated_at))
+    }
+
+    /// The newest brief of any session made on `branch`; a brief that
+    /// recorded no branch counts when it has the same base.
+    pub fn newest_on(&self, branch: Option<&str>, base: Option<&str>) -> Option<Brief> {
+        std::fs::read_dir(&self.dir)
+            .ok()?
+            .filter_map(Result::ok)
+            .filter_map(|e| std::fs::read_to_string(e.path()).ok())
+            .filter_map(|t| serde_json::from_str::<Brief>(&t).ok())
+            .filter(|b| match &b.branch {
+                Some(recorded) => Some(recorded.as_str()) == branch,
+                None => b.base.is_some() && b.base.as_deref() == base,
+            })
             .max_by(|a, b| a.updated_at.cmp(&b.updated_at))
     }
 }

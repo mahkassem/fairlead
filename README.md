@@ -122,8 +122,10 @@ This README documents Fairlead 0.7.1. Each command, by what it's for:
   `ci report` and the GitHub Action.
 - **Rules as the agent works:** `guard check`, the hooks `hooks install` adds,
   and `doctor`.
-- **The change loop:** `brief` before an edit, `done` before it's finished,
-  then `receipt` and `next`.
+- **The change loop:** `brief` before an edit, or `context` for the brief with
+  the lessons, skills, README and history to read; `done` before it's
+  finished, then `receipt` and `next`; `resume` picks up where the last
+  session on a branch stopped.
 - **Project memory:** `learn` writes a lesson, and `lessons` lists, reviews and
   checks them; the brief offers the ones a change reaches, and the skills
   `[[skills.routes]]` scope to it.

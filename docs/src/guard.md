@@ -189,13 +189,14 @@ fairlead hooks uninstall       # take them out again
 fairlead doctor                # the hooks, the binary on the PATH, and what the event log recorded
 ```
 
-`hooks install` adds three Claude Code hooks:
+`hooks install` adds four Claude Code hooks:
 
 | Hook | Runs | Does |
 |---|---|---|
 | `PreToolUse` | `fairlead guard hook` | The write stage below: denies an edit that breaks a rule, or adds a note |
 | `PostToolUse` | `fairlead guard nudge` | Once per session, after an edit made with no brief, says how to get one ([The brief](brief.md#the-note-after-an-edit)); off with `brief.nudge = false`. *Since 0.8.0:* after an edit, names the routed skill for the file once per session, and records a skill the agent loads ([Skills](skills.md#while-the-agent-works)) |
 | `Stop` | `fairlead guard stop` | Sends the agent back while the tree it leaves hasn't passed `fairlead done` ([The Stop hook](done.md#the-stop-hook)); off with `done.on_stop = "off"` |
+| `SessionStart` | `fairlead resume --hook` | *Since 0.8.0:* starts a session with where the last one on the branch stopped: the last brief, what changed, the gate and `next` ([The SessionStart hook](context.md#the-sessionstart-hook)); off with `brief.resume = false` |
 
 The hooks go where `hooks.claude` says: `"shared"` (the default) is the
 committed `.claude/settings.json`, so everyone who clones the repository and
@@ -244,8 +245,8 @@ manifest, it removes the entries by their command.
 
 ### Codex
 
-*Since 0.7.0:* `fairlead hooks install --codex` writes the same three hooks to
-`.codex/hooks.json`, which Codex reads in the same shape; `status` and
+*Since 0.7.0:* `fairlead hooks install --codex` writes the same hooks, all but
+`SessionStart`, to `.codex/hooks.json`, which Codex reads in the same shape; `status` and
 `uninstall` take `--codex` too. Codex edits files with one tool,
 `apply_patch`, whose patch can add, change, move or delete several files at
 once. The write hook reads the patch the way Codex applies it, lints each
@@ -262,8 +263,8 @@ lists them.
 
 ### Gemini CLI
 
-*Since 0.7.0:* `fairlead hooks install --gemini` merges the same three hooks
-into `.gemini/settings.json`, under Gemini CLI's names for the moments:
+*Since 0.7.0:* `fairlead hooks install --gemini` merges the same hooks, all
+but `SessionStart`, into `.gemini/settings.json`, under Gemini CLI's names for the moments:
 `BeforeTool` for the write stage, `AfterTool` for the brief nudge and
 `AfterAgent` for the Stop hook, which sends the agent back with its reason
 as a new prompt. Its timeouts are in milliseconds, and the edit matcher is
