@@ -33,7 +33,8 @@ const WORKFLOW: &str = ".github/workflows/fairlead.yml";
 fn fixture() -> String {
     let path =
         Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/ci-workflow/fairlead.yml");
-    std::fs::read_to_string(path).unwrap()
+    // A Windows checkout gives the fixture CRLF; the generator writes LF everywhere.
+    std::fs::read_to_string(path).unwrap().replace("\r\n", "\n")
 }
 
 fn repo(name: &str) -> PathBuf {
