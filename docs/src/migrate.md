@@ -206,6 +206,15 @@ For you to decide:
   already keeps into lesson files, and `fairlead import rules` turns
   path-scoped rule files into routed skills ([Lessons](lessons.md),
   [Skills](skills.md)).
+- CI stages stay off until the config sets `[stages]` or a runner's or
+  check's `from`. Then `ci plan` reads the stage from the GitHub event, a
+  merge skips what its pull request passed on the same tree, and
+  `fairlead ci workflow` writes a staged workflow or prints the `if:` lines
+  for one you keep ([Stages](ci.md#stages)).
+- Three kinds of change no longer select everything: a bun dependency's
+  version bump runs the tests of the files that import it, an edit to
+  `fairlead.toml` plans with the new config, and a workflow that only runs by
+  hand or on a schedule selects nothing by itself ([The test plan](plan.md)).
 - `migrate` refreshes Claude Code's hooks only. Gemini CLI hooks installed
   by 0.7 don't match `read_file`, so reading a SKILL.md there isn't counted
   as a use until `fairlead hooks uninstall --gemini` and

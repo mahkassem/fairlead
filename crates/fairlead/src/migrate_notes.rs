@@ -158,6 +158,10 @@ pub const RELEASES: &[(&str, &[Note])] = &[
                 text: "Lessons, skill routes and the AGENTS.md block are new and stay off until a repository adds them. `fairlead import lessons` and `import rules` start from a lessons document and rule files a team already keeps (see Lessons and Skills).",
                 applies: always,
             },
+            Note {
+                text: "CI stages stay off until the config sets `[stages]` or a step's `from`. Then `ci plan` reads the stage from the GitHub event, and `fairlead ci workflow` writes a staged workflow, or prints the `if:` lines for one you keep (see Plans in CI). A bun dependency's version bump, a Fairlead config edit and a workflow that only runs by hand or on a schedule no longer select every test.",
+                applies: always,
+            },
         ],
     ),
 ];
