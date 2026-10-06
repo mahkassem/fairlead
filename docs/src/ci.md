@@ -41,6 +41,7 @@ Pin the action and `actions/checkout` to a commit SHA in your own workflows.
 | `--out PATH` | `fairlead-plan.json` in `$RUNNER_TEMP` or the system temp directory | Never the working tree, where the file would count as a change. A relative path is from the current directory. |
 | `--set KEY=VALUE` | | Override a config value for this run. |
 | `--stage auto\|none\|draft\|ready\|merge\|full` | `auto` for a config that uses [stages](#stages), else none | *Since 0.8.0:* the stage to plan for. `none` plans as before stages existed. |
+| `--since-green JOB` | none | *Since 0.8.0:* at the merge stage, plan from the last commit where the job JOB passed, so one run covers the batch merged since ([batching](#batching-after-merge---since-green)). Repeatable. Ignored at other stages. |
 
 A missing merge base fails with exit code 2, never an empty plan: fetch more history or pass `--files`.
 
@@ -103,6 +104,49 @@ Outside GitHub Actions, `auto` is `ready`. The first line of output says which s
 The plan still decides which tests run; the stage decides whether a runner or check runs at all. A later stage's steps leave the plan's invocations, tests and checks and are listed in its `deferred`, each with its `from` and how many tests or checks it would have run, so a step waiting for its stage reads differently from one the change didn't reach. `full` plans everything whatever changed. Each stage of a tree has its own `plan_id`. `[stages]` and `from` are left out of `config_digest`: they say when a step runs, not what it proves.
 
 A config with no `[stages]` and no `from` plans exactly as before, with no stage and the same plan ids. So does `--stage none`.
+
+### Batching after merge: `--since-green`
+
+*Since 0.8.0:* a slow step from the `merge` stage, such as an end-to-end runner, can run once per batch of merged changes instead of once per push. At the merge stage, `fairlead ci plan --since-green e2e` plans from the head commit of the newest earlier run of this workflow on this branch where the job named `e2e` concluded `success`. The plan then covers every change merged since that job last passed, whatever runs were cancelled, skipped or failed in between. JOB is the job's name as the Actions API reports it: its `name:`, or its id when it has none. With the flag repeated, the base is the newest commit at which every named job had passed.
+
+It reads `GITHUB_REPOSITORY`, `GITHUB_RUN_ID`, `GITHUB_API_URL` and a token from `GITHUB_TOKEN` or `GH_TOKEN`, which needs `actions: read`. It finds this run's workflow, lists up to 100 of that workflow's runs on the branch, newest first, and reads each run's jobs until the job has passed. Only earlier `push` and `merge_group` runs on the same branch count: a pull request run tested a commit that never landed as such. The chosen base and its run are printed, so a failing run names its batch, everything between that commit and `HEAD`:
+
+```text
+since-green: base 1f2e3d4c5b6a from run 912 (#41), the newest where e2e passed; this batch is 1f2e3d4c5b6a..HEAD (https://github.com/OWNER/REPO/actions/runs/912)
+```
+
+Any doubt about the base plans everything, with one line saying why and a plan warning:
+
+| Warning | When |
+| --- | --- |
+| `since-green-unavailable` | no token, not a GitHub Actions run, or the API failed or was rate-limited |
+| `since-green-not-found` | none of the last 100 runs on the branch has the job passing |
+| `since-green-not-in-history` | the commit isn't in the clone (check out with `fetch-depth: 0`), or isn't an ancestor of `HEAD` |
+
+At any other stage the flag is ignored with a one-line note, so one plan command serves every event.
+
+### A staged workflow: `fairlead ci workflow`
+
+*Since 0.8.0:* `fairlead ci workflow` prints a GitHub Actions workflow made from the config, and `fairlead ci workflow --write` writes it to `.github/workflows/fairlead.yml`. For the config above it has:
+
+- **Triggers:** `pull_request` (opened, synchronize, reopened, ready_for_review, converted_to_draft, labeled and unlabeled, so the stage follows the pull request), `push` to `stages.environments`, and `workflow_dispatch`.
+- **`plan`:** checks out the whole history, installs Fairlead with the action at this release, runs `fairlead ci plan --format github` with `--since-green` for each job of its own, and uploads the plan as the `fairlead-plan` artifact. Its outputs are `stage` and every `run_<id>`.
+- **`checks`:** runs the plan with `--except` for each step that has a job of its own. A newer push to the same pull request or branch cancels it.
+- **A job per runner or check whose `from` is `merge` or `full`,** here `e2e` and `desktop-build`: it runs only when `needs.plan.outputs.run_<id> == 'true'`, with `fairlead ci run --only <id>`. Its concurrency group is per workflow, job and branch, with `cancel-in-progress: false`, which is GitHub's own batching: one run at a time and only the newest waiting. A waiting run a newer push replaces is covered by the newer run's plan, since both plan from the last green run.
+- **Permissions:** `contents: read` at the top and in each job; `plan` adds `actions: read` for `--since-green`. Every action is pinned to a commit, and no `github.event` text is written into a `run:` line: the pull request's base reaches the shell through an environment variable.
+
+The file starts with a comment marking it as generated by `fairlead ci workflow`. `--write` rewrites a file with that comment and refuses any other, naming it, so a workflow you wrote is never replaced. A gated id may hold only letters, digits, `-`, `_` and `.`, since it is written into a `run:` line, and `plan` and `checks` are taken. The jobs check out the code and run the plan on `ubuntu-latest`; a step that needs a toolchain or dependencies the runner image lacks needs setup steps, and since `--write` replaces edits, such a workflow is better kept as your own.
+
+For a workflow you wrote, `ci workflow` also prints the `if:` line for each gated job, to standard error when it prints the workflow:
+
+```text
+  if: needs.plan.outputs.run_e2e == 'true'   # e2e
+  if: needs.plan.outputs.run_desktop_build == 'true'   # desktop-build
+```
+
+Each such job needs `needs: plan`, and the plan job must export the outputs (`run_e2e: ${{ steps.plan.outputs.run_e2e }}`) from a step that runs `fairlead ci plan --format github` itself: the action's outputs don't include `stage` or `run_<id>`.
+
+**Required checks:** GitHub counts a job that `if:` skipped as passing a required status check. A required `e2e` check therefore passes on every pull request where end-to-end tests wait for the merge stage; it proves only that the job wasn't due. Require `checks` on pull requests, and watch the merge-stage jobs on the environment branch.
 
 ## `fairlead ci run --plan PATH`
 

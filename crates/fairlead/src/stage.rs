@@ -200,7 +200,7 @@ pub fn apply(plan: &mut Plan, config: &Config, stage: CiStage) {
 }
 
 /// A step id as a GitHub output name: anything but letters, digits and `_` becomes `_`.
-fn output_name(id: &str) -> String {
+pub fn output_name(id: &str) -> String {
     let safe: String = id
         .chars()
         .map(|c| {

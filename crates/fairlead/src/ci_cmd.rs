@@ -42,6 +42,11 @@ pub enum CiAction {
         /// and any other config plans with no stage.
         #[arg(long, value_enum)]
         stage: Option<StageArg>,
+        /// At the merge stage, plan from the head of the newest earlier run of
+        /// this workflow on this branch where the job named JOB passed; repeat
+        /// for several jobs. When that commit can't be trusted, plan everything.
+        #[arg(long, value_name = "JOB")]
+        since_green: Vec<String>,
     },
     /// Run a plan's invocations in order; exits non-zero if any fails.
     Run {
@@ -81,6 +86,13 @@ pub enum CiAction {
         #[arg(long)]
         comment: bool,
     },
+    /// Print a staged GitHub Actions workflow made from the config.
+    Workflow {
+        /// Write it to `.github/workflows/fairlead.yml` instead, replacing
+        /// only a file this command wrote.
+        #[arg(long)]
+        write: bool,
+    },
 }
 
 pub fn run(action: CiAction, cwd: &Path) -> ExitCode {
@@ -91,9 +103,11 @@ pub fn run(action: CiAction, cwd: &Path) -> ExitCode {
             format,
             out,
             stage,
+            since_green,
         } => {
             let out = out.unwrap_or_else(default_out);
-            plan(cwd, changes, head.as_deref(), format, &out, stage)
+            let green = since_green.as_slice();
+            plan(cwd, changes, head.as_deref(), format, &out, stage, green)
         }
         CiAction::Run {
             plan,
@@ -119,6 +133,7 @@ pub fn run(action: CiAction, cwd: &Path) -> ExitCode {
             receipt,
             comment,
         } => crate::ci_report::run(cwd, &plan, results.as_deref(), receipt.as_deref(), comment),
+        CiAction::Workflow { write } => crate::ci_workflow::run(cwd, write),
     };
     result.unwrap_or_else(|e| {
         eprintln!("{e}");
@@ -164,6 +179,7 @@ fn plan(
     format: Format,
     out: &Path,
     stage_arg: Option<StageArg>,
+    since_green: &[String],
 ) -> Result<ExitCode, String> {
     if let Some(head) = head {
         head_matches(cwd, head)?;
@@ -177,7 +193,9 @@ fn plan(
             changes.everything = Some("stage full".into());
         }
     }
+    let green = crate::since_green::apply(cwd, since_green, resolved.stage, &mut changes);
     let mut planned = make(cwd, &changes)?;
+    planned.plan.warnings.extend(green);
     if let Some(s) = resolved.stage {
         stage::apply(&mut planned.plan, &planned.config, s);
     }
