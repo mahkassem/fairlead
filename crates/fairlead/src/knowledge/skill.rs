@@ -81,6 +81,8 @@ pub fn load(root: &Path, skills: &Skills) -> (Vec<Skill>, Vec<Bad>) {
 
 /// The routed skill a path names: the SKILL.md itself, or its directory.
 pub fn by_path<'a>(skills: &'a [Skill], path: &str) -> Option<&'a Skill> {
+    // An agent on Windows names the file with backslashes; routes use slashes.
+    let path = path.replace('\\', "/");
     let path = path.trim_start_matches("./");
     skills.iter().find(|s| {
         path == s.path
@@ -138,6 +140,10 @@ mod tests {
         assert_eq!(
             by_path(&found, "/abs/repo/.claude/skills/bare/SKILL.md").map(|s| s.name.as_str()),
             Some("bare")
+        );
+        assert_eq!(
+            by_path(&found, r"D:\repo\.claude\skills\forms\SKILL.md").map(|s| s.name.as_str()),
+            Some("web-forms")
         );
         assert!(by_path(&found, "src/forms/a.ts").is_none());
     }
