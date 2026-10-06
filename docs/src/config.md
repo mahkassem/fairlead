@@ -119,6 +119,11 @@ fairlead.toml: tests.unreachd: unknown field `unreachd`, expected one of ...
 | `memory.max_lines` | `12` | The longest body a lesson may have |
 | `memory.cap` | `5` | Lessons a brief lists before "N more" |
 | `memory.learn` | `"write"` | What `fairlead learn` does: `write` the file to the working tree, or `ask`, which prints it for a person to save |
+| `skills.imports` | `1` | Hops along what a changed file imports, for [skills](skills.md) and lessons alike. *Since 0.8.0* |
+| `skills.importers` | `0` | Hops along the files that import a changed file; off by default |
+| `skills.cap` | `8` | Skills a brief lists before "N more" |
+| `skills.targets` | `["claude", "agents", "cursor"]` | The agents `skills sync` writes for |
+| `skills.routes` | `[]` | `{ skill, paths, modules, always }`: the SKILL.md and the code it applies to. See [Skills](skills.md) |
 | `ci.comment` | `false` | Whether `fairlead ci report` also keeps one pull request comment up to date with the report. See [Plans in CI](ci.md#fairlead-ci-report---plan-path) |
 | `ci.escapes` | `"report"` | What a failing test the merged change's plan left out does once `ci run --judge` finds it: `"report"` lists it, `"fail"` also makes `ci report` exit 1. See [Escapes](ci.md#escapes---judge-path) |
 | `guard.comments` | off | `files`, `exclude`, `tests`, `migrations`, `block_length`, `density`, `history`, `item_codes`, `agent_phrases`, `block_marker`, and `ratchet` (default `false`). See [Guard rules](guard.md#comments) |

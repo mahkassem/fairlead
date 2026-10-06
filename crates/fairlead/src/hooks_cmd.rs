@@ -592,7 +592,13 @@ fn add_ours(
             ));
         };
         let command = stage_command("nudge", runner, dir);
-        groups.push(json!({ "matcher": edits, "hooks": [{ "type": "command", "command": command, "timeout": TIMEOUT * unit }] }));
+        // The same hook sees a skill load, so the hit rate can count it as used.
+        let matcher = match agent {
+            Agent::Claude => format!("{edits}|Skill"),
+            Agent::Gemini => format!("{edits}|read_file"),
+            Agent::Codex => edits.to_string(),
+        };
+        groups.push(json!({ "matcher": matcher, "hooks": [{ "type": "command", "command": command, "timeout": TIMEOUT * unit }] }));
     }
     Ok(())
 }

@@ -51,6 +51,11 @@ pub enum Reason {
         path: String,
         via: String,
     },
+    /// The scope covers `path`, which imports `of`; only with `skills.importers`.
+    Importer {
+        path: String,
+        of: String,
+    },
     Always,
     /// Nothing to follow, so everything is offered.
     Fallback,
@@ -61,10 +66,18 @@ impl fmt::Display for Reason {
         match self {
             Reason::Named { path } => write!(f, "named: {path}"),
             Reason::Used { path, via } => write!(f, "used: {via} imports {path}"),
+            Reason::Importer { path, of } => write!(f, "importer: {path} imports {of}"),
             Reason::Always => f.write_str("always"),
             Reason::Fallback => f.write_str("fallback: nothing to follow, so everything"),
         }
     }
+}
+
+/// How far a change reaches past the paths it names.
+#[derive(Debug, Clone, Copy)]
+pub struct Hops {
+    pub imports: usize,
+    pub importers: usize,
 }
 
 /// What a change reaches, worked out once and asked of every entry.
@@ -72,7 +85,42 @@ pub struct Reach {
     changed: Vec<(String, Option<String>)>,
     /// A file a changed file imports, within the hops, and the changed file it came from.
     used: BTreeMap<String, (Option<String>, String)>,
+    /// A file that imports a changed file, within the hops, and that changed file.
+    importers: BTreeMap<String, (Option<String>, String)>,
     fallback: bool,
+}
+
+/// Files within `hops` of `start` along `next`, each with the changed file
+/// it came from; the walk doesn't go past a barrier.
+fn walk(
+    start: &str,
+    changed: &[String],
+    graph: &Graph,
+    hops: usize,
+    next: &dyn Fn(u32) -> Vec<u32>,
+    module_of: &dyn Fn(&str) -> Option<String>,
+    out: &mut BTreeMap<String, (Option<String>, String)>,
+) {
+    let Some(id) = graph.id(start) else { return };
+    let mut queue = VecDeque::from([(id, 0usize)]);
+    let mut seen = vec![id];
+    while let Some((file, depth)) = queue.pop_front() {
+        if depth == hops || (depth > 0 && graph.is_barrier(file)) {
+            continue;
+        }
+        for other in next(file) {
+            if seen.contains(&other) {
+                continue;
+            }
+            seen.push(other);
+            let path = graph.files[other as usize].clone();
+            if !changed.contains(&path) {
+                out.entry(path.clone())
+                    .or_insert_with(|| (module_of(&path), start.to_string()));
+            }
+            queue.push_back((other, depth + 1));
+        }
+    }
 }
 
 impl Reach {
@@ -82,36 +130,38 @@ impl Reach {
     pub fn new(
         changed: &[String],
         graph: &Graph,
-        hops: usize,
+        hops: Hops,
         module_of: &dyn Fn(&str) -> Option<String>,
         fallback: bool,
     ) -> Reach {
         let mut used = BTreeMap::new();
+        let mut importers = BTreeMap::new();
+        let forward = |f: u32| graph.dependencies(f).iter().map(|&(d, _)| d).collect();
+        let back = |f: u32| graph.importers(f).into_iter().map(|(i, _)| i).collect();
         for start in changed {
-            let Some(id) = graph.id(start) else { continue };
-            let mut queue = VecDeque::from([(id, 0usize)]);
-            let mut seen = vec![id];
-            while let Some((file, depth)) = queue.pop_front() {
-                if depth == hops || (depth > 0 && graph.is_barrier(file)) {
-                    continue;
-                }
-                for &(dep, _) in graph.dependencies(file) {
-                    if seen.contains(&dep) {
-                        continue;
-                    }
-                    seen.push(dep);
-                    let path = graph.files[dep as usize].clone();
-                    if !changed.contains(&path) {
-                        used.entry(path.clone())
-                            .or_insert_with(|| (module_of(&path), start.clone()));
-                    }
-                    queue.push_back((dep, depth + 1));
-                }
-            }
+            walk(
+                start,
+                changed,
+                graph,
+                hops.imports,
+                &forward,
+                module_of,
+                &mut used,
+            );
+            walk(
+                start,
+                changed,
+                graph,
+                hops.importers,
+                &back,
+                module_of,
+                &mut importers,
+            );
         }
         Reach {
             changed: changed.iter().map(|p| (p.clone(), module_of(p))).collect(),
             used,
+            importers,
             fallback,
         }
     }
@@ -136,6 +186,16 @@ impl Reach {
                 via: via.clone(),
             });
         }
+        if let Some((path, (_, of))) = self
+            .importers
+            .iter()
+            .find(|(p, (m, _))| scope.covers(p, m.as_deref()))
+        {
+            return Some(Reason::Importer {
+                path: path.clone(),
+                of: of.clone(),
+            });
+        }
         if scope.always {
             return Some(Reason::Always);
         }
@@ -158,7 +218,7 @@ pub fn select<T, K: Ord>(
         .collect();
     let group = |r: &Reason| match r {
         Reason::Named { .. } => 0,
-        Reason::Used { .. } => 1,
+        Reason::Used { .. } | Reason::Importer { .. } => 1,
         Reason::Always => 2,
         Reason::Fallback => 3,
     };
@@ -196,10 +256,14 @@ mod tests {
         None
     }
 
+    fn hops(imports: usize, importers: usize) -> Hops {
+        Hops { imports, importers }
+    }
+
     #[test]
     fn named_beats_used_beats_always_and_fallback_only_when_set() {
         let g = graph();
-        let reach = Reach::new(&["test/a.test.ts".into()], &g, 1, &none, false);
+        let reach = Reach::new(&["test/a.test.ts".into()], &g, hops(1, 0), &none, false);
         assert_eq!(
             reach.reason(&scope(&["test/**"], true)),
             Some(Reason::Named {
@@ -218,7 +282,7 @@ mod tests {
             Some(Reason::Always)
         );
         assert_eq!(reach.reason(&scope(&["docs/**"], false)), None);
-        let fallback = Reach::new(&["package.json".into()], &g, 1, &none, true);
+        let fallback = Reach::new(&["package.json".into()], &g, hops(1, 0), &none, true);
         assert_eq!(
             fallback.reason(&scope(&["docs/**"], false)),
             Some(Reason::Fallback)
@@ -228,7 +292,7 @@ mod tests {
     #[test]
     fn reach_goes_along_imports_never_importers() {
         let g = graph();
-        let reach = Reach::new(&["src/a.ts".into()], &g, 1, &none, false);
+        let reach = Reach::new(&["src/a.ts".into()], &g, hops(1, 0), &none, false);
         assert_eq!(
             reach.reason(&scope(&["test/**"], false)),
             None,
@@ -241,12 +305,12 @@ mod tests {
     fn hops_count_and_a_barrier_stops_the_walk() {
         let mut g = graph();
         let deep = scope(&["src/deep.ts"], false);
-        let two = Reach::new(&["src/a.ts".into()], &g, 2, &none, false);
+        let two = Reach::new(&["src/a.ts".into()], &g, hops(2, 0), &none, false);
         assert!(two.reason(&deep).is_some(), "two hops reach deep.ts");
-        let one = Reach::new(&["src/a.ts".into()], &g, 1, &none, false);
+        let one = Reach::new(&["src/a.ts".into()], &g, hops(1, 0), &none, false);
         assert!(one.reason(&deep).is_none());
         g.barrier.insert(1);
-        let barred = Reach::new(&["src/a.ts".into()], &g, 2, &none, false);
+        let barred = Reach::new(&["src/a.ts".into()], &g, hops(2, 0), &none, false);
         assert!(
             barred.reason(&deep).is_none(),
             "the walk stops at the barrel"
@@ -254,10 +318,28 @@ mod tests {
     }
 
     #[test]
+    fn importers_are_followed_only_when_asked_and_rank_after_imports() {
+        let g = graph();
+        let tests = scope(&["test/**"], false);
+        let off = Reach::new(&["src/a.ts".into()], &g, hops(1, 0), &none, false);
+        assert_eq!(off.reason(&tests), None);
+        let on = Reach::new(&["src/a.ts".into()], &g, hops(1, 1), &none, false);
+        assert_eq!(
+            on.reason(&tests),
+            Some(Reason::Importer {
+                path: "test/a.test.ts".into(),
+                of: "src/a.ts".into()
+            })
+        );
+        let both = scope(&["test/**", "src/index.ts"], false);
+        assert!(matches!(on.reason(&both), Some(Reason::Used { .. })));
+    }
+
+    #[test]
     fn a_module_scope_covers_the_modules_files() {
         let g = graph();
         let module_of = |p: &str| p.starts_with("src/").then(|| "core".to_string());
-        let reach = Reach::new(&["src/a.ts".into()], &g, 1, &module_of, false);
+        let reach = Reach::new(&["src/a.ts".into()], &g, hops(1, 0), &module_of, false);
         let by_module = Scope::new(&[], &["core".into()], false).unwrap();
         assert!(matches!(
             reach.reason(&by_module),
@@ -268,7 +350,7 @@ mod tests {
     #[test]
     fn selection_orders_by_reason_then_rank() {
         let g = graph();
-        let reach = Reach::new(&["test/a.test.ts".into()], &g, 1, &none, false);
+        let reach = Reach::new(&["test/a.test.ts".into()], &g, hops(1, 0), &none, false);
         let entries = [
             (scope(&["docs/**"], true), 0),
             (scope(&["src/a.ts"], false), 1),

@@ -125,7 +125,8 @@ This README documents Fairlead 0.7.1. Each command, by what it's for:
 - **The change loop:** `brief` before an edit, `done` before it's finished,
   then `receipt` and `next`.
 - **Project memory:** `learn` writes a lesson, and `lessons` lists, reviews and
-  checks them; the brief offers the ones a change reaches.
+  checks them; the brief offers the ones a change reaches, and the skills
+  `[[skills.routes]]` scope to it.
 - **Measuring:** `replay` and the benchmarks.
 - **Getting started:** `init` writes a first config from what the repository
   shows.

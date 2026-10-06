@@ -760,7 +760,7 @@ fn install_adds_the_brief_note_after_edits_unless_brief_nudge_is_off() {
     );
     let after: Value = serde_json::from_str(&settings(&dir, "settings.json")).unwrap();
     let group = &after["hooks"]["PostToolUse"][0];
-    assert_eq!(group["matcher"], "Edit|Write|MultiEdit");
+    assert_eq!(group["matcher"], "Edit|Write|MultiEdit|Skill");
     let command = group["hooks"][0]["command"].as_str().unwrap();
     assert!(
         command.contains("fairlead guard nudge") && !command.contains("|| true"),

@@ -89,6 +89,7 @@ pub struct Config {
     pub brief: Brief,
     pub ci: Ci,
     pub memory: Memory,
+    pub skills: Skills,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
@@ -732,6 +733,48 @@ impl Default for Memory {
             learn: Learn::Write,
         }
     }
+}
+
+/// Skills in the open SKILL.md format, routed to a change by scope.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields, default)]
+pub struct Skills {
+    /// Hops along what a changed file imports, for lessons and skills alike.
+    pub imports: usize,
+    /// Hops along the files that import a changed file; off by default.
+    pub importers: usize,
+    /// Skills a brief lists before "N more".
+    pub cap: usize,
+    /// The agents `skills sync` writes skills for.
+    pub targets: List<String>,
+    /// Which code each skill applies to.
+    pub routes: List<SkillRoute>,
+}
+
+impl Default for Skills {
+    fn default() -> Self {
+        Skills {
+            imports: 1,
+            importers: 0,
+            cap: 8,
+            targets: strings(&["claude", "agents", "cursor"]),
+            routes: List::default(),
+        }
+    }
+}
+
+/// One skill and the scope it applies to: `paths`, `modules` or `always`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct SkillRoute {
+    /// The skill's SKILL.md, from the repository root.
+    pub skill: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub paths: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub modules: Vec<String>,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub always: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, JsonSchema)]

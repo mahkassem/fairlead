@@ -4,6 +4,7 @@
 pub mod lesson;
 pub mod route;
 pub mod secrets;
+pub mod skill;
 
 use std::cmp::Reverse;
 use std::path::Path;
@@ -13,7 +14,11 @@ use crate::plan_cmd::Planned;
 /// What the planned change reaches, for every kind of knowledge: the changed
 /// paths (a rename's old path too), the files they import within `hops`,
 /// and the fallback when the plan runs everything.
-pub fn reach(planned: &Planned, hops: usize) -> route::Reach {
+pub fn reach(planned: &Planned) -> route::Reach {
+    let hops = route::Hops {
+        imports: planned.config.skills.imports,
+        importers: planned.config.skills.importers,
+    };
     let scan = &planned.scan;
     let modules = fairlead_tests::modules::Modules::discover(
         &scan.tree,
@@ -30,7 +35,7 @@ pub fn reach(planned: &Planned, hops: usize) -> route::Reach {
     route::Reach::new(&changed, &scan.graph, hops, &module_of, planned.plan.all)
 }
 
-/// A lesson offered for a change, and the files that couldn't be.
+/// What a change was offered, as (name, why), and the files that couldn't be read.
 pub struct Offered {
     pub lessons: Vec<(String, String)>,
     pub bad: Vec<lesson::Bad>,
@@ -69,4 +74,37 @@ pub fn lessons(planned: &Planned, root: &Path, reach: &route::Reach) -> Offered 
         })
         .collect();
     Offered { lessons, bad }
+}
+
+/// The routed skills a change should load, in the brief's order: named,
+/// used, always, fallback, then by name.
+pub fn skills(planned: &Planned, root: &Path, reach: &route::Reach) -> Offered {
+    let (all, bad) = skill::load(root, &planned.config.skills);
+    let picked = route::select(&all, |s| &s.scope, |s| s.name.clone(), reach);
+    let skills = picked
+        .into_iter()
+        .map(|(i, reason)| {
+            let s = &all[i];
+            let what = if s.description.is_empty() {
+                s.path.clone()
+            } else {
+                short(&s.description, 70)
+            };
+            (s.name.clone(), format!("{what} ({reason})"))
+        })
+        .collect();
+    Offered {
+        lessons: skills,
+        bad,
+    }
+}
+
+/// At most `n` characters, cut at a word with "…" when it's longer.
+fn short(text: &str, n: usize) -> String {
+    if text.chars().count() <= n {
+        return text.to_string();
+    }
+    let cut: String = text.chars().take(n).collect();
+    let cut = cut.rsplit_once(' ').map_or(cut.as_str(), |(head, _)| head);
+    format!("{cut}…")
 }

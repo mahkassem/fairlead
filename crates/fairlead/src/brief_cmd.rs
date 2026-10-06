@@ -73,6 +73,13 @@ pub struct Brief {
     /// How many lessons the text lists before "N more".
     #[serde(default = "lesson_cap")]
     pub lesson_cap: usize,
+    /// How many skills the text lists before "N more".
+    #[serde(default = "skill_cap")]
+    pub skill_cap: usize,
+}
+
+fn skill_cap() -> usize {
+    8
 }
 
 fn lesson_cap() -> usize {
@@ -163,6 +170,7 @@ fn brief(args: &BriefArgs, cwd: &Path) -> Result<(), String> {
     if let Some(store) = &store {
         store.save(&made)?;
     }
+    offer(&root, &made);
     if args.json {
         println!(
             "{}",
@@ -172,6 +180,33 @@ fn brief(args: &BriefArgs, cwd: &Path) -> Result<(), String> {
         print!("{}", text(&made, args.all));
     }
     Ok(())
+}
+
+/// One `offer` event naming what the brief offered, for the hit rate:
+/// `skills report` sets it against what the agent then used.
+fn offer(root: &Path, brief: &Brief) {
+    let items: Vec<String> = brief
+        .lessons
+        .items
+        .iter()
+        .map(|i| format!("lesson:{}", i.name))
+        .chain(
+            brief
+                .skills
+                .items
+                .iter()
+                .map(|i| format!("skill:{}", i.name)),
+        )
+        .collect();
+    if items.is_empty() {
+        return;
+    }
+    if let Some(log) = EventLog::open(root) {
+        let mut event = Event::new("offer", "brief", std::time::Duration::ZERO);
+        event.session = brief.session.clone();
+        event.items = items;
+        let _ = log.append(&event);
+    }
 }
 
 /// The merge base with `base`, or with the default branch.
@@ -231,8 +266,9 @@ fn assemble(
             })
     };
     let steps = crate::done_cmd::steps(planned)?;
-    let reach = crate::knowledge::reach(planned, 1);
+    let reach = crate::knowledge::reach(planned);
     let offered = crate::knowledge::lessons(planned, root, &reach);
+    let routed = crate::knowledge::skills(planned, root, &reach);
     Ok(Brief {
         version: 1,
         id,
@@ -283,8 +319,12 @@ fn assemble(
                 .collect(),
         },
         skills: Section {
-            source: "none routed yet (K4)".into(),
-            items: Vec::new(),
+            source: "fairlead.toml [[skills.routes]]".into(),
+            items: routed
+                .lessons
+                .iter()
+                .map(|(n, w)| item(n.clone(), w.clone()))
+                .collect(),
         },
         done: Section {
             source: "fairlead.toml [done], done --dry-run".into(),
@@ -297,8 +337,15 @@ fn assemble(
             .bad
             .iter()
             .map(|b| format!("[bad-lesson] {}: {}", b.path, b.reason))
+            .chain(
+                routed
+                    .bad
+                    .iter()
+                    .map(|b| format!("[bad-skill] {}: {}", b.path, b.reason)),
+            )
             .collect(),
         lesson_cap: planned.config.memory.cap,
+        skill_cap: planned.config.skills.cap,
     })
 }
 
@@ -403,7 +450,19 @@ pub fn text(b: &Brief, all: bool) -> String {
         "fairlead brief --all",
         b.lesson_cap,
     );
-    head(&mut out, "skills", "none".into(), &b.skills.source);
+    let n = b.skills.items.len();
+    let skills = match n {
+        0 => "none".to_string(),
+        1 => "1 skill".to_string(),
+        n => format!("{n} skills"),
+    };
+    head(&mut out, "skills", skills, &b.skills.source);
+    capped(
+        &mut out,
+        &b.skills.items,
+        "fairlead brief --all",
+        b.skill_cap,
+    );
     head(
         &mut out,
         "done",
@@ -463,9 +522,11 @@ fn fnv(text: &str) -> u64 {
     })
 }
 
-/// The Claude Code PostToolUse hook: after the first edit of a session with
-/// no brief, one note saying how to get one. Never a deny, and silent on
-/// any error.
+/// The PostToolUse hook. After an edit: once per session with no brief, a
+/// note saying how to get one, and once per skill per session, the routed
+/// skill that applies to the file. After a skill is loaded (Claude Code's
+/// `Skill`, or a read of a SKILL.md), a `use` event for the hit rate. Never
+/// a deny, and silent on any error.
 pub fn nudge() -> ExitCode {
     let mut input = String::new();
     let _ = std::io::Read::read_to_string(&mut std::io::stdin(), &mut input);
@@ -479,33 +540,87 @@ pub fn nudge() -> ExitCode {
     ExitCode::SUCCESS
 }
 
-fn nudge_for(call: &serde_json::Value) -> Option<&'static str> {
+const READS: [&str; 3] = ["Read", "read_file", "read_many_files"];
+
+fn nudge_for(call: &serde_json::Value) -> Option<String> {
     let session = call["session_id"].as_str()?;
     let dir = call["cwd"]
         .as_str()
         .map(PathBuf::from)
         .or_else(|| std::env::current_dir().ok())?;
     let loaded = fairlead_core::config::load(&dir, &LoadOptions::from_process(Vec::new())).ok()?;
-    if !loaded.config.brief.nudge {
-        return None;
-    }
     let root = crate::graph_cmd::repo_root(&dir);
-    if Store::open(&root)?.current(Some(session)).is_some() {
+    let log = EventLog::open(&root)?;
+    let tool = call["tool_name"].as_str().unwrap_or("");
+    let input = &call["tool_input"];
+    let file = input["file_path"]
+        .as_str()
+        .or_else(|| input["absolute_path"].as_str())
+        .or_else(|| input["path"].as_str());
+    let (skills, _) = crate::knowledge::skill::load(&root, &loaded.config.skills);
+    let record = |stage: &'static str, decision: &'static str, items: Vec<String>| {
+        let mut event = Event::new(stage, decision, std::time::Duration::ZERO);
+        event.session = Some(session.to_string());
+        event.tool = Some(tool.to_string());
+        event.items = items;
+        let _ = log.append(&event);
+    };
+    if tool == "Skill" {
+        let name = input["skill"].as_str().or_else(|| input["name"].as_str())?;
+        let name = name.rsplit(':').next().unwrap_or(name);
+        record("use", "skill", vec![format!("skill:{name}")]);
         return None;
     }
-    let log = EventLog::open(&root)?;
-    let told = log
+    if READS.contains(&tool) {
+        let used = file.and_then(|f| crate::knowledge::skill::by_path(&skills, f))?;
+        record("use", "read", vec![format!("skill:{}", used.name)]);
+        return None;
+    }
+    let events: Vec<serde_json::Value> = log
         .read()
         .lines()
-        .filter_map(|l| serde_json::from_str::<serde_json::Value>(l).ok())
-        .any(|e| e["stage"] == "nudge" && e["session"] == session);
-    if told {
-        return None;
+        .filter_map(|l| serde_json::from_str(l).ok())
+        .filter(|e: &serde_json::Value| e["session"] == session)
+        .collect();
+    let mut notes = Vec::new();
+    let has_brief = Store::open(&root)?.current(Some(session)).is_some();
+    if loaded.config.brief.nudge && !has_brief && !events.iter().any(|e| e["stage"] == "nudge") {
+        record("nudge", "note", Vec::new());
+        notes.push(NUDGE.to_string());
     }
-    let mut event = Event::new("nudge", "note", std::time::Duration::ZERO);
-    event.session = Some(session.to_string());
-    let _ = log.append(&event);
-    Some(NUDGE)
+    if let Some(file) = file {
+        let rel = Path::new(file)
+            .strip_prefix(std::fs::canonicalize(&root).unwrap_or(root.clone()))
+            .or_else(|_| Path::new(file).strip_prefix(&root))
+            .map(|p| p.to_string_lossy().replace('\\', "/"))
+            .unwrap_or_else(|_| file.to_string());
+        let told: Vec<&str> = events
+            .iter()
+            .filter(|e| e["stage"] == "offer" && e["decision"] == "nudge")
+            .flat_map(|e| e["items"].as_array().into_iter().flatten())
+            .filter_map(|i| i.as_str())
+            .collect();
+        for s in skills
+            .iter()
+            .filter(|s| s.scope.paths.iter().any(|p| p.is_match(&rel)))
+        {
+            let item = format!("skill:{}", s.name);
+            if told.contains(&item.as_str()) {
+                continue;
+            }
+            record("offer", "nudge", vec![item]);
+            let about = if s.description.is_empty() {
+                String::new()
+            } else {
+                format!(": {}", s.description)
+            };
+            notes.push(format!(
+                "fairlead: the `{}` skill applies to {rel}{about} Load it before editing further ({}).",
+                s.name, s.path
+            ));
+        }
+    }
+    (!notes.is_empty()).then(|| notes.join("\n"))
 }
 
 #[cfg(test)]

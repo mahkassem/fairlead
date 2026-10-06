@@ -90,6 +90,7 @@ pub fn validate(config: &Config) -> Vec<Problem> {
     graph_providers(config, &mut problems);
     guard(config, &mut problems);
     memory(config, &mut problems);
+    skills(config, &mut problems);
     problems
 }
 
@@ -590,6 +591,53 @@ fn memory(config: &Config, problems: &mut Vec<Problem>) {
     }
     if m.review_days == 0 {
         problems.push(problem("memory.review_days", "must be at least 1"));
+    }
+}
+
+/// The agents `skills sync` can write for.
+pub const SKILL_TARGETS: [&str; 3] = ["claude", "agents", "cursor"];
+
+fn skills(config: &Config, problems: &mut Vec<Problem>) {
+    let s = &config.skills;
+    if s.cap == 0 {
+        problems.push(problem("skills.cap", "must be at least 1"));
+    }
+    if s.imports > 3 || s.importers > 3 {
+        problems.push(problem(
+            "skills.imports",
+            "hops past 3 offer nearly everything; 0 to 3",
+        ));
+    }
+    for (i, t) in s.targets.items().iter().enumerate() {
+        if !SKILL_TARGETS.contains(&t.as_str()) {
+            problems.push(problem(
+                format!("skills.targets[{i}]"),
+                format!("`{t}` isn't one of {}", SKILL_TARGETS.join(", ")),
+            ));
+        }
+    }
+    for (i, r) in s.routes.items().iter().enumerate() {
+        let key = format!("skills.routes[{i}]");
+        if !r.skill.ends_with("SKILL.md") || r.skill.starts_with('/') || r.skill.contains("..") {
+            problems.push(problem(
+                format!("{key}.skill"),
+                "must be a SKILL.md path inside the repository",
+            ));
+        }
+        if r.paths.is_empty() && r.modules.is_empty() && !r.always {
+            problems.push(problem(
+                key.clone(),
+                "needs a scope: `paths`, `modules` or `always = true`",
+            ));
+        }
+        globs(&format!("{key}.paths"), &r.paths, problems);
+    }
+    let skills: Vec<&str> = s.routes.items().iter().map(|r| r.skill.as_str()).collect();
+    for dup in duplicates(skills.into_iter()) {
+        problems.push(problem(
+            "skills.routes",
+            format!("`{dup}` is routed twice; give one route every scope"),
+        ));
     }
 }
 

@@ -19,7 +19,8 @@ checks   typecheck                                                plan --files
 rules    size                                                     fairlead.toml [guard.*]
 lessons  1 lesson                                                 .fairlead/lessons (fairlead lessons list)
   leave-settles-at-sign-off                    Leave settles at sign-off (used: src/b.ts imports src/a.ts)
-skills   none                                                     none routed yet (K4)
+skills   1 skill                                                  fairlead.toml [[skills.routes]]
+  forms                                        How forms validate. (named: src/forms/form.ts)
 done     unit, typecheck, guard                                   fairlead.toml [done], done --dry-run
 next     edit, then: fairlead done
 ```
@@ -30,7 +31,7 @@ next     edit, then: fairlead done
 - **tests** and **checks:** what the plan for these paths selects, with each test's first reason. It's `fairlead plan --files` run ahead of the change, and `fairlead test --explain FILE` explains any one of them.
 - **rules:** the `[guard.*]` tables whose rules read a named path, such as `size`, `comments` or `migrations`. These are the rules the write hook will hold the edit to.
 - **lessons:** the [lessons](lessons.md) whose scope covers a named path, a file a named path imports, or every change, each with why it was picked. It lists `memory.cap` (5) of them. A lesson file that can't be offered is named in a `warning` line. *Since 0.8.0.*
-- **skills:** always empty for now. It's filled by skill routing on the roadmap without changing the format.
+- **skills:** the [skills](skills.md) whose route covers a named path or a file it imports, or every change, each with its description and why. It lists `skills.cap` (8) of them. *Since 0.8.0.*
 - **done:** the steps `fairlead done` will run, the same list as `fairlead done --dry-run`.
 
 A path that isn't in the tree yet is a new file. Nothing reaches it, and the brief still lists the rules its location falls under. Each section shows its first five items, then how many more there are and the command that lists them. `--all` lifts the cap. Without it a brief stays under 40 lines.

@@ -194,7 +194,7 @@ fairlead doctor                # the hooks, the binary on the PATH, and what the
 | Hook | Runs | Does |
 |---|---|---|
 | `PreToolUse` | `fairlead guard hook` | The write stage below: denies an edit that breaks a rule, or adds a note |
-| `PostToolUse` | `fairlead guard nudge` | Once per session, after an edit made with no brief, says how to get one ([The brief](brief.md#the-note-after-an-edit)); off with `brief.nudge = false` |
+| `PostToolUse` | `fairlead guard nudge` | Once per session, after an edit made with no brief, says how to get one ([The brief](brief.md#the-note-after-an-edit)); off with `brief.nudge = false`. *Since 0.8.0:* after an edit, names the routed skill for the file once per session, and records a skill the agent loads ([Skills](skills.md#while-the-agent-works)) |
 | `Stop` | `fairlead guard stop` | Sends the agent back while the tree it leaves hasn't passed `fairlead done` ([The Stop hook](done.md#the-stop-hook)); off with `done.on_stop = "off"` |
 
 The hooks go where `hooks.claude` says: `"shared"` (the default) is the

@@ -16,6 +16,7 @@
 - [Guard rules](guard.md)
 - [The brief](brief.md)
 - [Lessons](lessons.md)
+- [Skills](skills.md)
 - [The done gate](done.md)
 - [The receipt and next](receipt.md)
 
