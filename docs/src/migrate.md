@@ -67,7 +67,7 @@ workflow's pin, then from the config's floor.
 
 | What | When it changes | How |
 |---|---|---|
-| Claude Code hooks in `.claude/settings.json` and `settings.local.json`, Codex hooks in `.codex/hooks.json` and Gemini CLI hooks in `.gemini/settings.json` | Fairlead's entries aren't the ones this release's `hooks install` would write for your config | Fairlead's entries are replaced with this release's, and every other setting and hook stays as it was. Uninstall still restores the file from before Fairlead, byte for byte, when nobody else changed it. |
+| Claude Code hooks in `.claude/settings.json` and `settings.local.json`, and, since 0.9.0, Codex hooks in `.codex/hooks.json` and Gemini CLI hooks in `.gemini/settings.json` | Fairlead's entries aren't the ones this release's `hooks install` would write for your config | Fairlead's entries are replaced with this release's, and every other setting and hook stays as it was. Uninstall still restores the file from before Fairlead, byte for byte, when nobody else changed it. |
 | The commit stage in `lefthook.yml` | It runs another command than this release writes, such as `fairlead` by name where the project has its own copy | The `run:` line is replaced in place, with its indentation, quotes and comments kept |
 | The `fairlead = "X.Y"` floor in the project config | The floor is older than a table or key the config uses, such as `[done]` (0.6) or `[guard]` (0.4) | The floor is raised to that release, so a teammate on an older binary is told which version to install |
 | `package.json` | `dependencies`, `devDependencies` or `optionalDependencies` pins an older release, as `0.4.2`, `^0.4.2`, `~0.4.2` or `>=0.4.2` | The version moves to this release and keeps its `^` or `~` |
@@ -219,6 +219,26 @@ For you to decide:
   by 0.7 don't match `read_file`, so reading a SKILL.md there isn't counted
   as a use until `fairlead hooks uninstall --gemini` and
   `hooks install --gemini` write this release's.
+
+### To 0.9.0
+
+Migrate updates:
+
+- Codex hooks in `.codex/hooks.json` and Gemini CLI hooks in
+  `.gemini/settings.json`, which `migrate` now refreshes as it does Claude
+  Code's. Gemini CLI hooks from 0.7 get `read_file` in the nudge's matcher,
+  so a SKILL.md read there counts as a use; the uninstall and install the
+  0.8.0 notes asked for is no longer needed.
+
+For you to decide:
+
+- A project whose pushes run the plan and whose full suite runs on a
+  schedule can add `--event schedule` to its `replay fetch`, so replay
+  counts what the nightly caught and no push ran ([Scheduled
+  runs](replay.md#scheduled-runs)).
+- `fairlead graph why` names edge kinds in words (`type import`,
+  `path literal`) where it printed `typeimport` and `pathliteral`; a script
+  that reads its output needs the new names.
 
 ## Going back to an older release
 

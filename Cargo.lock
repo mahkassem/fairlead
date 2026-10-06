@@ -345,7 +345,7 @@ dependencies = [
 
 [[package]]
 name = "fairlead"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "clap",
  "fairlead-core",
@@ -363,7 +363,7 @@ dependencies = [
 
 [[package]]
 name = "fairlead-core"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "regex",
  "schemars",
@@ -376,7 +376,7 @@ dependencies = [
 
 [[package]]
 name = "fairlead-guard"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "fairlead-core",
  "fairlead-lang",
@@ -387,7 +387,7 @@ dependencies = [
 
 [[package]]
 name = "fairlead-lang"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "fairlead-core",
  "globset",
@@ -407,7 +407,7 @@ dependencies = [
 
 [[package]]
 name = "fairlead-replay"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "fairlead-core",
  "fairlead-lang",
@@ -420,7 +420,7 @@ dependencies = [
 
 [[package]]
 name = "fairlead-tests"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "fairlead-core",
  "fairlead-lang",
