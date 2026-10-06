@@ -98,9 +98,8 @@ fn write_adds_skills_and_routes_the_config_accepts_and_a_rerun_changes_nothing()
         read(&dir, ".claude/skills/api/SKILL.md"),
         "---\nname: api\ndescription: \"How API handlers validate\"\n---\n# API\nValidate first.\n"
     );
-    assert!(
-        read(&dir, ".claude/skills/house/SKILL.md").contains("description: \"Short functions.\"")
-    );
+    assert!(read(&dir, ".claude/skills/house/SKILL.md")
+        .contains("description: \"Short functions. Small files.\""));
     let config = read(&dir, "fairlead.toml");
     assert!(config.starts_with(CONFIG), "existing text kept:\n{config}");
     for want in [
