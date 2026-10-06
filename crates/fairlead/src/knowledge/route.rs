@@ -34,7 +34,7 @@ impl Scope {
         })
     }
 
-    fn covers(&self, path: &str, module: Option<&str>) -> bool {
+    pub fn covers(&self, path: &str, module: Option<&str>) -> bool {
         self.paths.iter().any(|p| p.is_match(path))
             || module.is_some_and(|m| self.modules.iter().any(|s| s == m))
     }

@@ -338,6 +338,8 @@ pub struct Autoload {
     /// it's PSR-0, which keeps the prefix in the path.
     prefixes: Vec<(String, String, bool)>,
     declared: HashMap<String, Vec<String>>,
+    /// Each PHP declaration as written, with its file, for search.
+    listed: Vec<(String, String)>,
 }
 
 /// Where a name resolved.
@@ -371,18 +373,30 @@ impl Autoload {
         // Longest prefix first, as composer tries them.
         prefixes.sort_by(|a, b| b.0.len().cmp(&a.0.len()).then_with(|| a.cmp(b)));
         let mut by_name: HashMap<String, Vec<String>> = HashMap::new();
+        let mut listed = Vec::new();
         for (file, names) in declared {
             for name in names {
+                if file.ends_with(".php") {
+                    listed.push((name.clone(), file.to_string()));
+                }
                 by_name
                     .entry(name.to_ascii_lowercase())
                     .or_default()
                     .push(file.to_string());
             }
         }
+        listed.sort();
         Autoload {
             prefixes,
             declared: by_name,
+            listed,
         }
+    }
+
+    /// Every class, interface, trait, enum and function a PHP file
+    /// declares, as (qualified name, file), sorted.
+    pub fn declarations(&self) -> &[(String, String)] {
+        &self.listed
     }
 
     pub fn resolve(&self, tree: &Tree, name: &str) -> Resolved {

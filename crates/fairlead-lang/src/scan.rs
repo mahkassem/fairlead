@@ -61,6 +61,8 @@ pub struct Scan {
     pub coverage: Option<crate::coverage::Report>,
     /// How PHP names resolve here, for turning a coverage run's test names into files.
     pub autoload: php::Autoload,
+    /// What the Java and Kotlin files declare.
+    pub jvm: jvm::Index,
 }
 
 pub fn build(root: &Path, config: &Config) -> std::io::Result<Scan> {
@@ -171,6 +173,7 @@ pub fn build(root: &Path, config: &Config) -> std::io::Result<Scan> {
         uncertain,
         coverage,
         autoload: named.autoload,
+        jvm: named.index,
     })
 }
 

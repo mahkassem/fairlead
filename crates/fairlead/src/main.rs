@@ -9,6 +9,7 @@ mod ci_judge;
 mod ci_report;
 mod coverage_cmd;
 mod done_cmd;
+mod find_cmd;
 mod graph_cmd;
 mod guard_cmd;
 mod hook_cmd;
@@ -136,6 +137,12 @@ enum Command {
     Lessons {
         #[command(subcommand)]
         action: lessons_cmd::LessonsAction,
+    },
+    /// Search the lessons, skills, docs headings and declared names, nearest
+    /// the session's brief first; `--symbol` finds where a name is declared.
+    Find {
+        #[command(flatten)]
+        args: find_cmd::FindArgs,
     },
     /// Bring the hooks, the config's version floor and the version pins to
     /// this release, and list what changed since that needs a person.
@@ -440,6 +447,7 @@ fn main() -> ExitCode {
         Some(Command::Guard { action, sets }) => guard_cmd::run(action, sets, &cwd()),
         Some(Command::Learn { args }) => lessons_cmd::learn(args, &cwd()),
         Some(Command::Lessons { action }) => lessons_cmd::run(action, &cwd()),
+        Some(Command::Find { args }) => find_cmd::run(args, &cwd()),
         Some(Command::Hooks { action }) => hooks_cmd::run(action, &cwd()),
         Some(Command::Migrate { args }) => migrate_cmd::run(args, &cwd()),
         Some(Command::Done { args }) => done_cmd::run(args, &cwd()),
