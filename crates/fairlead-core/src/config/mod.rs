@@ -610,6 +610,10 @@ pub struct CommandRule {
     /// A regex over the whole command line.
     #[serde(rename = "match")]
     pub matches: String,
+    /// A regex over the same line that lets a matched command through, since
+    /// the regex crate has no lookahead to say "without this flag".
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub unless: Option<String>,
     /// Why, shown to the agent.
     pub reason: String,
 }

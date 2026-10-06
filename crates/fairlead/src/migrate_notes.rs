@@ -170,6 +170,7 @@ pub const SINCE: &[(&str, &str)] = &[
     ("memory", "0.8"),
     ("skills", "0.8"),
     ("agents", "0.8"),
+    ("guard.commands.unless", "0.8"),
 ];
 
 /// Top-level tables every released config format has had.
