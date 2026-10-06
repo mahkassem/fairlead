@@ -17,6 +17,7 @@
 - [The brief](brief.md)
 - [Lessons](lessons.md)
 - [Skills](skills.md)
+- [Find](find.md)
 - [The done gate](done.md)
 - [The receipt and next](receipt.md)
 

@@ -2,6 +2,8 @@
 //! with K4.3 on, each picked by the same router from what the change reaches.
 
 pub mod import;
+pub mod bm25;
+pub mod corpus;
 pub mod lesson;
 pub mod route;
 pub mod secrets;
@@ -102,7 +104,7 @@ pub fn skills(planned: &Planned, root: &Path, reach: &route::Reach) -> Offered {
 }
 
 /// At most `n` characters, cut at a word with "…" when it's longer.
-fn short(text: &str, n: usize) -> String {
+pub fn short(text: &str, n: usize) -> String {
     if text.chars().count() <= n {
         return text.to_string();
     }

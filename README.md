@@ -132,6 +132,8 @@ This README documents Fairlead 0.7.1. Each command, by what it's for:
   lists, reviews and checks them; the brief offers the ones a change reaches.
   `[[skills.routes]]` scope to it. `skills sync` writes each skill where
   Claude Code, Codex and Cursor each load it.
+  `[[skills.routes]]` scope to it. `find` searches lessons, skills, docs
+  headings and declared names, nearest the brief first.
 - **Measuring:** `replay` and the benchmarks.
 - **Getting started:** `init` writes a first config from what the repository
   shows.

@@ -247,6 +247,17 @@ impl Index {
         Index { declared }
     }
 
+    /// Every top-level declaration, as (qualified name, file), sorted.
+    pub fn declarations(&self) -> Vec<(&str, &str)> {
+        let mut out: Vec<(&str, &str)> = self
+            .declared
+            .iter()
+            .flat_map(|(name, files)| files.iter().map(move |f| (name.as_str(), f.as_str())))
+            .collect();
+        out.sort_unstable();
+        out
+    }
+
     /// The files that declare a name. An import may name a nested class or
     /// a static member, so it's tried without its last parts too; a
     /// candidate matches exactly or not at all. A name outside the tree,
