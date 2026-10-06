@@ -82,7 +82,7 @@ fairlead.toml: tests.unreachd: unknown field `unreachd`, expected one of ...
 | `tests.classes` | `[]` | `class` (`unit`, `own`, `demand`, `canary`) for a `match` |
 | `checks` | `[]` | Steps that aren't tests: `id`, `command`, `paths`, `modules`, `files` |
 | `quarantine` | `[]` | A test (`path`) or check (`check`) that fails on one platform whatever the change: `os`, `when` (`autocrlf`, `space-in-path`), `signature`, `reason`, `proved_in`, `until` ([Test plan](plan.md#tests-that-lie-on-one-platform)) |
-| `plan.run_all` | lockfiles, root manifests, tsconfig, runner and CI config | A changed path matching one selects everything |
+| `plan.run_all` | lockfiles, root manifests, tsconfig, runner and CI config | A changed path matching one selects everything. *Since 0.8.0:* except a change that only moves dependency versions and a workflow run only by hand or on a schedule ([Changes that don't run everything](plan.md#changes-that-dont-run-everything)) |
 | `plan.lockfile` | `"all"` | `all`: a changed lockfile selects everything; `scope` (opt-in): a changed root `pnpm-lock.yaml` selects the workspace packages whose resolved dependencies changed |
 | `plan.ignore` | root Markdown, the changesets tool's folder (`.changeset/**`), `docs/**`, READMEs, changelogs, licences | A changed path matching one that reaches no test selects nothing, instead of falling to `tests.unreached`; one that reaches tests still selects them, and a changed test file always runs |
 | `replay.provider` | `"github"` | Where CI history comes from |

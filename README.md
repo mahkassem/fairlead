@@ -92,6 +92,8 @@ of trying things like a stranger.
   Fairlead never needs a plugin for your stack.
 - **Monorepos, precisely.** pnpm, npm, yarn and bun workspaces. A pnpm lockfile
   change runs only the packages whose dependencies actually changed.
+  *Unreleased:* in a bun project, a dependency's version bump runs only the
+  tests of the files that import it, and nothing when nothing does.
 - **No install needed to read your code.** The import graph comes from source
   alone, with tsconfig paths, `go.mod` and composer's autoload resolved and
   parsed files cached, so a plan takes a fraction of a second.

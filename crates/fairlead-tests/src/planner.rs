@@ -1,6 +1,6 @@
-//! Building a plan, in the order the design sets: changed paths, `run_all`,
-//! deleted files, package manifests, the reverse walk, tests, unreached
-//! files, checks, then the invocations that run them.
+//! Building a plan, in the order the design sets: changed paths, the trims,
+//! `run_all`, deleted files, package manifests, the reverse walk, tests,
+//! unreached files, checks, then the invocations that run them.
 
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 
@@ -17,6 +17,7 @@ use crate::owners::Owners;
 use crate::pattern::Pattern;
 use crate::select::{everything, select};
 use crate::testfiles::{discover, TestFile};
+use crate::trims::Trims;
 use crate::walk::{walk, Via, Walk};
 
 pub struct Input {
@@ -25,7 +26,8 @@ pub struct Input {
     pub head: String,
     pub config_digest: String,
     pub tree_hash: String,
-    /// Files' text at the base, for the changes that need it: the lockfile.
+    /// Files' text at the base, for the changes that need it: lockfiles,
+    /// manifests and workflows.
     pub base_files: BTreeMap<String, String>,
 }
 
@@ -39,12 +41,13 @@ pub fn base_files(
     changes: &[Change],
 ) -> BTreeMap<String, String> {
     let mut out = BTreeMap::new();
-    if changes
+    let paths = changes
         .iter()
-        .any(|c| c.path == LOCKFILE || c.from.as_deref() == Some(LOCKFILE))
-    {
-        if let Some(text) = crate::git::file_at(root, base, LOCKFILE) {
-            out.insert(LOCKFILE.to_string(), text);
+        .flat_map(|c| std::iter::once(&c.path).chain(&c.from))
+        .filter(|p| *p == LOCKFILE || crate::trims::reads_base(p));
+    for path in paths {
+        if let Some(text) = crate::git::file_at(root, base, path) {
+            out.insert(path.clone(), text);
         }
     }
     out
@@ -69,6 +72,7 @@ pub struct Context<'a> {
     /// Changed paths `plan.ignore` matched that nothing references.
     pub ignored: BTreeSet<String>,
     pub lockfile: Option<LockScope>,
+    pub trims: Trims,
 }
 
 impl Context<'_> {
@@ -145,6 +149,9 @@ pub fn plan(scan: &mut Scan, config: &Config, input: Input) -> Result<Plan, Stri
         .collect();
     let owners = Owners::new(config.tests.owners.items())?;
     let lockfile = lockfile_scope(scan, config, &changed, &input.base_files);
+    let run_all = patterns(config.plan.run_all.items())?;
+    let mut trims = crate::trims::trims(scan, config, &input.changes, &input.base_files, &run_all);
+    let mut warnings = std::mem::take(&mut trims.warnings);
     let mut cx = Context {
         scan,
         config,
@@ -155,6 +162,7 @@ pub fn plan(scan: &mut Scan, config: &Config, input: Input) -> Result<Plan, Stri
         deleted,
         ignored,
         lockfile,
+        trims,
     };
     // An ignored path still selects the tests it reaches; it's only kept from
     // widening the plan when it reaches none.
@@ -169,7 +177,6 @@ pub fn plan(scan: &mut Scan, config: &Config, input: Input) -> Result<Plan, Stri
         .filter(|p| !crate::select::reaches_a_test(&cx, p, &test_ids))
         .cloned()
         .collect();
-    let run_all = patterns(config.plan.run_all.items())?;
     // Only tests a claim selects count: `demand` never runs on a claim.
     let test_paths: Vec<&str> = cx
         .tests
@@ -180,7 +187,7 @@ pub fn plan(scan: &mut Scan, config: &Config, input: Input) -> Result<Plan, Stri
     let mut trigger = None;
     for path in &cx.changed {
         let scoped = cx.lockfile.is_some() && path == LOCKFILE;
-        if scoped || !run_all.iter().any(|g| g.is_match(path)) {
+        if scoped || cx.trims.quiet.contains(path) || !run_all.iter().any(|g| g.is_match(path)) {
             continue;
         }
         if !cx.owners.overrides_run_all(path, &test_paths)? {
@@ -188,7 +195,6 @@ pub fn plan(scan: &mut Scan, config: &Config, input: Input) -> Result<Plan, Stri
             break;
         }
     }
-    let mut warnings = Vec::new();
     if cx.lockfile.as_ref().is_some_and(|l| l.manifests.is_empty()) {
         warnings.push(Warning {
             code: "lockfile-scoped-to-nothing".into(),
@@ -381,9 +387,12 @@ pub fn start_walk(cx: &Context) -> Walk {
         if let Some(id) = graph.id(path) {
             starts.push((id, Via::Start));
         }
-        if is_manifest(cx, path) {
+        if is_manifest(cx, path) && !cx.trims.quiet.contains(path) {
             package_files(path, path, &mut starts);
         }
+    }
+    for (id, via) in &cx.trims.starts {
+        starts.push((*id, Via::Path(via.clone())));
     }
     for manifest in cx.lockfile.iter().flat_map(|l| &l.manifests) {
         let via = format!("{LOCKFILE} ({})", parent(manifest));
