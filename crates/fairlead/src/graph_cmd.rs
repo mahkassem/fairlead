@@ -219,9 +219,17 @@ fn why(scan: &Scan, from: &str, to: &str) -> ExitCode {
                 .rev()
                 .find(|(f, _)| scan.graph.id(f).is_some_and(|id| scan.graph.is_barrier(id)));
             for (i, (file, kind)) in chain.iter().enumerate() {
-                let via = kind
-                    .map(|k| format!("  ({})", format!("{k:?}").to_lowercase()))
-                    .unwrap_or_default();
+                // No kind means a package edge: the file depends on the next one's whole package.
+                let package = || {
+                    let next = scan.graph.id(&chain.get(i + 1)?.0)?;
+                    scan.graph.package_name_of(next)
+                };
+                let via = match kind {
+                    Some(k) => format!("  ({})", k.label()),
+                    None => package()
+                        .map(|p| format!("  (depends on package {p})"))
+                        .unwrap_or_default(),
+                };
                 println!(
                     "{}{file}{}",
                     "  ".repeat(i),

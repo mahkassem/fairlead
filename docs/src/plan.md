@@ -156,7 +156,18 @@ Where an entry holds:
 
 ## Reasons
 
-Every test and check carries the reason that put it in first: `run-all`, `changed`, `import` with the chain from the change to the test, `owner`, `canary`, `unreached`, and for checks `paths`, `modules` or `always`. `fairlead test --explain` prints the chain for a selected test, and for one that isn't selected, why not.
+Every test and check carries the reason that put it in first: `run-all`, `changed`, `import` with the chain from the change to the test, `owner`, `canary`, `unreached`, and for checks `paths`, `modules` or `always`. `fairlead test --explain` prints the chain for a selected test, and for one that isn't selected, why not. Each hop that isn't a plain import names its kind, such as `(type import)`, `(path literal)` or `(coverage)`, and a hop the walk adds conservatively says why it's there:
+
+```
+$ fairlead test --explain test/pricing.test.ts
+test/pricing.test.ts is selected (unit):
+src/a.ts
+  -> src/api.ts  (unresolved import `./gen/missing`, so it depends on its whole module)
+  -> src/types.ts  (type import)
+  -> test/pricing.test.ts  (type import)
+```
+
+The other conservative hops read `a dynamic import with no literal path` or `its tsconfig couldn't be applied`, and a workspace import that resolved to no file names the specifier and the package it's kept as a dependency on. `graph why` names each edge's kind the same way.
 
 ## Plan JSON, version 1
 
