@@ -30,6 +30,7 @@ mod resume_cmd;
 mod skills_cmd;
 mod skills_eval_cmd;
 mod skills_report_cmd;
+mod stage;
 mod step;
 
 use std::path::{Path, PathBuf};

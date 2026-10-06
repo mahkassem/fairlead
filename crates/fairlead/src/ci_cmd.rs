@@ -11,6 +11,7 @@ use fairlead_core::config::LoadOptions;
 use fairlead_core::plan::{Plan, VERSION};
 
 use crate::plan_cmd::{make, Changes};
+use crate::stage::{self, StageArg};
 use crate::step::Outcome;
 
 #[derive(Clone, Copy, PartialEq, Eq, ValueEnum)]
@@ -36,6 +37,11 @@ pub enum CiAction {
         /// where it would count as a change on the next plan.
         #[arg(long, value_name = "PATH")]
         out: Option<PathBuf>,
+        /// The CI stage to plan for. Without it, a config that sets `[stages]`
+        /// or a step's `from` reads the stage from the GitHub event (`auto`),
+        /// and any other config plans with no stage.
+        #[arg(long, value_enum)]
+        stage: Option<StageArg>,
     },
     /// Run a plan's invocations in order; exits non-zero if any fails.
     Run {
@@ -52,6 +58,12 @@ pub enum CiAction {
         /// that would have caught it.
         #[arg(long, value_name = "PATH")]
         judge: Option<PathBuf>,
+        /// Run only these runners and checks, by id.
+        #[arg(long, value_name = "ID", conflicts_with = "except")]
+        only: Vec<String>,
+        /// Run everything but these runners and checks, by id.
+        #[arg(long, value_name = "ID")]
+        except: Vec<String>,
     },
     /// Write the run's summary: what the plan selected and why, what ran and
     /// failed, and the change's receipt when one is given. To
@@ -78,16 +90,29 @@ pub fn run(action: CiAction, cwd: &Path) -> ExitCode {
             head,
             format,
             out,
+            stage,
         } => {
             let out = out.unwrap_or_else(default_out);
-            plan(cwd, &changes, head.as_deref(), format, &out)
+            plan(cwd, changes, head.as_deref(), format, &out, stage)
         }
         CiAction::Run {
             plan,
             fail_fast,
             results,
             judge,
-        } => execute(cwd, &plan, fail_fast, results.as_deref(), judge.as_deref()),
+            only,
+            except,
+        } => {
+            let pick = Pick { only, except };
+            execute(
+                cwd,
+                &plan,
+                fail_fast,
+                results.as_deref(),
+                judge.as_deref(),
+                &pick,
+            )
+        }
         CiAction::Report {
             plan,
             results,
@@ -134,21 +159,35 @@ fn head_matches(cwd: &Path, expected: &str) -> Result<(), String> {
 
 fn plan(
     cwd: &Path,
-    changes: &Changes,
+    mut changes: Changes,
     head: Option<&str>,
     format: Format,
     out: &Path,
+    stage_arg: Option<StageArg>,
 ) -> Result<ExitCode, String> {
     if let Some(head) = head {
         head_matches(cwd, head)?;
     }
-    let planned = make(cwd, changes)?;
+    let config = crate::plan_cmd::config_for(cwd, &changes)?;
+    let event = stage::Event::from_env();
+    let resolved = stage::resolve(stage_arg, &config, event.as_ref());
+    if let Some(s) = resolved.stage {
+        println!("stage: {s} ({})", resolved.why);
+        if s == fairlead_core::config::CiStage::Full {
+            changes.everything = Some("stage full".into());
+        }
+    }
+    let mut planned = make(cwd, &changes)?;
+    if let Some(s) = resolved.stage {
+        stage::apply(&mut planned.plan, &planned.config, s);
+    }
+    let runs = stage::run_outputs(&planned.plan, &planned.config)?;
     let json = serde_json::to_string_pretty(&planned.plan).expect("plan prints");
     let path = cwd.join(out);
     std::fs::write(&path, format!("{json}\n"))
         .map_err(|e| format!("could not write {}: {e}", path.display()))?;
     if format == Format::Github {
-        write_outputs(&planned.plan, &path)?;
+        write_outputs(&planned.plan, &path, &runs)?;
     }
     println!(
         "plan {}: {} tests, {} checks, {} invocations{} -> {}",
@@ -165,7 +204,55 @@ fn plan(
         },
         path.display()
     );
+    for d in &planned.plan.deferred {
+        println!(
+            "  {} waits for the {} stage ({} selected)",
+            d.id, d.from, d.selected
+        );
+    }
     Ok(ExitCode::SUCCESS)
+}
+
+/// The runners and checks `ci run` was asked to run, by id.
+struct Pick {
+    only: Vec<String>,
+    except: Vec<String>,
+}
+
+impl Pick {
+    fn wants(&self, id: &str) -> bool {
+        (self.only.is_empty() || self.only.iter().any(|o| o == id))
+            && !self.except.iter().any(|e| e == id)
+    }
+
+    /// An id no runner or check has is a typo, not an empty run.
+    fn check(&self, cwd: &Path, plan: &Plan) -> Result<(), String> {
+        if self.only.is_empty() && self.except.is_empty() {
+            return Ok(());
+        }
+        let config = fairlead_core::config::load(cwd, &LoadOptions::from_process(Vec::new()))
+            .map_err(|e| e.to_string())?
+            .config;
+        let known = |id: &str| {
+            config.tests.runners.items().iter().any(|r| r.id == id)
+                || config.checks.items().iter().any(|c| c.id == id)
+                || plan.invocations.iter().any(|i| i.id == id)
+        };
+        for id in self.only.iter().chain(&self.except) {
+            if !known(id) {
+                return Err(format!("no runner or check is called `{id}`"));
+            }
+        }
+        for d in plan.deferred.iter().filter(|d| self.only.contains(&d.id)) {
+            println!(
+                "fairlead: {} waits for the {} stage; this plan is {}",
+                d.id,
+                d.from,
+                plan.stage.map_or("unstaged", |s| s.name())
+            );
+        }
+        Ok(())
+    }
 }
 
 /// `name<<DELIM` blocks, so no value can end the block early.
@@ -179,7 +266,7 @@ fn output_block(name: &str, value: &str) -> String {
     format!("{name}<<{delim}\n{value}\n{delim}\n")
 }
 
-fn outputs(plan: &Plan, path: &Path) -> String {
+fn outputs(plan: &Plan, path: &Path, runs: &[(String, bool)]) -> String {
     let invocations = serde_json::to_string(&plan.invocations).expect("invocations print");
     let checks: Vec<&str> = plan.checks.iter().map(|c| c.id.as_str()).collect();
     [
@@ -189,11 +276,17 @@ fn outputs(plan: &Plan, path: &Path) -> String {
         output_block("invocations", &invocations),
         output_block("checks", &checks.join(" ")),
         output_block("tests", &plan.tests.len().to_string()),
+        output_block("stage", plan.stage.map_or("", |s| s.name())),
     ]
-    .concat()
+    .into_iter()
+    .chain(
+        runs.iter()
+            .map(|(name, on)| output_block(name, if *on { "true" } else { "false" })),
+    )
+    .collect()
 }
 
-fn write_outputs(plan: &Plan, path: &Path) -> Result<(), String> {
+fn write_outputs(plan: &Plan, path: &Path, runs: &[(String, bool)]) -> Result<(), String> {
     let target = std::env::var_os("GITHUB_OUTPUT")
         .ok_or("--format github needs $GITHUB_OUTPUT, which GitHub Actions sets")?;
     let mut file = std::fs::OpenOptions::new()
@@ -201,7 +294,7 @@ fn write_outputs(plan: &Plan, path: &Path) -> Result<(), String> {
         .create(true)
         .open(&target)
         .map_err(|e| format!("could not open $GITHUB_OUTPUT: {e}"))?;
-    file.write_all(outputs(plan, path).as_bytes())
+    file.write_all(outputs(plan, path, runs).as_bytes())
         .map_err(|e| format!("could not write $GITHUB_OUTPUT: {e}"))
 }
 
@@ -229,8 +322,11 @@ fn execute(
     fail_fast: bool,
     results: Option<&Path>,
     judge: Option<&Path>,
+    pick: &Pick,
 ) -> Result<ExitCode, String> {
-    let plan = read_plan(cwd, plan_path)?;
+    let mut plan = read_plan(cwd, plan_path)?;
+    pick.check(cwd, &plan)?;
+    plan.invocations.retain(|i| pick.wants(&i.id));
     let root = crate::graph_cmd::repo_root(cwd);
     let merge = judge.map(|p| read_plan(cwd, p)).transpose()?;
     let config = match &merge {

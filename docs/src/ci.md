@@ -40,6 +40,7 @@ Pin the action and `actions/checkout` to a commit SHA in your own workflows.
 | `--format json\|github` | `json` | `github` also writes step outputs. |
 | `--out PATH` | `fairlead-plan.json` in `$RUNNER_TEMP` or the system temp directory | Never the working tree, where the file would count as a change. A relative path is from the current directory. |
 | `--set KEY=VALUE` | | Override a config value for this run. |
+| `--stage auto\|none\|draft\|ready\|merge\|full` | `auto` for a config that uses [stages](#stages), else none | *Since 0.8.0:* the stage to plan for. `none` plans as before stages existed. |
 
 A missing merge base fails with exit code 2, never an empty plan: fetch more history or pass `--files`.
 
@@ -53,8 +54,55 @@ A missing merge base fails with exit code 2, never an empty plan: fetch more his
 | `invocations` | the invocations as a JSON array; `fromJSON` makes it a job matrix |
 | `checks` | the selected check ids, space-separated |
 | `tests` | how many test files are selected |
+| `stage` | *Since 0.8.0:* the plan's [stage](#stages), empty without one |
+| `run_<id>` | *Since 0.8.0:* `true` or `false` for every runner and check: whether this plan runs it. An id's characters other than letters, digits and `_` become `_`, so `desktop-build` is `run_desktop_build`; two ids that become one name fail the plan |
 
 Nothing is keyed to a runner name or folder layout. `invocations` can feed a job matrix with `fromJSON`; pass each argv to a program through an environment variable rather than writing it into a `run:` line, which would let a path in the plan be read as shell syntax. For most projects, `fairlead ci run --plan` in one job is simpler.
+
+## Stages
+
+*Since 0.8.0:* a change goes through stages, and each runner and check says the earliest one it runs at with `from`. It runs at that stage and every later one: `draft` < `ready` < `merge` < `full`.
+
+```toml
+[stages]
+environments = ["main"]        # pushes here are the merge stage; add "staging", "production"
+full_label = "run-everything"  # a pull request label that runs everything
+
+[[tests.runners]]
+id = "unit"
+match = ["src/**/*.test.ts"]
+command = ["bunx", "vitest", "run", "{files}"]
+from = "draft"                 # draft | ready (a runner's default) | merge | full
+
+[[tests.runners]]
+id = "e2e"
+match = ["e2e/**/*.spec.ts"]
+command = ["bunx", "playwright", "test", "{files}"]
+from = "merge"
+
+[[checks]]
+id = "desktop-build"
+command = ["./scripts/build-desktop.sh"]
+from = "merge"                 # a check's default is draft
+```
+
+`ci plan` reads the stage from the GitHub event:
+
+| Event | Stage |
+| --- | --- |
+| `pull_request` or `pull_request_target`, a draft | `draft` |
+| `pull_request` or `pull_request_target`, not a draft (any action, `ready_for_review` included) | `ready` |
+| a pull request labelled `stages.full_label` | `full` |
+| `push` to a branch in `stages.environments` (a name or a glob such as `release/*`) | `merge` |
+| `merge_group` | `merge` |
+| `push` to any other branch, a tag, or another event | `ready` |
+| `schedule` or `workflow_dispatch` | `full` |
+
+Outside GitHub Actions, `auto` is `ready`. The first line of output says which stage and why, such as `stage: draft (auto: pull_request, a draft)`.
+
+The plan still decides which tests run; the stage decides whether a runner or check runs at all. A later stage's steps leave the plan's invocations, tests and checks and are listed in its `deferred`, each with its `from` and how many tests or checks it would have run, so a step waiting for its stage reads differently from one the change didn't reach. `full` plans everything whatever changed. Each stage of a tree has its own `plan_id`. `[stages]` and `from` are left out of `config_digest`: they say when a step runs, not what it proves.
+
+A config with no `[stages]` and no `from` plans exactly as before, with no stage and the same plan ids. So does `--stage none`.
 
 ## `fairlead ci run --plan PATH`
 
@@ -63,6 +111,8 @@ Runs each invocation's argv in its working directory (relative to the repository
 *Since 0.7.0:* a program is found the way a shell finds it. On Windows, a name with no extension is looked up on `PATH` with each of `PATHEXT`'s `.com`, `.exe`, `.bat` and `.cmd`, and a relative path such as `node_modules/.bin/eslint` beside the working directory, so `npx` and other `.cmd` shims start. Before, they needed the full name, such as `npx.cmd`, which still works. The same goes for `fairlead done`, `[[guard.external]]` rules and graph providers.
 
 An invocation a [`[[quarantine]]` entry](plan.md#tests-that-lie-on-one-platform) holds doesn't fail the run when its output matches the entry's signature and names no other failed test. It is reported as not provable here, and the last line counts it. Any other failure counts. The entry is checked again on the machine running the plan, so a plan made on Windows excuses nothing on Linux.
+
+*Since 0.8.0:* `--only ID` runs just those runners and checks, and `--except ID` all but those, each repeatable, so one plan can feed a fast job and an end-to-end job. An id that no runner or check has fails with exit code 2. One the plan's stage defers is not an error: the run says which stage it waits for and runs nothing for it.
 
 `--results PATH` also writes each invocation's id, working directory, argv, outcome and seconds, for `fairlead ci report`, with `"quarantined": true` on one that failed as its entry expects.
 

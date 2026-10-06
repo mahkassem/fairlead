@@ -16,7 +16,7 @@ pub struct Problem {
     pub message: String,
 }
 
-fn problem(key: impl Into<String>, message: impl Into<String>) -> Problem {
+pub(super) fn problem(key: impl Into<String>, message: impl Into<String>) -> Problem {
     Problem {
         key: key.into(),
         message: message.into(),
@@ -91,6 +91,7 @@ pub fn validate(config: &Config) -> Vec<Problem> {
     guard(config, &mut problems);
     memory(config, &mut problems);
     skills(config, &mut problems);
+    super::stages::validate(config, &mut problems);
     agents(config, &mut problems);
     problems
 }

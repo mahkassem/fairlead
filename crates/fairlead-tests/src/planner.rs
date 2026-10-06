@@ -27,6 +27,9 @@ pub struct Input {
     pub tree_hash: String,
     /// Files' text at the base, for the changes that need it: the lockfile.
     pub base_files: BTreeMap<String, String>,
+    /// Run everything whatever changed, named as the reason, such as a
+    /// full CI stage.
+    pub everything: Option<String>,
 }
 
 /// The one lockfile the planner can scope, at the repository root.
@@ -204,6 +207,9 @@ pub fn plan(scan: &mut Scan, config: &Config, input: Input) -> Result<Plan, Stri
             trigger = Some(path);
         }
     }
+    if trigger.is_none() {
+        trigger = input.everything.clone();
+    }
     let walked = start_walk(&cx);
     let (tests, unreached, all_reason) = match trigger {
         Some(path) => {
@@ -260,6 +266,8 @@ pub fn plan(scan: &mut Scan, config: &Config, input: Input) -> Result<Plan, Stri
         unreached,
         warnings,
         quarantined,
+        stage: None,
+        deferred: Vec::new(),
     })
 }
 
