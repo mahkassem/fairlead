@@ -1,6 +1,6 @@
 # The done gate
 
-`fairlead done` runs what a change must pass before it counts as finished, and records the outcome against the exact tree it checked. An agent runs it before it stops; a person can run it before they push.
+`fairlead done` runs what a change must pass before it counts as finished, and records the outcome against the exact tree it checked. An agent runs it before it stops; a person can run it before they push. *Since 0.8.0:* until it passes, [`fairlead next`](receipt.md#next) also says to open the pull request as a draft, `gh pr create --draft`; once it has, to mark it ready, `gh pr ready`.
 
 ```bash
 fairlead done                # plan the working tree against the default branch and run the gate

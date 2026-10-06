@@ -32,6 +32,7 @@ fn loop_lines(lessons_dir: &str) -> Vec<String> {
         "- Before an edit: `fairlead brief <paths>` names what they reach, the tests that will run, and the lessons and skills that apply.".to_string(),
         "- Before you finish: `fairlead done` runs the gate the change has to pass.".to_string(),
         "- After it: `fairlead receipt` compares the change with its brief, and `fairlead next` names the step that's due.".to_string(),
+        "- The pull request: open it as a draft, `gh pr create --draft`, and mark it ready, `gh pr ready`, once `fairlead done` passes.".to_string(),
         "- `fairlead find <words>` searches the lessons, skills, docs headings and symbols.".to_string(),
         "- `fairlead learn` records a lesson a change taught, with its scope and evidence.".to_string(),
     ]
@@ -287,7 +288,7 @@ mod tests {
     #[test]
     fn the_block_stays_within_forty_lines_and_says_how_many_more() {
         let small = render("l", &lists(3, 4));
-        assert_eq!(small.len(), 9 + 2 + 3 + 2 + 4);
+        assert_eq!(small.len(), 10 + 2 + 3 + 2 + 4);
         assert!(!small.iter().any(|l| l.contains("more:")));
         let big = render("l", &lists(30, 25));
         assert_eq!(big.len(), MAX_LINES);
@@ -295,7 +296,7 @@ mod tests {
         assert_eq!(more.len(), 2, "{big:#?}");
         let listed_l = big.iter().filter(|l| l.starts_with("- Lesson")).count();
         let listed_s = big.iter().filter(|l| l.starts_with("- s")).count();
-        assert_eq!(listed_l + listed_s, MAX_LINES - 9 - 2 * 3);
+        assert_eq!(listed_l + listed_s, MAX_LINES - 10 - 2 * 3);
         assert_eq!(
             *more[0],
             format!("- … {} more: `fairlead lessons list`", 30 - listed_l)

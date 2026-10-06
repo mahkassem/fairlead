@@ -48,7 +48,7 @@ changed  2 files since its base: 1 in the brief, 1 outside
 gate     not run for this tree
 lessons  1 added on this branch (fairlead lessons list)
   validate-on-blur                         Validate on blur
-next     done: `fairlead done` hasn't passed for the tree as it is now
+next     done: `fairlead done` hasn't passed for this tree; no pull request yet? `gh pr create --draft`
 ```
 
 - **changed:** every file that differs from the brief's base, untracked files included, split into the ones the brief named and the rest.

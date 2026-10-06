@@ -260,6 +260,50 @@ fn a_command_rule_denies_a_shell_command_with_its_reason() {
     );
 }
 
+/// The `[[guard.commands]]` block the guard page offers for draft pull
+/// requests, read from the page so the test runs what a reader copies.
+fn offered_draft_rule() -> String {
+    let page = std::fs::read_to_string(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../docs/src/guard.md"
+    ))
+    .unwrap();
+    page.split("```toml\n")
+        .filter_map(|b| b.split("```").next())
+        .find(|b| b.contains("unless ="))
+        .expect("the guard page offers a rule with `unless`")
+        .to_string()
+}
+
+#[test]
+fn the_offered_rule_denies_a_pull_request_opened_without_draft() {
+    let config = format!("{SIZE}{}", offered_draft_rule());
+    let dir = repo("draft", &config, &[]);
+    let (ok, out, err) = fairlead(&dir, &["config", "check"]);
+    assert!(ok, "{out}{err}");
+    let bash = |command: &str| hook(&dir, call(&dir, "Bash", json!({"command": command})));
+    for allowed in [
+        "gh pr create --draft",
+        "gh pr create -d --title x",
+        "git push -u origin HEAD && gh pr create --draft --fill",
+        "gh pr ready",
+        "gh pr list",
+    ] {
+        assert_eq!(bash(allowed), None, "{allowed}");
+    }
+    for denied in [
+        "gh pr create --title x",
+        "gh pr create --fill && git branch -d old",
+        "gh pr create --draft=false",
+    ] {
+        let answer = bash(denied).unwrap_or_else(|| panic!("{denied} went through"));
+        assert!(
+            reason(&answer).contains("gh pr create --draft"),
+            "{denied}: {answer}"
+        );
+    }
+}
+
 #[test]
 fn editing_a_migration_that_exists_is_denied_and_adding_one_is_not() {
     // The default budget, and no git to start once `guard check` has

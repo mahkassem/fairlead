@@ -507,6 +507,20 @@ mod tests {
     }
 
     #[test]
+    fn a_command_rule_with_unless_raises_the_floor_to_the_release_that_added_it() {
+        let rule = serde_json::json!({"match": "gh pr create", "reason": "r"});
+        let plain = serde_json::json!({"guard": {"commands": [rule.clone()]}});
+        assert_eq!(needed_floor(&plain).map(|f| f.1), Some("0.4"));
+        let mut with = rule.clone();
+        with["unless"] = serde_json::json!("--draft");
+        let unless = serde_json::json!({"guard": {"commands": [rule, with]}});
+        assert_eq!(
+            needed_floor(&unless).map(|f| (f.1, f.2)),
+            Some(("0.8", "guard.commands.unless"))
+        );
+    }
+
+    #[test]
     fn the_action_ref_and_its_version_input_move_and_nothing_else_does() {
         let text = "jobs:\n  plan:\n    steps:\n      - uses: actions/checkout@v4\n        with:\n          version: 0.1.0\n      - uses: mahkassem/fairlead@v0.4.2\n        with:\n          version: v0.4.2\n          command: ci plan\n      - uses: mahkassem/fairlead@main\n        with:\n          version: latest\n";
         let (after, seen) = workflow_pins(text);

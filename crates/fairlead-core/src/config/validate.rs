@@ -196,6 +196,13 @@ fn guard(config: &Config, problems: &mut Vec<Problem>) {
             std::slice::from_ref(&c.matches),
             problems,
         );
+        if let Some(unless) = &c.unless {
+            regexes(
+                &format!("guard.commands[{i}].unless"),
+                std::slice::from_ref(unless),
+                problems,
+            );
+        }
         if c.reason.trim().is_empty() {
             problems.push(problem(
                 format!("guard.commands[{i}].reason"),
