@@ -16,7 +16,8 @@ use crate::attribute::{attribute, Attribution, Repo};
 use crate::dataset::{Job, Row};
 use crate::extract::{extract, Extractor};
 use crate::git::{
-    first_parent, first_parent_before, has_commit, merge_base, patch_id, tree_of, Worktree,
+    first_parent, first_parent_before, first_parent_range, has_commit, merge_base, patch_id,
+    tree_of, Worktree,
 };
 use crate::window::Window;
 
@@ -81,6 +82,7 @@ pub struct Failure {
     pub hit_by: Option<HitBy>,
     /// What a quarantined or inherited failure would have been.
     pub judged: Option<Outcome>,
+    /// Why it couldn't be judged; for a scheduled run's escape, where it came in.
     pub detail: String,
     /// The changed paths of the plan it was judged against.
     pub changed: Vec<String>,
@@ -449,30 +451,143 @@ fn replay_row(r: &Replayer, row: &Row, all: &[&Row], out: &mut Replayed) {
     if failed.is_empty() {
         return;
     }
-    let unavailable = |out: &mut Replayed, why: &str| {
-        for job in &failed {
-            record(
-                out,
-                row,
-                &job.name,
-                Target::Job,
-                Outcome::Unavailable,
-                why,
-                &[],
-            );
-        }
-    };
     if !has_commit(r.clone, &row.head_sha) {
-        return unavailable(out, "head commit not in the clone");
+        return unavailable(out, row, &failed, "head commit not in the clone");
+    }
+    if row.event == SCHEDULE {
+        return replay_scheduled(r, row, failed, all, out);
     }
     let Some(base) = base_of(r, row).and_then(|b| merge_base(r.clone, &b, &row.head_sha)) else {
-        return unavailable(out, "no merge base with the recorded base");
+        return unavailable(out, row, &failed, "no merge base with the recorded base");
     };
+    judge(r, row, &base, failed, all, out);
+}
+
+/// The event of a scheduled run, which runs everything where pushes run the plan.
+pub const SCHEDULE: &str = "schedule";
+
+fn unavailable(out: &mut Replayed, row: &Row, jobs: &[&Job], why: &str) {
+    for job in jobs {
+        record(
+            out,
+            row,
+            &job.name,
+            Target::Job,
+            Outcome::Unavailable,
+            why,
+            &[],
+        );
+    }
+}
+
+/// A scheduled run is judged, job by job, against the newest earlier
+/// scheduled run of its workflow that passed the job: the pushes between
+/// the two ran only what their plans selected, so a failing test the change
+/// since then doesn't reach got past them.
+fn replay_scheduled(r: &Replayer, row: &Row, failed: Vec<&Job>, all: &[&Row], out: &mut Replayed) {
+    let mut by_green: std::collections::BTreeMap<String, Vec<&Job>> = Default::default();
+    for job in failed {
+        match last_green(row, job, all) {
+            Some(green) => by_green
+                .entry(green.head_sha.clone())
+                .or_default()
+                .push(job),
+            None => unavailable(
+                out,
+                row,
+                &[job],
+                "no earlier scheduled run in the window passed the job",
+            ),
+        }
+    }
+    for (green, jobs) in by_green {
+        if !has_commit(r.clone, &green) {
+            unavailable(
+                out,
+                row,
+                &jobs,
+                "the last green run's commit isn't in the clone",
+            );
+            continue;
+        }
+        if tree_of(r.clone, &green) == tree_of(r.clone, &row.head_sha) {
+            for job in &jobs {
+                record(
+                    out,
+                    row,
+                    &job.name,
+                    Target::Job,
+                    Outcome::Unconfirmed,
+                    "an earlier scheduled run passed it on the same tree",
+                    &[],
+                );
+            }
+            continue;
+        }
+        let Some(base) = merge_base(r.clone, &green, &row.head_sha) else {
+            unavailable(out, row, &jobs, "no merge base with the last green run");
+            continue;
+        };
+        let pushes = first_parent_range(r.clone, &base, &row.head_sha).unwrap_or_default();
+        let start = out.failures.len();
+        judge(r, row, &base, jobs, all, out);
+        let came_in = introduced(&pushes, &base, &row.head_sha, all);
+        for f in &mut out.failures[start..] {
+            if f.outcome == Outcome::Miss {
+                f.detail = came_in.clone();
+            }
+        }
+    }
+}
+
+/// The newest earlier run of the same event and workflow that passed `job`.
+fn last_green<'a>(row: &Row, job: &Job, all: &[&'a Row]) -> Option<&'a Row> {
+    all.iter()
+        .copied()
+        .filter(|o| {
+            o.event == row.event
+                && o.workflow == row.workflow
+                && o.created_at < row.created_at
+                && o.jobs
+                    .iter()
+                    .any(|j| j.name == job.name && j.conclusion == "success")
+        })
+        .max_by(|a, b| a.created_at.cmp(&b.created_at))
+}
+
+/// Where an escape came in: the one push since the last green run, with
+/// the pull request its recorded push run names, or else the range.
+fn introduced(pushes: &[String], base: &str, head: &str, all: &[&Row]) -> String {
+    let short = |sha: &str| sha.chars().take(9).collect::<String>();
+    match pushes {
+        [one] => {
+            let pr = all
+                .iter()
+                .find(|r| r.event == "push" && &r.head_sha == one)
+                .and_then(|r| r.pr);
+            format!(
+                "push {}{}",
+                short(one),
+                pr.map_or(String::new(), |p| format!(" (PR {p})"))
+            )
+        }
+        _ => format!(
+            "one of {} pushes in {}..{}",
+            pushes.len(),
+            short(base),
+            short(head)
+        ),
+    }
+}
+
+/// Plans `base..head` at the row's commit and classes each failed job's
+/// targets against it.
+fn judge(r: &Replayer, row: &Row, base: &str, failed: Vec<&Job>, all: &[&Row], out: &mut Replayed) {
     let PlanAt {
         plan,
         tests,
         seconds,
-    } = match r.plan_between(&base, &row.head_sha) {
+    } = match r.plan_between(base, &row.head_sha) {
         Ok(p) => p,
         Err(e) => {
             for job in &failed {
@@ -523,7 +638,7 @@ fn replay_row(r: &Replayer, row: &Row, all: &[&Row], out: &mut Replayed) {
             } else if hit_by.is_some() {
                 Outcome::Hit
             } else if *retried
-                .get_or_insert_with(|| passed_with_same_change(r, row, &base, job, all))
+                .get_or_insert_with(|| passed_with_same_change(r, row, base, job, all))
             {
                 Outcome::Unconfirmed
             } else {
@@ -565,7 +680,7 @@ fn passed_on_another_attempt(row: &Row, job: &Job, all: &[&Row]) -> bool {
 /// the same head, or a head whose diff from its merge base has the same
 /// patch id (a rebase). The change can't be what failed.
 fn passed_with_same_change(r: &Replayer, row: &Row, base: &str, job: &Job, all: &[&Row]) -> bool {
-    if row.event == "push" {
+    if row.event == "push" || row.event == SCHEDULE {
         return passed_on_same_tree(r, row, job, all);
     }
     let Some(pr) = row.pr else {
@@ -593,12 +708,13 @@ fn passed_with_same_change(r: &Replayer, row: &Row, base: &str, job: &Job, all: 
     })
 }
 
-/// A later push of the same tree passed the job, so the tree can't be what
-/// failed: a revert and reland, or a re-run the history recorded as a new run.
+/// A later run of the same event on the same tree passed the job, so the
+/// tree can't be what failed: a revert and reland, or a re-run the history
+/// recorded as a new run.
 fn passed_on_same_tree(r: &Replayer, row: &Row, job: &Job, all: &[&Row]) -> bool {
     let mut ours: Option<Option<String>> = None;
     all.iter().any(|other| {
-        let passed = other.event == "push"
+        let passed = other.event == row.event
             && other.run_id != row.run_id
             && other.created_at > row.created_at
             && other

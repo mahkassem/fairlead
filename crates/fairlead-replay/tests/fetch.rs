@@ -26,9 +26,12 @@ impl Http for Recorded {
         if let Some(reply) = self.take_once(key) {
             return Ok(reply);
         }
-        // `<path>#push` answers a listing filtered to that event.
-        if path.contains("event=push") {
-            if let Some(v) = self.responses.get(&format!("{key}#push")) {
+        // `<path>#<event>` answers a listing filtered to that event.
+        if let Some(event) = path
+            .split(['?', '&'])
+            .find_map(|p| p.strip_prefix("event="))
+        {
+            if let Some(v) = self.responses.get(&format!("{key}#{event}")) {
                 return Ok(Reply::new(200, v.clone()));
             }
         }
@@ -501,13 +504,50 @@ fn a_push_on_the_default_branch_is_a_row_with_the_pull_request_that_merged_it() 
 }
 
 #[test]
-fn an_event_replay_does_not_record_stops_the_fetch() {
-    let http = api();
+fn a_scheduled_run_on_the_default_branch_is_a_row_with_no_pull_request_or_base() {
+    let mut http = api();
+    http.responses
+        .insert("/repos/o/r".into(), json!({ "default_branch": "main" }));
+    http.responses.insert(
+        "/repos/o/r/actions/runs#schedule".into(),
+        json!({ "total_count": 1, "workflow_runs": [
+            { "id": 31, "name": "nightly", "head_sha": "ddd", "head_branch": "main", "run_attempt": 1, "created_at": "2026-09-22T02:00:00Z" }
+        ]}),
+    );
+    http.responses.insert(
+        "/repos/o/r/actions/runs/31/attempts/1/jobs".into(),
+        json!({ "jobs": [{ "id": 106, "name": "test", "conclusion": "success", "steps": [] }] }),
+    );
     let opts = Options {
         events: vec!["schedule".into()],
         ..opts(None)
     };
     let (rows, stop) = fetch(&http, &opts, &BTreeSet::new());
+    assert_eq!(stop, Stop::Complete);
+    assert_eq!(rows.len(), 1, "{rows:?}");
+    assert_eq!(rows[0].event, "schedule");
+    assert_eq!((rows[0].pr, rows[0].base_sha.as_deref()), (None, None));
+    let asked = http.asked.lock().unwrap();
+    assert!(
+        asked
+            .iter()
+            .any(|p| p.contains("event=schedule&branch=main")),
+        "{asked:?}"
+    );
+    assert!(
+        !asked.iter().any(|p| p.contains("/pulls")),
+        "replay finds the base from the last green run: {asked:?}"
+    );
+}
+
+#[test]
+fn an_event_replay_does_not_record_stops_the_fetch() {
+    let http = api();
+    let opts = Options {
+        events: vec!["workflow_dispatch".into()],
+        ..opts(None)
+    };
+    let (rows, stop) = fetch(&http, &opts, &BTreeSet::new());
     assert!(rows.is_empty());
-    assert!(matches!(stop, Stop::Error(e) if e.contains("`schedule`")));
+    assert!(matches!(stop, Stop::Error(e) if e.contains("`workflow_dispatch`")));
 }

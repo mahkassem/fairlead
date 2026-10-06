@@ -17,7 +17,7 @@ pub struct Row {
     pub repo: String,
     pub run_id: u64,
     pub attempt: u32,
-    /// `pull_request` or `merge_group`.
+    /// `pull_request`, `merge_group`, `push` or `schedule`.
     pub event: String,
     pub workflow: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
