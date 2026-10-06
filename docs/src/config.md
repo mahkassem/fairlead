@@ -124,6 +124,8 @@ fairlead.toml: tests.unreachd: unknown field `unreachd`, expected one of ...
 | `skills.cap` | `8` | Skills a brief lists before "N more" |
 | `skills.targets` | `["claude", "agents", "cursor"]` | The agents `skills sync` writes for |
 | `skills.routes` | `[]` | `{ skill, paths, modules, always }`: the SKILL.md and the code it applies to. See [Skills](skills.md) |
+| `agents.write` | `"block"` | What `fairlead agents sync` does: `block` keeps the marked block in each file; `never` writes nothing and prints it for a person to copy in. See [AGENTS.md and CLAUDE.md](agents.md). *Since 0.8.0* |
+| `agents.files` | `["AGENTS.md", "CLAUDE.md"]` | The files that carry the block, relative paths inside the repository |
 | `ci.comment` | `false` | Whether `fairlead ci report` also keeps one pull request comment up to date with the report. See [Plans in CI](ci.md#fairlead-ci-report---plan-path) |
 | `ci.escapes` | `"report"` | What a failing test the merged change's plan left out does once `ci run --judge` finds it: `"report"` lists it, `"fail"` also makes `ci report` exit 1. See [Escapes](ci.md#escapes---judge-path) |
 | `guard.comments` | off | `files`, `exclude`, `tests`, `migrations`, `block_length`, `density`, `history`, `item_codes`, `agent_phrases`, `block_marker`, and `ratchet` (default `false`). See [Guard rules](guard.md#comments) |

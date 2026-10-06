@@ -126,7 +126,9 @@ This README documents Fairlead 0.7.1. Each command, by what it's for:
   then `receipt` and `next`.
 - **Project memory:** `learn` writes a lesson, and `lessons` lists, reviews and
   checks them; the brief offers the ones a change reaches, and the skills
-  `[[skills.routes]]` scope to it.
+  `[[skills.routes]]` scope to it. `agents sync` keeps the loop, the
+  always-on lessons and the skill index in a marked block in AGENTS.md and
+  CLAUDE.md.
 - **Measuring:** `replay` and the benchmarks.
 - **Getting started:** `init` writes a first config from what the repository
   shows.
