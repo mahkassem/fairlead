@@ -15,7 +15,7 @@ changed  3 files: 1 named in the brief, 1 in its reach, 1 outside
   outside  src/auth.ts  adds 1 test (test/auth.test.ts)
 tests    planned now 2, briefed 1: 1 added by files outside the brief
 gate     passed for this tree at 16:01 (1 step) in 9 s
-next     nothing due; the gate passed and the receipt is written
+next     ready: the gate passed and the receipt is written; `gh pr ready` if the pull request is a draft
 ```
 
 ## Inside, reach and outside
@@ -39,9 +39,11 @@ One line, from the state of the change:
 |---|---|
 | Nothing has changed | nothing due |
 | Changed, no brief for the session | `fairlead brief <paths>` |
-| Briefed, the gate hasn't passed for this tree | `fairlead done` |
+| Briefed, the gate hasn't passed for this tree | `fairlead done`, and `gh pr create --draft` if no pull request is open yet |
 | The gate failed | the failing step's command, then `fairlead done` |
-| The gate passed, no receipt for this tree | `fairlead receipt` |
-| The gate passed and the receipt is written | nothing due |
+| The gate passed, no receipt for this tree | `fairlead receipt`, then `gh pr ready` |
+| The gate passed and the receipt is written | `gh pr ready` if the pull request is a draft |
 
 The session comes from `--session` or `CLAUDE_CODE_SESSION_ID`, as for the brief.
+
+*Since 0.8.0:* `next` also says when to open the pull request as a draft and when to mark it ready, so a CI that runs only fast checks on a draft runs the rest once it's marked ready. Fairlead never runs `gh` and doesn't ask whether a pull request is open, so the line reads right either way. A [`[[guard.commands]]` rule](guard.md#commands) can refuse `gh pr create` without `--draft`.

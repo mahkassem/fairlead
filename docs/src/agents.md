@@ -25,6 +25,7 @@ files = ["AGENTS.md", "CLAUDE.md"] # from the repository root
 - Before an edit: `fairlead brief <paths>` names what they reach, the tests that will run, and the lessons and skills that apply.
 - Before you finish: `fairlead done` runs the gate the change has to pass.
 - After it: `fairlead receipt` compares the change with its brief, and `fairlead next` names the step that's due.
+- The pull request: open it as a draft, `gh pr create --draft`, and mark it ready, `gh pr ready`, once `fairlead done` passes.
 - `fairlead find <words>` searches the lessons, skills, docs headings and symbols.
 - `fairlead learn` records a lesson a change taught, with its scope and evidence.
 
@@ -36,7 +37,7 @@ files = ["AGENTS.md", "CLAUDE.md"] # from the repository root
 <!-- fairlead:end -->
 ```
 
-- **The loop:** the commands of [the brief](brief.md), [the done gate](done.md), [the receipt and next](receipt.md), `find` and [`learn`](lessons.md).
+- **The loop:** the commands of [the brief](brief.md), [the done gate](done.md), [the receipt and next](receipt.md), `find` and [`learn`](lessons.md), and when to open the pull request as a draft and mark it ready, as [`next`](receipt.md#next) says.
 - **Lessons for every change:** the [lessons](lessons.md) with `always: true`, as `title (id)`, by id. A lesson scoped to paths stays in the brief, which offers it when a change reaches it.
 - **Skills:** every routed [skill](skills.md), as `name: description (path)`, by name.
 
