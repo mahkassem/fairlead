@@ -19,6 +19,7 @@
 
 ### Changed
 
+- Three kinds of change no longer select every test and check ([#165](https://github.com/mahkassem/fairlead/issues/165)). A `package.json` or `bun.lock` change that only moves dependency versions selects the files that import the moved packages (or a package depending on one) and the tests that reach them, so a devDependency nothing imports selects nothing; anything more than versions moving, a moved package a runner's command runs, one a `plan.run_all` file imports, or one a `plan.run_all` file or a `package.json` script names as a word (a jest preset, a plugin list, a CLI) still selects everything. An edit to `fairlead.toml` or one of its layers selects nothing by itself, since the plan already uses the new config. A workflow whose only triggers are `workflow_dispatch` and `schedule`, at the base and the head, selects nothing by itself. Each says so in a warning: `version-bump-scoped`, `version-bump-runs-everything`, `fairlead-config` or `workflow-dispatch-only`. See [Changes that don't run everything](https://mahkassem.github.io/fairlead/docs/plan.html#changes-that-dont-run-everything).
 - The release binary's size budget in CI is 18 MB, up from 16 MB. With the new commands the Windows build is 17.1 MB and the Linux build 15.1 MB, up from 14.0 MB. Building for size (`opt-level = "s"`) would have kept it under 16 MB but made the graph build and the edit hook about half again slower.
 
 ## 0.7.1 (2026-10-05)
