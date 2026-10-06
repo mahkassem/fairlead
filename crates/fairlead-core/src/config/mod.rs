@@ -1,11 +1,13 @@
 //! The config schema. Every field has a default, so any layer on its own is a
 //! valid config, and the same types read TOML and YAML.
 
+mod agents;
 mod knowledge;
 mod load;
 mod quarantine;
 mod validate;
 
+pub use agents::{Agents, AgentsWrite};
 pub use knowledge::{Learn, Memory, SkillRoute, Skills};
 pub use load::{
     find_config, load, load_file, read_layer, ConfigError, LoadOptions, Loaded, ENV_NAME,
@@ -92,6 +94,7 @@ pub struct Config {
     pub ci: Ci,
     pub memory: Memory,
     pub skills: Skills,
+    pub agents: Agents,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]

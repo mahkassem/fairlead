@@ -2,6 +2,7 @@
 //! adds `config`, K1.2 `graph`, K1.3 `plan`, `test --explain` and `ci`,
 //! K2.1 `guard`.
 
+mod agents_cmd;
 mod bench_cmd;
 mod brief_cmd;
 mod ci_cmd;
@@ -151,6 +152,12 @@ enum Command {
         #[command(flatten)]
         args: find_cmd::FindArgs,
     },
+    /// Keep a marked block in AGENTS.md and CLAUDE.md: the change loop's
+    /// commands, the always-on lessons and the skill index.
+    Agents {
+        #[command(subcommand)]
+        action: agents_cmd::AgentsAction,
+    },
     /// Bring the hooks, the config's version floor and the version pins to
     /// this release, and list what changed since that needs a person.
     Migrate {
@@ -243,8 +250,10 @@ fn doctor_hooks(dir: &Path, loaded: Option<&Loaded>) -> String {
 fn doctor_report(dir: &Path, opts: &LoadOptions) -> String {
     let loaded = config::load(dir, opts);
     let mut hooks = doctor_hooks(dir, loaded.as_ref().ok());
+    let mut agents = String::new();
     if let Ok(l) = &loaded {
-        if let Some(line) = lessons_cmd::doctor_line(&graph_cmd::repo_root(dir), &l.config.memory) {
+        let root = graph_cmd::repo_root(dir);
+        if let Some(line) = lessons_cmd::doctor_line(&root, &l.config.memory) {
             hooks.push_str(&line);
         }
         let root = if l.files.is_empty() {
@@ -255,6 +264,7 @@ fn doctor_report(dir: &Path, opts: &LoadOptions) -> String {
         if let Some(line) = skills_cmd::doctor_line(&root, &l.config) {
             hooks.push_str(&line);
         }
+        agents = agents_cmd::doctor_lines(&root, &l.config);
     }
     let config = match loaded {
         Ok(loaded) if loaded.files.is_empty() => "none found; defaults apply".to_string(),
@@ -271,7 +281,7 @@ fn doctor_report(dir: &Path, opts: &LoadOptions) -> String {
     let here = fairlead_tests::quarantine::Here::detect(&graph_cmd::repo_root(dir));
     let conditions: Vec<&str> = here.conditions.iter().map(|c| c.name()).collect();
     format!(
-        "fairlead {}\nplatform: {}-{}\nconditions: {}\nconfig: {}\n{hooks}",
+        "fairlead {}\nplatform: {}-{}\nconditions: {}\nconfig: {}\n{agents}{hooks}",
         env!("CARGO_PKG_VERSION"),
         std::env::consts::OS,
         std::env::consts::ARCH,
@@ -470,6 +480,7 @@ fn main() -> ExitCode {
         Some(Command::Import { action }) => import_cmd::run(action, &cwd()),
         Some(Command::Skills { action }) => skills_cmd::run(action, &cwd()),
         Some(Command::Find { args }) => find_cmd::run(args, &cwd()),
+        Some(Command::Agents { action }) => agents_cmd::run(action, &cwd()),
         Some(Command::Hooks { action }) => hooks_cmd::run(action, &cwd()),
         Some(Command::Migrate { args }) => migrate_cmd::run(args, &cwd()),
         Some(Command::Done { args }) => done_cmd::run(args, &cwd()),

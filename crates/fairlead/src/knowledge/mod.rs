@@ -4,6 +4,7 @@
 pub mod import;
 pub mod bm25;
 pub mod corpus;
+pub mod block;
 pub mod lesson;
 pub mod route;
 pub mod secrets;

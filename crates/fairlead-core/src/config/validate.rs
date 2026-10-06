@@ -91,6 +91,7 @@ pub fn validate(config: &Config) -> Vec<Problem> {
     guard(config, &mut problems);
     memory(config, &mut problems);
     skills(config, &mut problems);
+    agents(config, &mut problems);
     problems
 }
 
@@ -641,6 +642,23 @@ fn skills(config: &Config, problems: &mut Vec<Problem>) {
     }
 }
 
+/// A file the block goes in: relative, inside the repository, and a file.
+fn agents(config: &Config, problems: &mut Vec<Problem>) {
+    for (i, file) in config.agents.files.items().iter().enumerate() {
+        let path = std::path::Path::new(file);
+        let outside = path.is_absolute()
+            || file.starts_with(['/', '\\'])
+            || file.get(1..2) == Some(":")
+            || file.split(['/', '\\']).any(|p| p == "..");
+        if file.trim().is_empty() || outside || file.ends_with(['/', '\\']) {
+            problems.push(problem(
+                format!("agents.files[{i}]"),
+                "must be a file path inside the repository",
+            ));
+        }
+    }
+}
+
 fn replay(config: &Config, problems: &mut Vec<Problem>) {
     let runner_ids: BTreeSet<&str> = config
         .tests
@@ -849,6 +867,24 @@ mod tests {
             runner_problems("exclude_arg = [\"--ignore={file}\"]\n"),
             Vec::new()
         );
+    }
+
+    #[test]
+    fn agents_files_must_stay_inside_the_repository_and_write_takes_two_values() {
+        let keys = |files: &str| -> Vec<String> {
+            let config: Config =
+                toml::from_str(&format!("[agents]\nfiles = {files}\n")).expect("parses");
+            validate(&config).into_iter().map(|p| p.key).collect()
+        };
+        assert!(keys(r#"["AGENTS.md", "docs/AGENTS.md"]"#).is_empty());
+        assert_eq!(
+            keys(r#"["/etc/AGENTS.md", "../AGENTS.md", "", "docs/", "C:\\x.md"]"#),
+            (0..5)
+                .map(|i| format!("agents.files[{i}]"))
+                .collect::<Vec<_>>()
+        );
+        assert!(toml::from_str::<Config>("[agents]\nwrite = \"never\"\n").is_ok());
+        assert!(toml::from_str::<Config>("[agents]\nwrite = \"sometimes\"\n").is_err());
     }
 
     #[test]

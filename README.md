@@ -134,6 +134,9 @@ This README documents Fairlead 0.7.1. Each command, by what it's for:
   Claude Code, Codex and Cursor each load it.
   `[[skills.routes]]` scope to it. `find` searches lessons, skills, docs
   headings and declared names, nearest the brief first.
+  `[[skills.routes]]` scope to it. `agents sync` keeps the loop, the
+  always-on lessons and the skill index in a marked block in AGENTS.md and
+  CLAUDE.md.
 - **Measuring:** `replay` and the benchmarks.
 - **Getting started:** `init` writes a first config from what the repository
   shows.

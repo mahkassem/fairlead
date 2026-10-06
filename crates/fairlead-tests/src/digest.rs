@@ -14,7 +14,9 @@ fn hex(bytes: &[u8]) -> String {
 
 /// Sections that never change a plan, left out of its digest altogether, so
 /// adding one doesn't change the digest of every plan made before it.
-const NOT_PLANNED: [&str; 7] = ["guard", "hooks", "done", "brief", "ci", "memory", "skills"];
+const NOT_PLANNED: [&str; 8] = [
+    "guard", "hooks", "done", "brief", "ci", "memory", "skills", "agents",
+];
 
 pub fn config_digest(config: &Config) -> String {
     let mut value = serde_json::to_value(config).expect("config serializes");
@@ -80,6 +82,8 @@ mod tests {
         config.brief.nudge = false;
         config.ci.comment = true;
         config.done.guard = false;
+        config.agents.write = fairlead_core::config::AgentsWrite::Never;
+        config.agents.files = vec!["AGENTS.md".to_string()].into();
         assert_eq!(
             config_digest(&config),
             released,
