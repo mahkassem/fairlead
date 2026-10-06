@@ -140,6 +140,10 @@ This README documents Fairlead 0.7.1. Each command, by what it's for:
   always-on lessons and the skill index in a marked block in AGENTS.md and
   CLAUDE.md.
 - **Measuring:** `replay` and the benchmarks.
+  `[[skills.routes]]` scope to it; `import rules` turns path-scoped rule
+  files into skills and routes.
+- **Measuring:** `replay`, the benchmarks, and `skills eval`, which scores
+  skill routing on the repository's history.
 - **Getting started:** `init` writes a first config from what the repository
   shows.
 - **The config:** `config check`, `show` and `schema`.

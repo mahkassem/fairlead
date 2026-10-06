@@ -19,6 +19,18 @@ pub enum SkillsAction {
         #[arg(long, conflicts_with = "check")]
         clean: bool,
     },
+    /// Score skill routing on git history: a commit that changes code and edits a routed SKILL.md needed that skill.
+    Eval {
+        /// Every first-parent commit since this date, as `git log --since` reads it.
+        #[arg(long, value_name = "DATE", conflicts_with = "limit")]
+        since: Option<String>,
+        /// How many first-parent commits from HEAD to read (500).
+        #[arg(long, value_name = "N")]
+        limit: Option<usize>,
+        /// Print the scores as JSON.
+        #[arg(long)]
+        json: bool,
+    },
 }
 
 fn config_at(cwd: &Path) -> Result<(PathBuf, Config), String> {
@@ -33,6 +45,12 @@ fn config_at(cwd: &Path) -> Result<(PathBuf, Config), String> {
 }
 
 pub fn run(action: SkillsAction, cwd: &Path) -> ExitCode {
+    if let SkillsAction::Eval { since, limit, json } = action {
+        return crate::skills_eval_cmd::run(
+            crate::skills_eval_cmd::SkillsAction::Eval { since, limit, json },
+            cwd,
+        );
+    }
     let (root, config) = match config_at(cwd) {
         Ok(found) => found,
         Err(e) => {
@@ -44,6 +62,7 @@ pub fn run(action: SkillsAction, cwd: &Path) -> ExitCode {
         SkillsAction::Sync { clean: true, .. } => clean(&root),
         SkillsAction::Sync { check: true, .. } => check(&root, &config),
         SkillsAction::Sync { .. } => write(&root, &config),
+        SkillsAction::Eval { .. } => unreachable!("handled above"),
     }
 }
 

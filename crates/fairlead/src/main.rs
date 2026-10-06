@@ -17,6 +17,7 @@ mod guard_cmd;
 mod hook_cmd;
 mod hooks_cmd;
 mod import_cmd;
+mod import_rules_cmd;
 mod init_cmd;
 mod knowledge;
 mod lessons_cmd;
@@ -27,6 +28,7 @@ mod receipt_cmd;
 mod replay_cmd;
 mod skills_cmd;
 mod resume_cmd;
+mod skills_eval_cmd;
 mod step;
 
 use std::path::{Path, PathBuf};

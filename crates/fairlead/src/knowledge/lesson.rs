@@ -74,7 +74,7 @@ pub struct Bad {
 }
 
 /// Splits `---` front matter from the body.
-fn split(text: &str) -> Option<(&str, &str)> {
+pub fn split(text: &str) -> Option<(&str, &str)> {
     let text = text.strip_prefix('\u{feff}').unwrap_or(text);
     let rest = text
         .strip_prefix("---\n")

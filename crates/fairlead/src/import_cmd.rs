@@ -25,10 +25,26 @@ pub enum ImportAction {
         #[arg(long)]
         json: bool,
     },
+    /// Turn path-scoped rule files (Claude Code `.md` with `paths`, Cursor `.mdc` with `globs` or `alwaysApply`) into skills plus `[[skills.routes]]`.
+    Rules {
+        /// The directory holding the rule files, such as `.claude/rules` or `.cursor/rules`.
+        dir: PathBuf,
+        /// Write the SKILL.md files and append the routes to fairlead.toml; without it, only print them.
+        #[arg(long)]
+        write: bool,
+    },
 }
 
 pub fn run(action: ImportAction, cwd: &Path) -> ExitCode {
-    let ImportAction::Lessons { file, write, json } = action;
+    let (file, write, json) = match action {
+        ImportAction::Lessons { file, write, json } => (file, write, json),
+        ImportAction::Rules { dir, write } => {
+            return crate::import_rules_cmd::run(
+                crate::import_rules_cmd::ImportAction::Rules { dir, write },
+                cwd,
+            )
+        }
+    };
     match lessons(&file, write, json, cwd) {
         Ok(code) => code,
         Err(e) => {
