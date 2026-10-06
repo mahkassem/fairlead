@@ -21,6 +21,7 @@ mod migrate_notes;
 mod plan_cmd;
 mod receipt_cmd;
 mod replay_cmd;
+mod skills_report_cmd;
 mod step;
 
 use std::path::{Path, PathBuf};
@@ -142,6 +143,11 @@ enum Command {
     Migrate {
         #[command(flatten)]
         args: migrate_cmd::MigrateArgs,
+    },
+    /// How routed skills and lessons fare: `report` gives routing's hit rate from the event log.
+    Skills {
+        #[command(subcommand)]
+        action: skills_report_cmd::SkillsAction,
     },
     /// Install, check or remove the Claude Code and git hooks that run the guard, the brief nudge and the Stop hook.
     Hooks {
@@ -440,6 +446,7 @@ fn main() -> ExitCode {
         Some(Command::Guard { action, sets }) => guard_cmd::run(action, sets, &cwd()),
         Some(Command::Learn { args }) => lessons_cmd::learn(args, &cwd()),
         Some(Command::Lessons { action }) => lessons_cmd::run(action, &cwd()),
+        Some(Command::Skills { action }) => skills_report_cmd::run(action, &cwd()),
         Some(Command::Hooks { action }) => hooks_cmd::run(action, &cwd()),
         Some(Command::Migrate { args }) => migrate_cmd::run(args, &cwd()),
         Some(Command::Done { args }) => done_cmd::run(args, &cwd()),

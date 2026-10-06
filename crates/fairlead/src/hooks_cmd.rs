@@ -916,6 +916,17 @@ pub fn claude_installed(root: &Path) -> bool {
     })
 }
 
+/// Whether `.codex/hooks.json` holds Fairlead's hooks: they see edits, never
+/// a read, so a skill Codex loads isn't recorded.
+pub fn codex_installed(root: &Path) -> bool {
+    let file = root.join(".codex").join("hooks.json");
+    read(&file)
+        .ok()
+        .flatten()
+        .and_then(|text| parse(&file, &text).ok())
+        .is_some_and(|settings| !installed(&settings).is_empty())
+}
+
 /// The lefthook config, when its commit stage runs another command than this version writes.
 pub fn stale_git(root: &Path, git_dir: &Path) -> Result<Option<Refresh>, String> {
     let file = lefthook_file(root);
