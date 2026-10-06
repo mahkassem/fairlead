@@ -14,6 +14,10 @@
 - `fairlead agents sync` ([#163](https://github.com/mahkassem/fairlead/issues/163)) keeps a block between `<!-- fairlead:begin -->` and `<!-- fairlead:end -->` in each of `agents.files` (AGENTS.md and CLAUDE.md): the change loop's commands, the `always` lessons and every routed skill, in at most 40 lines, with "… N more" past that. Only what's between the markers is written; a file without them gets the block at its end and a missing one is created, keeping the file's line endings and final newline. Markers that don't make one block are an error naming the file, which is left untouched. `--check` writes nothing and exits 1 on a missing or stale block, and `--clean` removes it, giving back the file as it was. With `agents.write = "never"`, it prints the block for a person to copy in and writes nothing, and `fairlead doctor` names each file missing the block or holding a stale one in either mode. `[agents]` is left out of the plan digest. See [AGENTS.md and CLAUDE.md](https://mahkassem.github.io/fairlead/docs/agents.html).
 - `fairlead skills report` ([#164](https://github.com/mahkassem/fairlead/issues/164)) gives routing's hit rate from the event log: per skill, the sessions it was offered in, used in, used in before any offer (a miss) and offered in but never used, with the share of sessions in which an offered skill was used; per lesson, offers only, since nothing records a lesson being read. A session whose events carry Codex's `apply_patch` is unmeasured, never counted as unused. `--since`, `--session`, `--all` and `--json`. The edit hook's events now carry the session. See [Measuring routing](https://mahkassem.github.io/fairlead/docs/skills.html#measuring-routing-skills-report).
 
+### Changed
+
+- The release binary's size budget in CI is 18 MB, up from 16 MB. With the new commands the Windows build is 17.1 MB and the Linux build 15.1 MB, up from 14.0 MB. Building for size (`opt-level = "s"`) would have kept it under 16 MB but made the graph build and the edit hook about half again slower.
+
 ## 0.7.1 (2026-10-05)
 
 ### New
