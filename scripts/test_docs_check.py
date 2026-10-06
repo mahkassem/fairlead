@@ -66,7 +66,7 @@ class DocsCheck(unittest.TestCase):
         self.assertIn("documents Fairlead 0.1.0", p)
 
     def test_promising_a_milestone_the_roadmap_says_shipped_fails(self):
-        self.edit("README.md", "*Coming in K4*", "*Coming in K2*")
+        self.edit("README.md", "*Since 0.4.0:*", "*Coming in K2*")
         [p] = self.problems()
         self.assertIn('"coming in K2", but the roadmap says Shipped in', p)
 

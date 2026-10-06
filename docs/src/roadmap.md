@@ -6,7 +6,7 @@
 | K1 | Config and the test plan (import graph, test classes, CI plan), replay and the benchmarks | Shipped in 0.2.0 |
 | K2 | Guard rules, Claude Code hooks, git hooks, event log | Shipped in 0.4.0 |
 | K3 | Receipts, workflows, done gates, the change brief ([#45](https://github.com/mahkassem/fairlead/issues/45)), CI report, Codex hooks | Partly shipped in 0.7.0: the brief, the done gate and Stop hook, the receipt, the CI report and escapes (0.6.0), and Codex and Gemini CLI hooks |
-| K4 | Memory, search, skills and skill routing ([#43](https://github.com/mahkassem/fairlead/issues/43)), import | Planned |
+| K4 | Memory, search, skills and skill routing ([#43](https://github.com/mahkassem/fairlead/issues/43)), import | Shipped in 0.8.0 |
 | K5 | MCP server, trackers, headless runner, token sources | Planned |
 | K6 | Blueprints, readiness score, insights, 1.0 | Planned |
 
