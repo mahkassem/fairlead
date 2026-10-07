@@ -164,6 +164,19 @@ pub const RELEASES: &[(&str, &[Note])] = &[
             },
         ],
     ),
+    (
+        "0.9.0",
+        &[
+            Note {
+                text: "`replay fetch --event schedule` records the default branch's scheduled runs, so a project whose pushes run the plan and whose full suite runs on a schedule can count what the nightly caught and no push ran (see Replay).",
+                applies: uses_replay,
+            },
+            Note {
+                text: "`fairlead graph why` names edge kinds in words (`type import`, `path literal`) where it printed `typeimport` and `pathliteral`; a script that reads its output needs the new names.",
+                applies: always,
+            },
+        ],
+    ),
 ];
 
 /// Config tables and keys by the release that added them. The top-level

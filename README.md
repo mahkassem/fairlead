@@ -118,7 +118,7 @@ selected test classes.
 
 ## What it does
 
-This README documents Fairlead 0.8.0. Each command, by what it's for:
+This README documents Fairlead 0.9.0. Each command, by what it's for:
 
 - **The test plan:** `plan`, `test --explain`, the import graph (`graph`) and
   coverage maps (`coverage import`).
@@ -156,11 +156,15 @@ The [quick start](#quick-start) shows the first few, and the
 
 ## Status
 
-Pre-alpha. The latest release, v0.8.0, adds memory and skills: lessons in
-`.fairlead/lessons/` written by `fairlead learn` or imported from a document a
-team already keeps, skills routed by what a change reaches, `fairlead find`,
-`fairlead context` and `resume`, and a block in AGENTS.md and CLAUDE.md that
-`agents sync` keeps current. It also adds CI stages: each runner and check says
+Pre-alpha. The latest release, v0.9.0, lets replay measure a project whose
+pushes run the plan too, by reading its scheduled full runs (`replay fetch
+--event schedule`), names each hop of a `test --explain` chain that isn't a
+plain import, and has `migrate` refresh Codex and Gemini CLI hooks. v0.8.0
+added memory and skills: lessons in `.fairlead/lessons/` written by
+`fairlead learn` or imported from a document a team already keeps, skills
+routed by what a change reaches, `fairlead find`, `fairlead context` and
+`resume`, and a block in AGENTS.md and CLAUDE.md that `agents sync` keeps
+current. It also added CI stages: each runner and check says
 when it runs (a draft, a ready pull request, a merge or a full run), a merge
 skips what its pull request passed on the same tree, end-to-end runs batch
 after merge, and `ci workflow` writes the staged workflow. v0.7.1 let a runner say what "everything" means

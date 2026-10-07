@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.9.0 (2026-10-06)
+
+### New
+
+- Replay reads scheduled full runs as escape evidence ([#133](https://github.com/mahkassem/fairlead/issues/133)). For a project whose pushes run the plan and whose full suite runs on a schedule, `fairlead replay fetch --event schedule` records the default branch's scheduled runs. `replay run` judges each failed job against the newest earlier scheduled run of the same workflow that passed it, the same "last green" `ci plan --since-green` uses, by planning from that run's commit to the failing one. A failing test the plan selects is a hit; one it leaves out got past every push in between and is an escape, unless a later scheduled run passed the job on the same tree. An escape names the push it came in with, and the pull request its recorded push run names, when there was exactly one push since the green run, and otherwise the range and its number of pushes. Scheduled runs have their own report line, `schedule (full runs)`, and `--json` gains `introduced` on each escape. See [Scheduled runs](https://mahkassem.github.io/fairlead/docs/replay.html#scheduled-runs).
+- `fairlead test --explain` names each hop that isn't a plain import ([#129](https://github.com/mahkassem/fairlead/issues/129)): `(type import)`, `(path literal)`, `(coverage)` and the other edge kinds, and for a hop the walk adds conservatively, why it's there, such as ``(unresolved import `./gen/x`, so it depends on its whole module)``. `fairlead graph why` uses the same names, where it printed the kinds run together (`typeimport`, `pathliteral`), and labels a hop through a workspace package. The plan's JSON is unchanged. See [Reasons](https://mahkassem.github.io/fairlead/docs/plan.html#reasons).
+
+### Fixed
+
+- `fairlead migrate` refreshes Codex and Gemini CLI hooks as it does Claude Code's ([#178](https://github.com/mahkassem/fairlead/pull/178)). It compared only `.claude/settings.json` and `settings.local.json` with what `hooks install` writes, so hooks in `.codex/hooks.json` and `.gemini/settings.json` stayed as an older release left them: Gemini CLI hooks from 0.7 never matched `read_file`, so a SKILL.md read there wasn't counted as a use. `migrate --write` now brings them to this release's, and `hooks install` on an agent that already has hooks points at `migrate` for every agent. See [What migrate changes](https://mahkassem.github.io/fairlead/docs/migrate.html#what-migrate-changes).
+- A command whose output is piped into one that stops reading early, such as `fairlead plan | head`, exits quietly with 141, the status a shell gives a process a closed pipe stopped, where it panicked with a trace and exited 101 ([#177](https://github.com/mahkassem/fairlead/pull/177)). It's 141, not 0, so `fairlead done | head` can't read as a pass.
+
 ## 0.8.0 (2026-10-06)
 
 ### New
