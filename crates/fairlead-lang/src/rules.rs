@@ -27,6 +27,9 @@ pub struct RuleStats {
     pub unresolved: Vec<(String, usize, String)>,
 }
 
+/// File pairs a rule links, dependent first.
+type Pairs = BTreeSet<(u32, u32)>;
+
 /// A file's text, by its path from the root; `None` for a file that can't be
 /// read, such as one deleted from the tree.
 pub type Read<'a> = &'a dyn Fn(&str) -> Option<String>;
@@ -180,7 +183,7 @@ fn found(
     rule: &EdgeRule,
     find: &str,
     read: Read,
-) -> Result<(BTreeSet<(u32, u32)>, BTreeSet<String>), String> {
+) -> Result<(Pairs, BTreeSet<String>), String> {
     let re = Regex::new(find).map_err(|e| format!("`{find}`: {e}"))?;
     let from = Pattern::new(&rule.from)?;
     let targets = rule.targets();

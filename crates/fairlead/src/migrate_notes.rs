@@ -204,6 +204,8 @@ pub const SINCE: &[(&str, &str)] = &[
     ("tests.runners.from", "0.8"),
     ("checks.from", "0.8"),
     ("guard.commands.unless", "0.8"),
+    ("extends", "0.10"),
+    ("graph.edges.find", "0.10"),
 ];
 
 /// Top-level tables every released config format has had.

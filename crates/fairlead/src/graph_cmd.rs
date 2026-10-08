@@ -181,6 +181,9 @@ fn stats(scan: &Scan, seconds: f64, json: bool, cache_off: &str) -> ExitCode {
         for from in &scan.rules.unmatched {
             println!("rule from {from} linked no file");
         }
+        for (from, n, example) in &scan.rules.unresolved {
+            println!("rule from {from} found {n} name(s) that match no file, such as `{example}`");
+        }
         for (from, n) in &scan.rules.large {
             println!("rule from {from} added {n} edges; check that its globs match only what they should");
         }
