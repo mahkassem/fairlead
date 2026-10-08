@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### New
+
+- `fairlead hooks install --codex` and `--gemini` add the `SessionStart` hook that runs `fairlead resume --hook`, as Claude Code's install does ([#162](https://github.com/mahkassem/fairlead/issues/162)). Both CLIs now have a `SessionStart` event that sends the session's `cwd` and reads `hookSpecificOutput.additionalContext` back, the same shape Claude Code uses, so a new Codex or Gemini CLI session starts with where the last one on the branch stopped. `brief.resume = false` leaves it out, and `fairlead migrate --write` adds it to hooks installed before. See [The SessionStart hook](https://mahkassem.github.io/fairlead/docs/context.html#the-sessionstart-hook).
+
 ## 0.9.0 (2026-10-06)
 
 ### New

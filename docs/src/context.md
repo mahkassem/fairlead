@@ -60,7 +60,7 @@ With no brief at all, it says so in one line and suggests `fairlead brief <paths
 
 ## The SessionStart hook
 
-`fairlead hooks install` adds a Claude Code `SessionStart` hook that runs `fairlead resume --hook` when a session starts, resumes, clears or compacts. It reads the hook's JSON on stdin (`session_id`, `cwd`) and answers with the resume text as context for the agent:
+`fairlead hooks install` adds a `SessionStart` hook that runs `fairlead resume --hook` when a session starts, resumes, clears or compacts: for Claude Code, and *(Unreleased)* for Codex and Gemini CLI with `--codex` and `--gemini`, which send and read the same JSON. It reads the hook's JSON on stdin (`session_id`, `cwd`) and answers with the resume text as context for the agent:
 
 ```json
 {"hookSpecificOutput": {"hookEventName": "SessionStart", "additionalContext": "fairlead: where the last session on this branch stopped.\nresume   brief b-575006d4 …"}}
