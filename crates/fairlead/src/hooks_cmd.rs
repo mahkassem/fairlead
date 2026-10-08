@@ -620,7 +620,7 @@ fn add_ours(
         };
         groups.push(json!({ "matcher": matcher, "hooks": [{ "type": "command", "command": command, "timeout": TIMEOUT * unit }] }));
     }
-    if resume && agent == Agent::Claude {
+    if resume {
         let groups = hooks.entry(SESSION_EVENT).or_insert_with(|| json!([]));
         let Some(groups) = groups.as_array_mut() else {
             return Err(format!(
@@ -630,7 +630,7 @@ fn add_ours(
         };
         let command = stage_command("resume --hook", runner, dir);
         // Like the Stop hook, it plans the working tree, which a large one makes slower.
-        groups.push(json!({ "hooks": [{ "type": "command", "command": command, "timeout": STOP_TIMEOUT }] }));
+        groups.push(json!({ "hooks": [{ "type": "command", "command": command, "timeout": STOP_TIMEOUT * unit }] }));
     }
     Ok(())
 }
@@ -690,7 +690,7 @@ fn install(
     } else {
         ""
     };
-    let resume = if stages.resume && agent == Agent::Claude {
+    let resume = if stages.resume {
         "; a new session starts with `fairlead resume`"
     } else {
         ""
