@@ -19,6 +19,8 @@ pub struct Miss {
     pub event: String,
     pub pr: Option<u64>,
     pub head_sha: String,
+    /// The CI job it failed in.
+    pub job: String,
     pub target: String,
     pub changed: Vec<String>,
     /// An owner rule that would have selected it.
@@ -150,6 +152,7 @@ fn miss(f: &Failure) -> Miss {
         event: f.event.clone(),
         pr: f.pr,
         head_sha: f.head_sha.clone(),
+        job: f.job.clone(),
         target,
         changed: f.changed.clone(),
         fix,
@@ -453,12 +456,13 @@ pub fn text(r: &Report) -> String {
     for m in &r.misses {
         let _ = writeln!(
             out,
-            "\n  {}  run {} attempt {} (PR {})  {}",
+            "\n  {}  run {} attempt {} (PR {})  {}  [{}]",
             if escape(&m.event) { "escape" } else { "miss" },
             m.run_id,
             m.attempt,
             m.pr.map_or("-".into(), |p| p.to_string()),
-            m.target
+            m.target,
+            m.job
         );
         let _ = writeln!(out, "        changed: {}", m.changed.join(", "));
         if let Some(introduced) = &m.introduced {
