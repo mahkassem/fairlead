@@ -5,8 +5,9 @@
 
 use std::collections::{BTreeSet, HashSet};
 
-use fairlead_core::config::{EdgeRule, Graph as GraphConfig};
+use fairlead_core::config::{EdgeRule, Graph as GraphConfig, FOUND, FOUND_PATH};
 use fairlead_core::pattern::{fill, Captures, Pattern};
+use regex::Regex;
 
 use crate::graph::{EdgeKind, Graph};
 
@@ -21,7 +22,14 @@ pub struct RuleStats {
     pub unmatched: Vec<String>,
     /// Rules, by `from`, past `LARGE_RULE` edges, with their count.
     pub large: Vec<(String, usize)>,
+    /// What `find` rules captured that named no file, by `from`, with the
+    /// distinct values and an example.
+    pub unresolved: Vec<(String, usize, String)>,
 }
+
+/// A file's text, by its path from the root; `None` for a file that can't be
+/// read, such as one deleted from the tree.
+pub type Read<'a> = &'a dyn Fn(&str) -> Option<String>;
 
 pub struct Rules {
     edges: Vec<EdgeRule>,
@@ -43,10 +51,31 @@ impl Rules {
     }
 
     /// Adds every rule edge to a freshly built graph.
-    pub fn apply(&self, graph: &mut Graph) -> Result<RuleStats, String> {
+    pub fn apply(&self, graph: &mut Graph, read: Read) -> Result<RuleStats, String> {
         let mut stats = RuleStats::default();
+        // Several `find` rules usually read the same files.
+        let memo: std::cell::RefCell<std::collections::HashMap<String, Option<String>>> =
+            Default::default();
+        let cached = |f: &str| {
+            memo.borrow_mut()
+                .entry(f.to_string())
+                .or_insert_with(|| read(f))
+                .clone()
+        };
+        let read: Read = &cached;
         for rule in &self.edges {
-            let pairs = pairs(graph, rule)?;
+            let pairs = match &rule.find {
+                Some(find) => {
+                    let (pairs, missing) = found(graph, rule, find, read)?;
+                    if let Some(example) = missing.iter().next() {
+                        stats
+                            .unresolved
+                            .push((rule.from.clone(), missing.len(), example.clone()));
+                    }
+                    pairs
+                }
+                None => pairs(graph, rule)?,
+            };
             if pairs.is_empty() {
                 stats.unmatched.push(rule.from.clone());
             }
@@ -62,10 +91,14 @@ impl Rules {
     }
 
     /// Adds the rule edges that touch `ids`, files added after the build.
-    pub fn apply_to(&self, graph: &mut Graph, ids: &[u32]) -> Result<(), String> {
+    pub fn apply_to(&self, graph: &mut Graph, ids: &[u32], read: Read) -> Result<(), String> {
         let ids: HashSet<u32> = ids.iter().copied().collect();
         for rule in &self.edges {
-            for (from, to) in pairs(graph, rule)? {
+            let pairs = match &rule.find {
+                Some(find) => found(graph, rule, find, read)?.0,
+                None => pairs(graph, rule)?,
+            };
+            for (from, to) in pairs {
                 if ids.contains(&from) || ids.contains(&to) {
                     graph.add_edge(from, to, EdgeKind::Rule);
                 }
@@ -136,4 +169,67 @@ fn pairs(graph: &Graph, rule: &EdgeRule) -> Result<BTreeSet<(u32, u32)>, String>
         }
     }
     Ok(out)
+}
+
+/// A `find` rule's pairs: each `from` file whose text the regex matches
+/// depends on what `to` names, filled with the file's own `{name}`s and the
+/// capture. A filled glob without wildcards is looked up directly. Also
+/// returns the captures that named no file.
+fn found(
+    graph: &Graph,
+    rule: &EdgeRule,
+    find: &str,
+    read: Read,
+) -> Result<(BTreeSet<(u32, u32)>, BTreeSet<String>), String> {
+    let re = Regex::new(find).map_err(|e| format!("`{find}`: {e}"))?;
+    let from = Pattern::new(&rule.from)?;
+    let targets = rule.targets();
+    let captures = re.captures_len() > 1;
+    let mut out = BTreeSet::new();
+    let mut missing = BTreeSet::new();
+    for (id, file) in graph.files.iter().enumerate() {
+        let Some(base) = from.captures(file) else {
+            continue;
+        };
+        let Some(text) = read(file) else { continue };
+        let values: BTreeSet<&str> = re
+            .captures_iter(&text)
+            .map(|c| c.get(1).map_or("", |m| m.as_str()))
+            .collect();
+        for value in values {
+            let mut binding = base.clone();
+            if captures {
+                binding.insert(FOUND.into(), value.to_string());
+                binding.insert(FOUND_PATH.into(), value.replace('.', "/"));
+            }
+            let mut linked = false;
+            for glob in &targets {
+                for to in matching(graph, glob, &binding)? {
+                    if to != id as u32 {
+                        out.insert((id as u32, to));
+                        linked = true;
+                    }
+                }
+            }
+            if !linked && captures {
+                missing.insert(value.to_string());
+            }
+        }
+    }
+    Ok((out, missing))
+}
+
+/// The files `glob`, filled with `binding`, matches.
+fn matching(graph: &Graph, glob: &str, binding: &Captures) -> Result<Vec<u32>, String> {
+    let mut literal = glob.to_string();
+    for (name, value) in binding {
+        literal = literal.replace(&format!("{{{name}}}"), value);
+    }
+    if !literal.contains(['*', '?', '[', '{']) {
+        return Ok(graph.id(&literal).into_iter().collect());
+    }
+    let p = fill(glob, binding)?;
+    Ok((0..graph.files.len() as u32)
+        .filter(|&id| p.is_match(&graph.files[id as usize]))
+        .collect())
 }

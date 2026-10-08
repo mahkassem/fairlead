@@ -1,0 +1,18 @@
+# akaunting/akaunting's tests workflow: php artisan test --parallel over tests/, printed by Collision like Pest.
+# Without a framework pack, the baseline the pack is measured against.
+
+[tests]
+match = { replace = ["tests/**/*Test.php"] }
+
+[[tests.runners]]
+id = "php"
+match = ["tests/**/*Test.php"]
+command = ["php", "artisan", "test", "{files}"]
+
+[replay]
+window_days = 90
+min_failures = 10
+
+[[replay.failures]]
+runner = "php"
+extractor = "pest"
