@@ -73,6 +73,10 @@ pub struct Report {
     /// Failures of a runner-image change, by job, test and image.
     pub environment: usize,
     pub waves: Vec<crate::waves::Wave>,
+    /// Failures set aside as recurring: the test failed alike across
+    /// unrelated pull requests on different bases.
+    pub recurring: usize,
+    pub recurring_groups: Vec<crate::recurring::Group>,
     /// Hits over hits, misses and unconfirmed failures.
     pub strict_recall: Option<f64>,
     pub by_event: BTreeMap<String, EventRecall>,
@@ -120,7 +124,13 @@ fn miss(f: &Failure) -> Miss {
         Target::Check(id) => format!("check {id}"),
         Target::Job => format!("job {}", f.job),
     };
-    let fix = match (&f.target, f.changed.first()) {
+    // A test or a document can't break another test, so neither is a cause
+    // worth an owner rule.
+    let cause = f
+        .changed
+        .iter()
+        .find(|c| !crate::inherited::is_test_name(c) && !is_document(c));
+    let fix = match (&f.target, cause) {
         (Target::Test(test), Some(changed)) => format!(
             "[[tests.owners]] match = \"{}\", covers = [\"{}\"]",
             dir_glob(test),
@@ -128,6 +138,9 @@ fn miss(f: &Failure) -> Miss {
         ),
         (Target::Check(id), Some(changed)) => {
             format!("add \"{}\" to the paths of check {id}", dir_glob(changed))
+        }
+        (_, None) if !f.changed.is_empty() => {
+            "no rule suggested: only tests or documents changed, so the test likelier failed on its own".into()
         }
         _ => "no rule suggested".into(),
     };
@@ -143,6 +156,15 @@ fn miss(f: &Failure) -> Miss {
         introduced: (f.event == crate::run::SCHEDULE && !f.detail.is_empty())
             .then(|| f.detail.clone()),
     }
+}
+
+fn is_document(path: &str) -> bool {
+    let lower = path.to_ascii_lowercase();
+    let name = lower.rsplit('/').next().unwrap_or(&lower);
+    [".md", ".mdx", ".txt", ".rst", ".adoc"]
+        .iter()
+        .any(|ext| name.ends_with(ext))
+        || name == "license"
 }
 
 pub fn report(repo: &str, window: &Window, min_failures: u32, replayed: &Replayed) -> Report {
@@ -239,6 +261,8 @@ pub fn report(repo: &str, window: &Window, min_failures: u32, replayed: &Replaye
         inherited_groups: replayed.inherited.clone(),
         environment: count(Outcome::Environment),
         waves: replayed.waves.clone(),
+        recurring: count(Outcome::Recurring),
+        recurring_groups: replayed.recurring.clone(),
         strict_recall: ratio(hits, judged + unconfirmed),
         by_event,
         min_failures,
@@ -279,18 +303,41 @@ pub fn text(r: &Report) -> String {
         pct(r.recall),
         pct(r.strict_recall)
     );
-    if !r.quarantine.is_empty() || !r.inherited_groups.is_empty() || !r.waves.is_empty() {
+    if !r.quarantine.is_empty()
+        || !r.inherited_groups.is_empty()
+        || !r.waves.is_empty()
+        || !r.recurring_groups.is_empty()
+    {
         let _ = writeln!(
             out,
-            "  raw recall {} (n={})  adjusted {} (n={}), {} quarantined, {} inherited, {} environment",
+            "  raw recall {} (n={})  adjusted {} (n={}), {} quarantined, {} inherited, {} environment, {} recurring",
             pct(r.raw_recall),
             r.raw_judged,
             pct(r.recall),
             r.judged,
             r.quarantined,
             r.inherited,
-            r.environment
+            r.environment,
+            r.recurring
         );
+        for g in &r.recurring_groups {
+            let pulls: Vec<String> = g.pulls.iter().map(u64::to_string).collect();
+            let _ = writeln!(
+                out,
+                "    recurring {}  [{}]  unrelated pull requests failed it alike: PRs {}; {} would-be hits, {} misses",
+                g.path,
+                g.job,
+                pulls.join(", "),
+                g.would_hit,
+                g.would_miss
+            );
+            let _ = writeln!(
+                out,
+                "      if it's flaky: [[replay.quarantine]] path = \"{}\", job = \"^{}$\", reason = \"fails across unrelated pull requests\", until = \"YYYY-MM-DD\"",
+                g.path,
+                regex::escape(&g.job)
+            );
+        }
         for w in &r.waves {
             let pulls: Vec<String> = w.pulls.iter().map(u64::to_string).collect();
             let _ = writeln!(
@@ -420,4 +467,56 @@ pub fn text(r: &Report) -> String {
         let _ = writeln!(out, "        fix: {}", m.fix);
     }
     out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn missed(changed: &[&str]) -> Failure {
+        Failure {
+            run_id: 1,
+            attempt: 1,
+            event: "pull_request".into(),
+            pr: Some(1),
+            head_sha: "head".into(),
+            base_sha: None,
+            created_at: "2026-09-01T10:00:00Z".into(),
+            job: "jvm".into(),
+            target: Target::Test("okhttp/src/jvmTest/kotlin/okhttp3/CallTest.kt".into()),
+            outcome: Outcome::Miss,
+            hit_by: None,
+            judged: None,
+            detail: String::new(),
+            changed: changed.iter().map(|s| s.to_string()).collect(),
+        }
+    }
+
+    #[test]
+    fn a_miss_after_only_tests_or_documents_changed_suggests_no_owner_rule() {
+        let fix = miss(&missed(&[
+            "okhttp-java-net-cookiejar/README.md",
+            "okhttp/src/jvmTest/kotlin/okhttp3/FastFallbackTest.kt",
+        ]))
+        .fix;
+        assert!(
+            fix.starts_with("no rule suggested: only tests or documents"),
+            "{fix}"
+        );
+    }
+
+    #[test]
+    fn the_owner_rule_names_the_changed_source_not_the_first_path() {
+        let fix = miss(&missed(&[
+            "okhttp-dnsoverhttps/src/test/java/okhttp3/DnsOverHttpsTest.java",
+            "okhttp-dnsoverhttps/src/main/kotlin/okhttp3/dnsoverhttps/DnsOverHttps.kt",
+        ]))
+        .fix;
+        assert!(
+            fix.contains(
+                "covers = [\"okhttp-dnsoverhttps/src/main/kotlin/okhttp3/dnsoverhttps/**\"]"
+            ),
+            "{fix}"
+        );
+    }
 }

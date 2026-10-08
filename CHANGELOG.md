@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- Replay sets recurring failures aside ([#184](https://github.com/mahkassem/fairlead/issues/184)). A test failing in one job across three or more unrelated pull requests on different bases, none touching it, gets the outcome `recurring`: kept out of adjusted recall and counted in raw recall, hits and misses alike, and listed with a `[[replay.quarantine]]` entry to confirm. On okhttp, flaky network tests counted as misses against changes that couldn't reach them. A miss's suggested owner rule now covers the first changed file that isn't a test or a document, and none is suggested when only tests or documents changed. `XTest`, `XTests`, `test_x` and `x_test` files count as tests when deciding whether a change touched a test, as `.test.` and `.spec.` files did. See [Recurring failures](https://mahkassem.github.io/fairlead/docs/replay.html#recurring-failures).
+
 ## 0.9.0 (2026-10-06)
 
 ### New
