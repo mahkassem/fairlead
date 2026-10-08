@@ -1,0 +1,18 @@
+# BookStackApp/BookStack's PHP test workflow: PHPUnit over tests/, a Laravel
+# application, without a framework pack. The baseline a pack is measured against.
+
+[tests]
+match = { replace = ["tests/**/*Test.php"] }
+
+[[tests.runners]]
+id = "phpunit"
+match = ["tests/**/*Test.php"]
+command = ["vendor/bin/phpunit", "{files}"]
+
+[replay]
+window_days = 90
+min_failures = 10
+
+[[replay.failures]]
+runner = "phpunit"
+extractor = "phpunit"
