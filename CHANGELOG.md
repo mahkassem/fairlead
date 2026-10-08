@@ -6,6 +6,10 @@
 
 - Framework packs, and rules that read names from the code ([#50](https://github.com/mahkassem/fairlead/issues/50), [#51](https://github.com/mahkassem/fairlead/issues/51)). `extends = ["laravel"]` layers a pack of graph rules under the project's config; a pack sets only `graph.edges`, `graph.barrier` and `plan.run_all`, is built in or a file in the project, and the project's own config comes after it. A `[[graph.edges]]` rule may have `find`, a regex searched in each `from` file's text: it links only the files it matches in, and its capture fills `{1}` (or `{1|path}`, dots as slashes) in `to`. `graph stats` names each rule whose captures matched no file. The `laravel` pack links feature tests to the HTTP layer, the code that names a view, config key or factory to its file, and the tests that migrate to every migration, and stops the walk at the boot path, which runs everything when it changes. See [Framework packs](https://mahkassem.github.io/fairlead/docs/graph.html#framework-packs).
 
+### Fixed
+
+- Replay's `phpunit` extractor reads Collision's format too, which PHPUnit prints under the printer Laravel installs, and both PHP extractors read a `FAILED` line cut to the terminal's width: its class comes from the `FAIL` header the test was listed under. Such failures used to be unattributed. See [Replay](https://mahkassem.github.io/fairlead/docs/replay.html).
+
 ## 0.9.0 (2026-10-06)
 
 ### New
