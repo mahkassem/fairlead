@@ -4,6 +4,7 @@
 mod agents;
 mod knowledge;
 mod load;
+mod packs;
 mod quarantine;
 mod stages;
 mod validate;
@@ -78,6 +79,11 @@ pub struct Config {
     /// The oldest Fairlead version this config needs, such as "0.2".
     #[serde(skip_serializing_if = "Option::is_none")]
     pub fairlead: Option<String>,
+    /// Framework packs layered under this config: a built-in pack's name,
+    /// such as "laravel", or a pack file's path from the project root. Left
+    /// out of the digest when empty; a pack's rules count through the merge.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub extends: Vec<String>,
     pub modules: Modules,
     pub graph: Graph,
     pub tests: Tests,
@@ -203,6 +209,29 @@ pub struct EdgeRule {
     pub from: String,
     /// The files they depend on, with the same `{name}`s as `from`.
     pub to: Vec<String>,
+    /// A regex searched in each `from` file's text: the rule links only the
+    /// files it matches in, and its capture, if any, fills `{1}` in `to`
+    /// (`{1|path}` with its dots as slashes). Left out of the digest when unset.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub find: Option<String>,
+}
+
+/// The placeholders `{1}` and `{1|path}` become in a `to` glob, since a
+/// capture's name can't start with a digit or hold `|`.
+pub const FOUND: &str = "found";
+pub const FOUND_PATH: &str = "found_path";
+
+impl EdgeRule {
+    /// The `to` globs as the matcher reads them.
+    pub fn targets(&self) -> Vec<String> {
+        self.to
+            .iter()
+            .map(|t| {
+                t.replace("{1|path}", &format!("{{{FOUND_PATH}}}"))
+                    .replace("{1}", &format!("{{{FOUND}}}"))
+            })
+            .collect()
+    }
 }
 
 impl Default for Graph {

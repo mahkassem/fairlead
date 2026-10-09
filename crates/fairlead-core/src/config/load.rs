@@ -83,7 +83,7 @@ impl fmt::Display for ConfigError {
 
 impl std::error::Error for ConfigError {}
 
-fn error(source: &str, key: Option<String>, message: impl Into<String>) -> ConfigError {
+pub(super) fn error(source: &str, key: Option<String>, message: impl Into<String>) -> ConfigError {
     ConfigError {
         source: source.to_string(),
         key,
@@ -195,6 +195,10 @@ fn load_from(
     if let Some(path) = local {
         read(path)?;
     }
+    // Packs go under every file, so a project's own rules and barriers
+    // come after them and `{ replace = [...] }` can drop a pack's.
+    let packs = super::packs::layers(&layers, &root)?;
+    layers.splice(0..0, packs);
     let mut env: Vec<&(String, String)> = opts.env.iter().collect();
     env.sort();
     for (name, raw) in env {

@@ -1,0 +1,48 @@
+# Laravel: the edges its conventions make that no import shows, and a
+# barrier on the boot path, which names every route file and service
+# provider and would otherwise tie each test to the whole app.
+
+[graph]
+barrier = ["bootstrap/app.php", "bootstrap/providers.php"]
+
+[plan]
+# The boot path and the service providers change what every test runs.
+run_all = ["bootstrap/**", "app/Providers/**"]
+
+# HTTP tests reach the app through its routes, which no import shows: a
+# change to a controller, a middleware, a request, a route file or a view
+# selects them.
+[[graph.edges]]
+from = "tests/Feature/**/*.php"
+to = ["app/Http/**", "routes/**", "resources/views/**"]
+
+# A view named in code: view('users.index'), View::make(...), and Blade's
+# @include, @extends, @each and @component.
+[[graph.edges]]
+from = "**/*.php"
+find = '''(?:\bview|View::make|@include(?:If|When|Unless|First)?|@extends|@each|@component)\(\s*['"]([\w.\-/]+)['"]'''
+to = ["resources/views/{1|path}.blade.php", "resources/views/{1|path}/index.blade.php"]
+
+# A Blade component: <x-alert> or <x-forms.input>.
+[[graph.edges]]
+from = "**/*.blade.php"
+find = '''<x-([\w.\-]+)'''
+to = ["resources/views/components/{1|path}.blade.php", "resources/views/components/{1|path}/index.blade.php"]
+
+# config('mail.from') reads config/mail.php.
+[[graph.edges]]
+from = "**/*.php"
+find = '''\bconfig\(\s*['"]([\w\-]+)'''
+to = ["config/{1}.php"]
+
+# A model's factory, found by name: Song::factory().
+[[graph.edges]]
+from = "**/*.php"
+find = '''\b(\w+)::factory\('''
+to = ["database/factories/{1}Factory.php"]
+
+# A test that migrates its database depends on every migration.
+[[graph.edges]]
+from = "tests/**/*.php"
+find = '''\b(?:RefreshDatabase|LazilyRefreshDatabase|DatabaseMigrations)\b'''
+to = ["database/migrations/**", "database/schema/**"]

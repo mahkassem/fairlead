@@ -1,0 +1,42 @@
+
+   FAIL  Tests\Unit\Imports\InvoiceXmlExtractorTest
+  ✓ reads a standalone xml document                                      0.01s
+  ⨯ extracts the payload from a pdf                                      0.02s
+
+   PASS  Tests\Unit\ExampleTest
+  ✓ that true is true                                                    0.01s
+
+   FAIL  Tests\Feature\ClientPortal\PaymentMethodsTest
+  ✓ the owner can see a payment method                                   0.01s
+  ⨯ another client is forbidden                                          0.03s
+
+   FAIL  Tests\Feature\Reports\ExportTest
+  ⨯ exports the monthly report as csv                                    0.05s
+  ────────────────────────────────────────────────────────────────────────────
+   FAILED  Tests\Unit\Imports\InvoiceXmlExtractorT…  Error
+  Class "App\Jobs\ReceiveDocument" not found
+
+  at app/Services/Imports/InvoiceXmlExtractor.php:40
+     39▕     {
+  ➜  40▕         return new ReceiveDocument($xml);
+     41▕     }
+
+  1   app/Services/Imports/InvoiceXmlExtractor.php:40
+  2   tests/Unit/Imports/InvoiceXmlExtractorTest.php:22
+
+  ────────────────────────────────────────────────────────────────────────────
+   FAILED  Tests\Feature\ClientPortal\Pa…  UniqueConstraintViolationException
+  SQLSTATE[23000]: Integrity constraint violation: 1062 Duplicate entry
+
+  at vendor/laravel/framework/src/Illuminate/Database/Connection.php:571
+
+  ────────────────────────────────────────────────────────────────────────────
+   FAILED  Tests\Feature\Reports\ExportTest > exports the monthly report as csv
+  Failed asserting that two strings are identical.
+
+  at tests/Feature/Reports/ExportTest.php:31
+
+
+  Tests:    3 failed, 3 passed (9 assertions)
+  Duration: 0.41s
+

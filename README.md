@@ -108,13 +108,23 @@ of trying things like a stranger.
 - **One binary, everywhere.** Linux, macOS and Windows, installed with a shell
   script, PowerShell or npm.
 
-*It reads JavaScript and TypeScript since 0.2.0, and Python, Go, PHP and Vue,
-Svelte and Astro components since 0.5.0. An external provider feeds the graph
-for any other language, and a coverage map adds what imports can't show.
-Framework packs and folders of several repositories are on the way
-([#47](https://github.com/mahkassem/fairlead/issues/47)).*
-*Since 0.7.0:* Java and Kotlin, with Maven and Gradle runners that take the
-selected test classes.
+**What it reads, and what replay has proven.** A language counts as proven
+when replaying a public project's CI history judges at least 10 failures, at
+high recall:
+
+| Language | Since | Replay evidence |
+| --- | --- | --- |
+| JavaScript, TypeScript | 0.2.0 | Effect, pnpm and vitest, replayed weekly ([benchmarks](docs/src/benchmarks.md)) |
+| Python | 0.5.0 | poetry: 99.2% of 122 failures |
+| PHP | 0.5.0 | pterodactyl/panel and invoiceninja: 100% of 27 failures |
+| Go | 0.5.0 | Reads, not yet proven: opentelemetry-go has too few failures to judge |
+| Vue, Svelte, Astro components | 0.5.0 | Reads, not yet proven: no replay yet |
+| Java, Kotlin (Maven, Gradle) | 0.7.0 | Reads, not yet proven: okhttp at 92.6%, most misses look flaky ([#184](https://github.com/mahkassem/fairlead/issues/184)) |
+
+An external provider feeds the graph for any other language, and a coverage
+map adds what imports can't show. Framework packs and folders of several
+repositories are on the way
+([#47](https://github.com/mahkassem/fairlead/issues/47)).
 
 ## What it does
 

@@ -54,7 +54,9 @@ pub fn attach_deleted(scan: &mut Scan, config: &GraphConfig, deleted: &[String])
     }
     // Validated with the config, so a pattern that fails here was checked already.
     if let Ok(rules) = Rules::new(config) {
-        let _ = rules.apply_to(&mut scan.graph, &ids);
+        let root = scan.tree.root.clone();
+        let read = |f: &str| std::fs::read_to_string(root.join(f)).ok();
+        let _ = rules.apply_to(&mut scan.graph, &ids, &read);
         rules.mark(&mut scan.graph, ids.iter().copied());
     }
     ids
