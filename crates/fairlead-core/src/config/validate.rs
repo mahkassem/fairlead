@@ -436,6 +436,64 @@ fn graph_providers(config: &Config, problems: &mut Vec<Problem>) {
     }
 }
 
+/// A `find` rule: its regex compiles with at most one capture, `{1}` is used
+/// only with one, and its other `{name}`s are whole segments of `from`,
+/// since the binding comes from the file the text was found in.
+fn found_rule(
+    rule: &crate::config::EdgeRule,
+    find: &str,
+    key: &str,
+    names: &std::collections::BTreeSet<String>,
+    problems: &mut Vec<Problem>,
+) {
+    let groups = match regex::Regex::new(find) {
+        Ok(re) => re.captures_len() - 1,
+        Err(e) => {
+            problems.push(problem(format!("{key}.find"), e.to_string()));
+            return;
+        }
+    };
+    if groups > 1 {
+        problems.push(problem(
+            format!("{key}.find"),
+            "may have at most one capture group; write the others as `(?:...)`",
+        ));
+    }
+    let found = [crate::config::FOUND, crate::config::FOUND_PATH];
+    for (j, to) in rule.targets().iter().enumerate() {
+        let here = placeholders(to);
+        if groups == 0 && here.iter().any(|n| found.contains(&n.as_str())) {
+            problems.push(problem(
+                format!("{key}.to[{j}]"),
+                "uses `{1}`, but `find` captures nothing",
+            ));
+        }
+        if here
+            .iter()
+            .any(|n| !found.contains(&n.as_str()) && !names.contains(n))
+        {
+            problems.push(problem(
+                format!("{key}.to[{j}]"),
+                "may use only `{1}`, `{1|path}` and the `{name}`s of `from`",
+            ));
+        }
+    }
+    if !names
+        .iter()
+        .all(|n| rule.from.split('/').any(|s| s == format!("{{{n}}}")))
+    {
+        problems.push(problem(
+            key.to_string(),
+            "with `find`, each `{name}` must be a whole path segment in `from`",
+        ));
+    }
+    for glob in std::iter::once(&rule.from).chain(&rule.targets()) {
+        if let Err(e) = crate::pattern::Pattern::new(glob) {
+            problems.push(problem(key.to_string(), e));
+        }
+    }
+}
+
 fn graph_edges(config: &Config, problems: &mut Vec<Problem>) {
     let whole = |glob: &str, name: &str| glob.split('/').any(|s| s == format!("{{{name}}}"));
     for (i, rule) in config.graph.edges.items().iter().enumerate() {
@@ -443,6 +501,10 @@ fn graph_edges(config: &Config, problems: &mut Vec<Problem>) {
         let names = placeholders(&rule.from);
         if rule.to.is_empty() {
             problems.push(problem(format!("{key}.to"), "needs at least one glob"));
+        }
+        if let Some(find) = &rule.find {
+            found_rule(rule, find, &key, &names, problems);
+            continue;
         }
         for (j, to) in rule.to.iter().enumerate() {
             let here = placeholders(to);

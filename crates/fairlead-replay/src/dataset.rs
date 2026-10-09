@@ -67,7 +67,7 @@ impl Job {
 /// `(fail)` line and the two after it, the bun file header a failure sits
 /// under, and bun's summary line, which ends what the extractor reads.
 /// PHPUnit's section headers and numbered failures, and Pest's `FAILED`,
-/// keep the frames after them. Surefire's `<<< ERROR!` lines and closing
+/// keep the frames after them; Collision's `⨯` lines are kept as they are. Surefire's `<<< ERROR!` lines and closing
 /// lists, the Gradle task header a `FAILED` line sits under, and Gradle's
 /// failed-task lines are kept too. Capped so one noisy job can't bloat the dataset.
 pub fn log_excerpt(log: &str) -> Vec<String> {
@@ -119,7 +119,7 @@ pub fn log_excerpt(log: &str) -> Vec<String> {
                 name.split_whitespace().next().unwrap_or(""),
             ));
         }
-        if go_file_line(&cleaned) {
+        if go_file_line(&cleaned) || cleaned.trim_start().starts_with('⨯') {
             keep.insert(i);
         }
         if php_failure(&cleaned) {
@@ -193,13 +193,14 @@ fn jvm_failure(line: &str) -> bool {
 /// How far after a PHP failure its frames are kept.
 const PHP_FRAMES: usize = 400;
 
-/// A PHPUnit section header or numbered failure, or a Pest `FAILED` line.
+/// A PHPUnit section header or numbered failure, or a Pest `FAILED` line,
+/// whole or cut to the terminal's width.
 fn php_failure(line: &str) -> bool {
     static FAILURE: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
     FAILURE
         .get_or_init(|| {
             regex::Regex::new(
-                r"^\s*(?:There (?:was|were) \d+ [\w ]+:|\d+\) [\w\\]+::\w|FAILED\s+[\w\\]+ > )",
+                r"^\s*(?:There (?:was|were) \d+ [\w ]+:|\d+\) [\w\\]+::\w|FAILED\s+[\w\\]+(?: > |…))",
             )
             .expect("built-in pattern compiles")
         })

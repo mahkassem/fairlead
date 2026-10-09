@@ -161,7 +161,10 @@ pub fn build(root: &Path, config: &Config) -> std::io::Result<Scan> {
     let uncertain = run_externals(&root, externals, &owner, &mut graph, &mut providers);
     add_snapshot_edges(&tree, &mut graph);
     let rules = Rules::new(&config.graph).map_err(std::io::Error::other)?;
-    let rule_stats = rules.apply(&mut graph).map_err(std::io::Error::other)?;
+    let read = |f: &str| std::fs::read_to_string(tree.abs(f)).ok();
+    let rule_stats = rules
+        .apply(&mut graph, &read)
+        .map_err(std::io::Error::other)?;
     let all = 0..graph.files.len() as u32;
     rules.mark(&mut graph, all);
     Ok(Scan {

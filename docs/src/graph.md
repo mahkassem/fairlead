@@ -37,6 +37,38 @@ to = ["apps/api/src/{area}/**"]
 
 Each file matching `from` depends on every file its `to` globs match. A `{name}` stands for one path segment, with the same value on both sides, so `orders.test.ts` and `orders-refunds.test.ts` depend on `src/orders/`. Its value is read from the side where it's a whole segment: `{area}*` alone would also take `orders-refunds` as the name. `config check` refuses a `{name}` that is never a whole segment, or a `to` glob that names different ones than `from` (a `to` with none links to the same files for every match). `graph stats` counts rule edges, and names any rule that linked no file.
 
+### Names in the code
+
+*Unreleased:* some dependencies are named in a file's text rather than imported: a view by name, a config file by its key, a model's factory by convention. A rule with `find` searches each `from` file's text with a regex, and links only the files it matches in. Its capture, if it has one, fills `{1}` in `to`, and `{1|path}` fills it with its dots as slashes:
+
+```toml
+[[graph.edges]]
+from = "**/*.php"
+find = '''\bview\(\s*['"]([\w.\-/]+)['"]'''
+to = ["resources/views/{1|path}.blade.php"]
+
+[[graph.edges]]
+from = "tests/**/*.php"
+find = '''\bRefreshDatabase\b'''
+to = ["database/migrations/**"]
+```
+
+The first makes a controller that calls `view('users.index')` depend on `resources/views/users/index.blade.php`. The second has no capture, so it links each test that uses `RefreshDatabase` to every migration. `from` may still use `{name}`s, as whole segments, and `to` may use them beside `{1}`. A filled `to` without wildcards is looked up directly; one with wildcards is matched like any glob. A name only a running program knows, such as `view("admin.$page")`, never matches, so it adds no edge. `graph stats` names each rule whose captures matched no file, with an example, which is where to look when replay finds a miss.
+
+## Framework packs
+
+*Unreleased:* a framework makes dependencies by convention, the same in every project that uses it. A pack bundles the rules for one framework, and a config names it in `extends`:
+
+```toml
+extends = ["laravel"]
+```
+
+A pack is a layer under the project's own config files, so a project's rules and barriers come after its, and `{ replace = [...] }` drops one of them (`graph.barrier = { replace = [] }` keeps none). A pack sets only `graph.edges`, `graph.barrier` and `plan.run_all`. A built-in pack ships in the binary, so it changes with the release, and the plan id changes with it. Any other name is a pack file's path from the project root, such as `extends = ["packs/ours.toml"]`, which is how a team writes its own.
+
+| Pack | What it adds |
+|---|---|
+| `laravel` | `tests/Feature/**` depend on `app/Http/**`, `routes/**` and `resources/views/**`, since HTTP tests reach controllers through routes no import shows. Views named in `view()`, `View::make()` and Blade's `@include`, `@extends`, `@each` and `@component`; Blade components (`<x-forms.input>`); `config('mail.from')` to `config/mail.php`; `Song::factory()` to `database/factories/SongFactory.php`; tests using `RefreshDatabase`, `LazilyRefreshDatabase` or `DatabaseMigrations` to every migration. A barrier on `bootstrap/app.php` and `bootstrap/providers.php`, so the boot path, which names every route file and service provider, doesn't tie each test to the whole app; a change under `bootstrap/` or `app/Providers/` runs everything instead. |
+
 ## PHP
 
 `.php` files are scanned too (Blade templates, `.blade.php`, are left as plain files), and `graph stats` lists them as the `php` provider. PHP refers to classes by name, not by path, so each reference is first made fully qualified the way PHP does it: through the file's `namespace`, its `use` imports (grouped and aliased ones included), and `\` or `namespace\` prefixes. A file depends on:
@@ -59,7 +91,7 @@ match = ["tests/**/*Test.php"]
 command = ["vendor/bin/phpunit", "{files}"]
 ```
 
-In a Laravel application every test boots the app, and booting it loads `bootstrap/app.php`, which names every route file, which names every controller, so a change to one controller reaches every test. That's the safe answer, and the one this gives today. Views, routes, bindings and the other links a framework makes at runtime will come from framework packs, which let a feature test reach the controller behind the route it calls without the walk passing through the app's boot.
+In a Laravel application every test boots the app, and booting it loads `bootstrap/app.php`, which names every route file, which names every controller, so a change to one controller reaches every test. That's the safe answer, and the one this gives without a pack. The `laravel` [framework pack](#framework-packs) stops the walk at the boot path and links feature tests to the HTTP layer, views, config files, factories and migrations instead. An app that loads its routes another way can have the opposite problem, a controller almost nothing reaches, which the pack's feature-test rule covers too.
 
 ## Go
 

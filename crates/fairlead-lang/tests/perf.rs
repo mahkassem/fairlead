@@ -85,6 +85,7 @@ fn a_two_thousand_file_workspace_builds_within_the_budget() {
     rules.graph.edges = vec![EdgeRule {
         from: "packages/{p}/src/f0.ts".into(),
         to: vec!["packages/{p}/src/**".into()],
+        find: None,
     }]
     .into();
     let started = Instant::now();

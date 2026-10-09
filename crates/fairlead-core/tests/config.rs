@@ -714,3 +714,105 @@ fn a_command_rule_without_unless_serializes_without_it() {
         ])
     );
 }
+
+#[test]
+fn a_built_in_pack_layers_under_the_project_whose_replace_drops_its_barrier() {
+    let dir = repo_with(
+        "pack-builtin",
+        &[(
+            "fairlead.toml",
+            "extends = [\"laravel\"]\n\n[graph]\nbarrier = { replace = [\"bootstrap/app.php\"] }\n",
+        )],
+    );
+    let loaded = load(&dir, &LoadOptions::default()).unwrap();
+    let config = &loaded.config;
+    assert!(config.graph.edges.items().iter().any(|r| r.find.is_some()));
+    assert_eq!(config.graph.barrier.items(), ["bootstrap/app.php"]);
+    assert!(config
+        .plan
+        .run_all
+        .items()
+        .contains(&"app/Providers/**".to_string()));
+    assert!(loaded.origins["graph.edges"].ends_with("pack laravel"));
+    assert_eq!(validate(config), []);
+}
+
+#[test]
+fn a_pack_is_built_in_or_a_file_and_sets_only_rules_barriers_and_run_all() {
+    let error = |files: &[(&str, &str)], name: &str| {
+        let project: Vec<(&str, &str)> = files
+            .iter()
+            .filter(|(p, _)| !p.starts_with("packs/"))
+            .copied()
+            .collect();
+        let dir = repo_with(name, &project);
+        fs::create_dir_all(dir.join("packs")).unwrap();
+        for (path, text) in files.iter().filter(|(p, _)| p.starts_with("packs/")) {
+            fs::write(dir.join(path), text).unwrap();
+        }
+        load(&dir, &LoadOptions::default())
+            .err()
+            .map(|e| e.to_string())
+    };
+    let unknown = error(
+        &[("fairlead.toml", "extends = [\"rails\"]\n")],
+        "pack-unknown",
+    )
+    .unwrap();
+    assert!(
+        unknown.contains("neither a built-in pack (laravel)"),
+        "{unknown}"
+    );
+    let wide = error(
+        &[
+            ("fairlead.toml", "extends = [\"packs/p.toml\"]\n"),
+            ("packs/p.toml", "[tests]\nunreached = \"all\"\n"),
+        ],
+        "pack-wide",
+    )
+    .unwrap();
+    assert!(wide.contains("a pack may set only"), "{wide}");
+    assert_eq!(
+        error(
+            &[
+                ("fairlead.toml", "extends = [\"packs/p.toml\"]\n"),
+                (
+                    "packs/p.toml",
+                    "[[graph.edges]]\nfrom = \"a/**\"\nto = [\"b/**\"]\n"
+                ),
+            ],
+            "pack-file",
+        ),
+        None
+    );
+}
+
+#[test]
+fn a_find_rule_has_at_most_one_capture_and_uses_it_only_when_it_has_one() {
+    let keys = |text: &str| -> Vec<String> {
+        let config: Config = toml::from_str(text).unwrap();
+        validate(&config).into_iter().map(|p| p.key).collect()
+    };
+    let rule = |find: &str, to: &str| {
+        format!(
+            "[[graph.edges]]\nfrom = \"app/{{area}}/**\"\nfind = '''{find}'''\nto = [\"{to}\"]\n"
+        )
+    };
+    assert!(keys(&rule(r"view\('([\w.]+)", "views/{area}/{1|path}.php")).is_empty());
+    assert_eq!(
+        keys(&rule(r"view\((", "views/{1}.php")),
+        ["graph.edges[0].find"]
+    );
+    assert_eq!(
+        keys(&rule(r"(a)(b)", "views/{1}.php")),
+        ["graph.edges[0].find"]
+    );
+    assert_eq!(
+        keys(&rule(r"RefreshDatabase", "views/{1}.php")),
+        ["graph.edges[0].to[0]"]
+    );
+    assert_eq!(
+        keys(&rule(r"(a)", "views/{other}.php")),
+        ["graph.edges[0].to[0]"]
+    );
+}

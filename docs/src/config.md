@@ -71,7 +71,8 @@ fairlead.toml: tests.unreachd: unknown field `unreachd`, expected one of ...
 | `graph.unresolved` | `"warn"` | `warn` or `fail` on imports that don't resolve |
 | `graph.conditions` | `["import", "node", "default"]` | Package `exports` conditions, in order |
 | `graph.cache` | `true` | Keep parse results under `.git/fairlead` so unchanged files aren't parsed again |
-| `graph.edges` | `[]` | `{ from, to }` rules: each file matching `from` depends on the files `to` matches. See [Import graph](graph.md#edges-the-imports-dont-show) |
+| `extends` | `[]` | *Unreleased:* framework packs layered under this config: a built-in pack's name, such as `"laravel"`, or a pack file's path. See [Framework packs](graph.md#framework-packs) |
+| `graph.edges` | `[]` | `{ from, to }` rules: each file matching `from` depends on the files `to` matches. See [Import graph](graph.md#edges-the-imports-dont-show). *Unreleased:* `find`, a regex searched in each `from` file's text, whose capture fills `{1}` in `to`. See [Names in the code](graph.md#names-in-the-code) |
 | `graph.barrier` | `[]` | Globs the walk reaches but doesn't go past. See [Import graph](graph.md#barriers) |
 | `graph.providers` | `[]` | `{ id, command, files, timeout_seconds }`: external commands that print the graph for the files they claim. See [Import graph](graph.md#other-languages-external-providers) |
 | `tests.match` | `**/*.{test,spec}.{ts,tsx,js,jsx,mjs,cjs,mts,cts}` | Test files |
