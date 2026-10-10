@@ -13,6 +13,7 @@
 - [Import graph](graph.md)
 - [Test plan](plan.md)
 - [Plans in CI](ci.md)
+- [Workspaces](workspace.md)
 - [Guard rules](guard.md)
 - [The brief](brief.md)
 - [Lessons](lessons.md)

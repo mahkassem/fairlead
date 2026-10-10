@@ -55,6 +55,8 @@ pub struct Loaded {
     pub files: Vec<PathBuf>,
     /// The directory holding the project file, or the start directory if none.
     pub root: PathBuf,
+    /// The workspace file layered under the project's, if any.
+    pub workspace: Option<PathBuf>,
     /// Semantic problems that don't stop loading.
     pub problems: Vec<Problem>,
     /// Settings that are valid but can't be what the author meant.
@@ -127,12 +129,30 @@ fn file_name(path: &Path) -> String {
 
 pub fn load(start: &Path, opts: &LoadOptions) -> Result<Loaded, ConfigError> {
     let project = find_config(start)?;
+    let repo = super::workspace::git_root(start);
+    if let (Some(file), None) = (&project, &repo) {
+        if let Some(ws) = super::workspace::read(file)? {
+            return Err(error(
+                &file.display().to_string(),
+                None,
+                format!(
+                    "this folder is a workspace of {} repositories ({}): run the command inside one of them, or `fairlead plan` here to plan them all",
+                    ws.repos.len(),
+                    ws.names()
+                ),
+            ));
+        }
+    }
+    let workspace = match (&repo, opts.ci) {
+        (Some(repo), false) => super::workspace::enclosing(repo)?.map(|w| w.file),
+        _ => None,
+    };
     let root = project
         .as_deref()
         .and_then(Path::parent)
         .map(Path::to_path_buf)
         .unwrap_or_else(|| start.to_path_buf());
-    load_from(project, root, opts)
+    load_from(project, root, opts, workspace)
 }
 
 /// One named config file over the defaults, with `sets` over it and no
@@ -145,16 +165,26 @@ pub fn load_file(path: &Path, sets: &[String]) -> Result<Loaded, ConfigError> {
         env: Vec::new(),
         ci: true,
     };
-    load_from(Some(path.to_path_buf()), root, &opts)
+    load_from(Some(path.to_path_buf()), root, &opts, None)
 }
 
 fn load_from(
     project: Option<PathBuf>,
     root: PathBuf,
     opts: &LoadOptions,
+    workspace: Option<PathBuf>,
 ) -> Result<Loaded, ConfigError> {
     let mut layers: Vec<(String, Value)> = Vec::new();
     let mut files = Vec::new();
+    // The workspace file goes under the repository's, without the table
+    // that only it may declare.
+    if let Some(path) = &workspace {
+        let mut value = read_file(path)?;
+        if let Some(table) = value.as_object_mut() {
+            table.remove("workspace");
+        }
+        layers.push((format!("workspace {}", path.display()), value));
+    }
     let environment = environment(opts)?;
     let mut read = |path: PathBuf| -> Result<(), ConfigError> {
         layers.push((file_name(&path), read_file(&path)?));
@@ -215,6 +245,16 @@ fn load_from(
             nested(key.trim(), parse_scalar(raw.trim())),
         ));
     }
+    if let Some((label, _)) = layers
+        .iter()
+        .find(|(label, v)| !label.starts_with("workspace ") && v.get("workspace").is_some())
+    {
+        return Err(error(
+            label,
+            Some("workspace".into()),
+            "only a workspace file, in the folder above its repositories, declares `[workspace]`",
+        ));
+    }
     for (label, value) in &layers {
         typed(label, value.clone()).map_err(|e| later_floor(label, value).unwrap_or(e))?;
     }
@@ -234,6 +274,7 @@ fn load_from(
         value: merged,
         files,
         root,
+        workspace,
         problems,
         warnings,
     })

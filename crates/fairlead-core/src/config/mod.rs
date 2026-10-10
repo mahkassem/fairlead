@@ -8,6 +8,7 @@ mod packs;
 mod quarantine;
 mod stages;
 mod validate;
+pub mod workspace;
 
 pub use agents::{Agents, AgentsWrite};
 pub use knowledge::{Learn, Memory, SkillRoute, Skills};
@@ -107,6 +108,33 @@ pub struct Config {
     /// absent unless a layer sets it.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub stages: Option<Stages>,
+    /// Only in a workspace file, in a folder holding several repositories;
+    /// a repository's own file can't set it.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub workspace: Option<Workspace>,
+}
+
+/// The repositories of a workspace folder.
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields, default)]
+pub struct Workspace {
+    /// The repositories, by path from the workspace folder. Empty means
+    /// every git repository one level down.
+    pub repos: Vec<WorkspaceRepo>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct WorkspaceRepo {
+    /// The repository's folder, from the workspace folder.
+    pub path: String,
+    /// What `--repo` calls it; defaults to the folder's name.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    /// The branch or commit its changes are measured from; defaults to its
+    /// remote's default branch.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub base: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]

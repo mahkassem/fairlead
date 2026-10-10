@@ -35,6 +35,7 @@ mod skills_eval_cmd;
 mod skills_report_cmd;
 mod stage;
 mod step;
+mod workspace_cmd;
 
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
