@@ -29,6 +29,7 @@ mod receipt_cmd;
 mod replay_cmd;
 mod resume_cmd;
 mod reuse;
+mod score_cmd;
 mod since_green;
 mod skills_cmd;
 mod skills_eval_cmd;
@@ -62,7 +63,10 @@ struct Cli {
 #[derive(Subcommand)]
 enum Command {
     /// Report the binary, the platform and the config Fairlead would use here.
-    Doctor,
+    Doctor {
+        #[command(flatten)]
+        args: score_cmd::DoctorArgs,
+    },
     /// Write a first fairlead.toml from what the repository shows: its test runners, and a check for each language the graph doesn't read.
     Init {
         #[command(flatten)]
@@ -508,7 +512,10 @@ fn main() -> ExitCode {
         std::env::set_var(config::ENV_NAME, name);
     }
     match cli.command {
-        Some(Command::Doctor) => {
+        Some(Command::Doctor { args }) if args.score => {
+            score_cmd::run(&args, &cwd(), &LoadOptions::from_process(Vec::new()))
+        }
+        Some(Command::Doctor { .. }) => {
             print!(
                 "{}",
                 doctor_report(&cwd(), &LoadOptions::from_process(Vec::new()))

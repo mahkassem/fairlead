@@ -26,6 +26,7 @@
 # Measuring
 
 - [Replay](replay.md)
+- [Readiness score](score.md)
 - [Benchmarks](benchmarks.md)
 
 # Project
