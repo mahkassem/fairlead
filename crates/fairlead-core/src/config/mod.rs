@@ -7,6 +7,7 @@ mod load;
 mod packs;
 mod quarantine;
 mod stages;
+mod tracker;
 mod validate;
 pub mod workspace;
 
@@ -18,6 +19,7 @@ pub use load::{
 };
 pub use quarantine::{Condition, Os, PlatformQuarantine};
 pub use stages::{CiStage, Stages};
+pub use tracker::{Tracker, TrackerKind};
 pub use validate::{is_date, plan_globs, validate, Problem, GUARD_RULES};
 
 use schemars::JsonSchema;
@@ -108,6 +110,9 @@ pub struct Config {
     /// absent unless a layer sets it.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub stages: Option<Stages>,
+    /// Where a change's task lives. Left out of the digest unless set.
+    #[serde(skip_serializing_if = "Tracker::is_unset")]
+    pub tracker: Tracker,
     /// Only in a workspace file, in a folder holding several repositories;
     /// a repository's own file can't set it.
     #[serde(skip_serializing_if = "Option::is_none")]

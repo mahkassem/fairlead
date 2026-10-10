@@ -92,6 +92,7 @@ pub fn validate(config: &Config) -> Vec<Problem> {
     memory(config, &mut problems);
     skills(config, &mut problems);
     super::stages::validate(config, &mut problems);
+    super::tracker::validate(config, &mut problems);
     agents(config, &mut problems);
     problems
 }
