@@ -16,6 +16,7 @@
 - [Workspaces](workspace.md)
 - [Guard rules](guard.md)
 - [The brief](brief.md)
+- [Trackers](trackers.md)
 - [Lessons](lessons.md)
 - [Skills](skills.md)
 - [Find](find.md)

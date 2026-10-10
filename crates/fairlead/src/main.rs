@@ -12,6 +12,7 @@ mod ci_workflow;
 mod context_cmd;
 mod coverage_cmd;
 mod done_cmd;
+mod escapes;
 mod find_cmd;
 mod graph_cmd;
 mod guard_cmd;
@@ -38,6 +39,7 @@ mod skills_eval_cmd;
 mod skills_report_cmd;
 mod stage;
 mod step;
+mod tracker;
 mod tokens;
 mod workspace_cmd;
 

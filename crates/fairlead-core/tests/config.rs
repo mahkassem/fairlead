@@ -816,3 +816,22 @@ fn a_find_rule_has_at_most_one_capture_and_uses_it_only_when_it_has_one() {
         ["graph.edges[0].to[0]"]
     );
 }
+
+#[test]
+fn a_tracker_needs_its_id_and_branch_patterns_and_a_command_its_get() {
+    let config: Config =
+        toml::from_str("[tracker]\nkind = \"command\"\nbranch = \"(T[\"\ntimeout = 0\n").unwrap();
+    let keys: Vec<String> = validate(&config).into_iter().map(|p| p.key).collect();
+    assert_eq!(
+        keys,
+        [
+            "tracker.id",
+            "tracker.branch",
+            "tracker.get",
+            "tracker.timeout"
+        ]
+    );
+    let config: Config =
+        toml::from_str("[tracker]\nkind = \"github\"\nbranch = \"issue-([0-9]+)\"\n").unwrap();
+    assert_eq!(validate(&config), [], "github ids default to numbers");
+}
