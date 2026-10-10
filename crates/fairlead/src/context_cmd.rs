@@ -165,9 +165,16 @@ fn history(root: &Path, path: &str) -> History {
         path: path.to_string(),
         commits: git::recent_commits(root, path, COMMITS)
             .into_iter()
-            .filter(|c| secrets::scan(c).is_empty())
+            .filter(|c| subject_is_clean(c))
             .collect(),
     }
+}
+
+/// Whether a `hash date subject` line's subject looks free of secrets. Only
+/// the subject is the author's: an all-digit short hash run into the date
+/// can read as a card number.
+fn subject_is_clean(line: &str) -> bool {
+    secrets::scan(line.splitn(3, ' ').nth(2).unwrap_or("")).is_empty()
 }
 
 /// The nearest README.md above each path, once each, first `DOCS` of them.
@@ -353,6 +360,14 @@ mod tests {
         let (heading, lines) = first_section("Just text.\n# Later\n").unwrap();
         assert_eq!((heading.as_str(), lines.len()), ("", 1));
         assert!(first_section("\n\n").is_none());
+    }
+
+    #[test]
+    fn a_commit_is_left_out_for_its_subject_never_for_its_hash_and_date() {
+        assert!(subject_is_clean("6807822 2026-10-10 init"));
+        assert!(!subject_is_clean(
+            "abc1234 2026-10-10 pay with 4111 1111 1111 1111"
+        ));
     }
 
     #[test]
