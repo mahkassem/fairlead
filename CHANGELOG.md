@@ -4,6 +4,13 @@
 
 ### New
 
+- Tokens and cost per agent session ([#6](https://github.com/mahkassem/fairlead/issues/6)), read as counts only.
+  - The Stop hook records a Claude Code session's totals from its transcript: the `cost-state` lines Claude Code writes, which count subagents and its own background calls and carry the cost.
+  - A transcript without them is counted from per-message usage, once per message and with subagents, and marked an estimate.
+  - `fairlead tokens import FILE` records a headless `claude -p --output-format json` run.
+  - `fairlead tokens report` shows the newest totals per session and source.
+  - Nothing but numbers reaches the event log, and `guard.events = "off"` records none.
+  - See [Tokens and cost](https://mahkassem.github.io/fairlead/docs/tokens.html).
 - `fairlead insights` ([#7](https://github.com/mahkassem/fairlead/issues/7)) sums up how the setup works over the last 30 days, or `--since`.
   - **From the event log:** the write hook's decisions and denies by rule, `done` failures by step, skill routing's hit rate with skills offered and unused or used unoffered, lessons never offered, and tokens and cost.
   - **From CI's reports:** `--replay` adds a replay report's recall, misses and recurring tests, and `--results` adds the escapes `ci run --judge` found.
@@ -22,6 +29,7 @@
   - Tracker text is cleaned before the brief shows it. Control, escape, text-direction and zero-width characters are removed, the length is capped, and only `https://` links are kept.
   - The task is read once per brief. A tracker that fails or hangs leaves a warning, not a broken brief.
   - See [Trackers](https://mahkassem.github.io/fairlead/docs/trackers.html).
+- `ci.escapes = "file"` opens a GitHub issue for each escape `ci run --judge` finds ([#6](https://github.com/mahkassem/fairlead/issues/6)). Each is labelled `fairlead-escape` and keyed on its runner and test. A repeat while the issue is open is a note, at most one a day; after it's closed, a new issue names the old one. A run opens at most five new issues, and filing never changes the run's outcome. The job needs `issues: write`. See [Escapes](https://mahkassem.github.io/fairlead/docs/ci.html#escapes---judge-path).
 - Framework packs, and rules that read names from the code ([#50](https://github.com/mahkassem/fairlead/issues/50), [#51](https://github.com/mahkassem/fairlead/issues/51)). `extends = ["laravel"]` layers a pack of graph rules under the project's config; a pack sets only `graph.edges`, `graph.barrier` and `plan.run_all`, is built in or a file in the project, and the project's own config comes after it. A `[[graph.edges]]` rule may have `find`, a regex searched in each `from` file's text: it links only the files it matches in, and its capture fills `{1}` (or `{1|path}`, dots as slashes) in `to`. `graph stats` names each rule whose captures matched no file. The `laravel` pack links feature tests to the HTTP layer, the code that names a view, config key or factory to its file, and the tests that migrate to every migration, and stops the walk at the boot path, which runs everything when it changes. See [Framework packs](https://mahkassem.github.io/fairlead/docs/graph.html#framework-packs).
 
 - Workspaces: a folder of several repositories ([#52](https://github.com/mahkassem/fairlead/issues/52), first phase). A `fairlead.toml` with `[workspace]` in the folder lists the repositories (`[[workspace.repos]]` with a `path`, an optional `name` and `base`) or, listing none, takes every git repository one level down. `fairlead plan` there plans each repository against its own base and merge base, leaves out the ones with nothing changed, and prints one plan per repository; `--json` gives `{"repos": [{"name", "path", "plan"}], "unchanged": [...]}`. `--repo` narrows it to one repository, `--files` sends each path to the repository holding it, and `test --explain` explains a file in its repository. Inside a repository, the workspace file is a layer under the repository's own, outside CI. Other commands in the folder stop and name the repositories to run them in. Edges across repositories are the second phase. See [Workspaces](https://mahkassem.github.io/fairlead/docs/workspace.html).

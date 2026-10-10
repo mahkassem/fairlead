@@ -48,6 +48,24 @@ pub struct Event {
     /// What an `offer` or `use` event is about, such as `skill:forms` or `lesson:settle`.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub items: Vec<String>,
+    /// A `tokens` event's counts for the session so far: numbers only.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tokens: Option<Tokens>,
+}
+
+/// Token counts and cost for one session from one source, as totals so far:
+/// a later event for the same session and source replaces an earlier one.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, serde::Deserialize)]
+pub struct Tokens {
+    pub input: u64,
+    pub output: u64,
+    pub cache_read: u64,
+    pub cache_write: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cost_usd: Option<f64>,
+    /// Counted from per-message usage, which can miss output still streaming.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub estimate: bool,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -79,6 +97,7 @@ impl Event {
             tree: None,
             steps: Vec::new(),
             items: Vec::new(),
+            tokens: None,
         }
     }
 

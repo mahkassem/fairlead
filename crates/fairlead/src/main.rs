@@ -12,6 +12,7 @@ mod ci_workflow;
 mod context_cmd;
 mod coverage_cmd;
 mod done_cmd;
+mod escapes;
 mod find_cmd;
 mod graph_cmd;
 mod guard_cmd;
@@ -39,6 +40,7 @@ mod skills_eval_cmd;
 mod skills_report_cmd;
 mod stage;
 mod step;
+mod tokens;
 mod tracker;
 mod workspace_cmd;
 
@@ -109,6 +111,11 @@ enum Command {
     },
     /// Serve the plan, the brief and the other read-only commands to an agent over MCP (stdio).
     Mcp,
+    /// Tokens and cost per agent session, read as counts only.
+    Tokens {
+        #[command(subcommand)]
+        action: tokens::TokensAction,
+    },
     /// What the event log and CI's reports say about the setup, and the config changes they back.
     Insights {
         #[command(flatten)]
@@ -563,6 +570,7 @@ fn main() -> ExitCode {
         Some(Command::Replay { action }) => replay_cmd::run(action),
         Some(Command::Insights { args }) => insights_cmd::run(args, &cwd()),
         Some(Command::Mcp) => mcp_cmd::run(&cwd()),
+        Some(Command::Tokens { action }) => tokens::run(action, &cwd()),
         Some(Command::Test { changes, explain }) => {
             plan_cmd::run_explain(&cwd(), changes, &explain)
         }
