@@ -4,6 +4,23 @@
 
 ### New
 
+- Tokens and cost per agent session ([#6](https://github.com/mahkassem/fairlead/issues/6)), read as counts only.
+  - The Stop hook records a Claude Code session's totals from its transcript: the `cost-state` lines Claude Code writes, which count subagents and its own background calls and carry the cost.
+  - A transcript without them is counted from per-message usage, once per message and with subagents, and marked an estimate.
+  - `fairlead tokens import FILE` records a headless `claude -p --output-format json` run.
+  - `fairlead tokens report` shows the newest totals per session and source.
+  - Nothing but numbers reaches the event log, and `guard.events = "off"` records none.
+  - See [Tokens and cost](https://mahkassem.github.io/fairlead/docs/tokens.html).
+- `fairlead insights` ([#7](https://github.com/mahkassem/fairlead/issues/7)) sums up how the setup works over the last 30 days, or `--since`.
+  - **From the event log:** the write hook's decisions and denies by rule, `done` failures by step, skill routing's hit rate with skills offered and unused or used unoffered, lessons never offered, and tokens and cost.
+  - **From CI's reports:** `--replay` adds a replay report's recall, misses and recurring tests, and `--results` adds the escapes `ci run --judge` found.
+  - **`--suggest`** lists only changes the evidence backs:
+    - an owner rule that two escapes or misses needed;
+    - a quarantine entry for a recurring test;
+    - narrowing a route offered in ten measured sessions and never used;
+    - `guard.on_finding = "deny"` when twenty warnings never reached a commit.
+  - **`--write`** applies only the one-key guard change, with a line edit that keeps the file's comments. It prints the rest, and never commits.
+  - See [Insights](https://mahkassem.github.io/fairlead/docs/insights.html).
 - Blueprints ([#7](https://github.com/mahkassem/fairlead/issues/7)): `fairlead init --blueprint NAME` writes a starting point once, and the project owns it from then on.
   - What it writes: config on top of what `init` detects, starter files such as a routed SKILL.md, and the staged CI workflow.
   - Built in: `laravel-api` (the laravel pack, migrations and size rules) and `vite-react` (size rules).

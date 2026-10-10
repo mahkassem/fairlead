@@ -22,6 +22,7 @@ mod hooks_cmd;
 mod import_cmd;
 mod import_rules_cmd;
 mod init_cmd;
+mod insights_cmd;
 mod knowledge;
 mod lessons_cmd;
 mod mcp_cmd;
@@ -40,6 +41,7 @@ mod skills_eval_cmd;
 mod skills_report_cmd;
 mod stage;
 mod step;
+mod tokens;
 mod tracker;
 mod workspace_cmd;
 
@@ -110,6 +112,16 @@ enum Command {
     },
     /// Serve the plan, the brief and the other read-only commands to an agent over MCP (stdio).
     Mcp,
+    /// Tokens and cost per agent session, read as counts only.
+    Tokens {
+        #[command(subcommand)]
+        action: tokens::TokensAction,
+    },
+    /// What the event log and CI's reports say about the setup, and the config changes they back.
+    Insights {
+        #[command(flatten)]
+        args: insights_cmd::InsightsArgs,
+    },
     /// Replay recorded CI failures against the planner.
     Replay {
         #[command(subcommand)]
@@ -557,7 +569,9 @@ fn main() -> ExitCode {
         }) => plan_cmd::run_plan(&cwd(), changes, json, out, schema),
         Some(Command::Ci { action }) => ci_cmd::run(action, &cwd()),
         Some(Command::Replay { action }) => replay_cmd::run(action),
+        Some(Command::Insights { args }) => insights_cmd::run(args, &cwd()),
         Some(Command::Mcp) => mcp_cmd::run(&cwd()),
+        Some(Command::Tokens { action }) => tokens::run(action, &cwd()),
         Some(Command::Test { changes, explain }) => {
             plan_cmd::run_explain(&cwd(), changes, &explain)
         }
