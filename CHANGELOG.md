@@ -4,6 +4,13 @@
 
 ### New
 
+- Tokens and cost per agent session ([#6](https://github.com/mahkassem/fairlead/issues/6)), read as counts only.
+  - The Stop hook records a Claude Code session's totals from its transcript: the `cost-state` lines Claude Code writes, which count subagents and its own background calls and carry the cost.
+  - A transcript without them is counted from per-message usage, once per message and with subagents, and marked an estimate.
+  - `fairlead tokens import FILE` records a headless `claude -p --output-format json` run.
+  - `fairlead tokens report` shows the newest totals per session and source.
+  - Nothing but numbers reaches the event log, and `guard.events = "off"` records none.
+  - See [Tokens and cost](https://mahkassem.github.io/fairlead/docs/tokens.html).
 - `fairlead doctor --score`: readiness out of 100 on a fixed, versioned rubric ([#7](https://github.com/mahkassem/fairlead/issues/7)). Ten items, each earned by evidence rather than config alone: a project file with no problems, a runner for every test file, hooks installed for each agent the repository shows, a `done` that passed in the last 30 days, `fairlead ci` in a workflow (with stages), a replay report from the last 30 days that met its gate, recall of 95% or more beside a median plan that selects less than everything, a write the hook checked in the last 7 days, every SKILL.md routed, and lessons with none overdue. It lists the three fixes worth the most; `--json` prints the items, `--min N` exits 1 below N, and `--replay FILE` names the report, else `.fairlead/replay.json`. See [Readiness score](https://mahkassem.github.io/fairlead/docs/score.html).
 - Framework packs, and rules that read names from the code ([#50](https://github.com/mahkassem/fairlead/issues/50), [#51](https://github.com/mahkassem/fairlead/issues/51)). `extends = ["laravel"]` layers a pack of graph rules under the project's config; a pack sets only `graph.edges`, `graph.barrier` and `plan.run_all`, is built in or a file in the project, and the project's own config comes after it. A `[[graph.edges]]` rule may have `find`, a regex searched in each `from` file's text: it links only the files it matches in, and its capture fills `{1}` (or `{1|path}`, dots as slashes) in `to`. `graph stats` names each rule whose captures matched no file. The `laravel` pack links feature tests to the HTTP layer, the code that names a view, config key or factory to its file, and the tests that migrate to every migration, and stops the walk at the boot path, which runs everything when it changes. See [Framework packs](https://mahkassem.github.io/fairlead/docs/graph.html#framework-packs).
 

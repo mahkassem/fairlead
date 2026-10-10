@@ -152,7 +152,7 @@ This README documents Fairlead 0.9.0. Each command, by what it's for:
   declared names, nearest the brief first.
 - **What agents read first:** `agents sync` keeps the loop, the always-on
   lessons and the skill index in a marked block in AGENTS.md and CLAUDE.md.
-- **Measuring:** `replay`, the benchmarks, `skills eval`, which scores skill
+- **Measuring:** `tokens`, the tokens and cost of each agent session, `replay`, the benchmarks, `skills eval`, which scores skill
   routing on the repository's history, and `skills report`, the hit rate of
   what routing offers against what agents load.
 - **Getting started:** `init` writes a first config from what the repository

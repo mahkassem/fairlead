@@ -29,6 +29,7 @@
 - [Replay](replay.md)
 - [Readiness score](score.md)
 - [Benchmarks](benchmarks.md)
+- [Tokens and cost](tokens.md)
 
 # Project
 

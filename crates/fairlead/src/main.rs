@@ -36,6 +36,7 @@ mod skills_eval_cmd;
 mod skills_report_cmd;
 mod stage;
 mod step;
+mod tokens;
 mod workspace_cmd;
 
 use std::path::{Path, PathBuf};
@@ -102,6 +103,11 @@ enum Command {
         /// Why this test file or check is in the plan, or why it isn't.
         #[arg(long, value_name = "FILE_OR_CHECK")]
         explain: String,
+    },
+    /// Tokens and cost per agent session, read as counts only.
+    Tokens {
+        #[command(subcommand)]
+        action: tokens::TokensAction,
     },
     /// Replay recorded CI failures against the planner.
     Replay {
@@ -550,6 +556,7 @@ fn main() -> ExitCode {
         }) => plan_cmd::run_plan(&cwd(), changes, json, out, schema),
         Some(Command::Ci { action }) => ci_cmd::run(action, &cwd()),
         Some(Command::Replay { action }) => replay_cmd::run(action),
+        Some(Command::Tokens { action }) => tokens::run(action, &cwd()),
         Some(Command::Test { changes, explain }) => {
             plan_cmd::run_explain(&cwd(), changes, &explain)
         }
