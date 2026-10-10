@@ -22,12 +22,14 @@
 - [Find](find.md)
 - [AGENTS.md and CLAUDE.md](agents.md)
 - [Context and resume](context.md)
+- [MCP server](mcp.md)
 - [The done gate](done.md)
 - [The receipt and next](receipt.md)
 
 # Measuring
 
 - [Replay](replay.md)
+- [Readiness score](score.md)
 - [Benchmarks](benchmarks.md)
 
 # Project
