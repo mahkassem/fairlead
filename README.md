@@ -150,6 +150,8 @@ This README documents Fairlead 0.9.0. Each command, by what it's for:
   Codex and Cursor load it.
 - **Finding things:** `find` searches lessons, skills, docs headings and
   declared names, nearest the brief first.
+- **Agents over MCP:** `mcp` serves the plan, the brief, the receipt and the
+  other read-only commands as tools.
 - **What agents read first:** `agents sync` keeps the loop, the always-on
   lessons and the skill index in a marked block in AGENTS.md and CLAUDE.md.
 - **Measuring:** `replay`, the benchmarks, `skills eval`, which scores skill
