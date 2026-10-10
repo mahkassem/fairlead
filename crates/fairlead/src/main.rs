@@ -21,6 +21,7 @@ mod hooks_cmd;
 mod import_cmd;
 mod import_rules_cmd;
 mod init_cmd;
+mod insights_cmd;
 mod knowledge;
 mod lessons_cmd;
 mod mcp_cmd;
@@ -114,6 +115,11 @@ enum Command {
     Tokens {
         #[command(subcommand)]
         action: tokens::TokensAction,
+    },
+    /// What the event log and CI's reports say about the setup, and the config changes they back.
+    Insights {
+        #[command(flatten)]
+        args: insights_cmd::InsightsArgs,
     },
     /// Replay recorded CI failures against the planner.
     Replay {
@@ -562,6 +568,7 @@ fn main() -> ExitCode {
         }) => plan_cmd::run_plan(&cwd(), changes, json, out, schema),
         Some(Command::Ci { action }) => ci_cmd::run(action, &cwd()),
         Some(Command::Replay { action }) => replay_cmd::run(action),
+        Some(Command::Insights { args }) => insights_cmd::run(args, &cwd()),
         Some(Command::Mcp) => mcp_cmd::run(&cwd()),
         Some(Command::Tokens { action }) => tokens::run(action, &cwd()),
         Some(Command::Test { changes, explain }) => {
