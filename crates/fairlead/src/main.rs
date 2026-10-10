@@ -39,8 +39,8 @@ mod skills_eval_cmd;
 mod skills_report_cmd;
 mod stage;
 mod step;
-mod tracker;
 mod tokens;
+mod tracker;
 mod workspace_cmd;
 
 use std::path::{Path, PathBuf};
