@@ -12,6 +12,7 @@ mod ci_workflow;
 mod context_cmd;
 mod coverage_cmd;
 mod done_cmd;
+mod escapes;
 mod find_cmd;
 mod graph_cmd;
 mod guard_cmd;
