@@ -185,7 +185,7 @@ fn write_blueprint(
         println!("  wrote {}", f.path);
     }
     if bp.ci_workflow {
-        crate::ci_workflow::run(root, true)?;
+        crate::ci_workflow::run(root, true, false)?;
     }
     Ok(())
 }

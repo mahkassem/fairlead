@@ -4,6 +4,7 @@
 
 ### New
 
+- The weekly summary ([#7](https://github.com/mahkassem/fairlead/issues/7)). `fairlead ci workflow --insights --write` writes `.github/workflows/fairlead-insights.yml`, which on Mondays (or by hand) replays the last 30 days of `fairlead.yml` and puts `fairlead insights --suggest` in the run's summary. It runs no tests, so the schedule never starts a full test run, and it needs only `contents: read` and `actions: read`. See [Weekly summary](https://mahkassem.github.io/fairlead/docs/insights.html#weekly-summary).
 - Tokens and cost per agent session ([#6](https://github.com/mahkassem/fairlead/issues/6)), read as counts only.
   - The Stop hook records a Claude Code session's totals from its transcript: the `cost-state` lines Claude Code writes, which count subagents and its own background calls and carry the cost.
   - A transcript without them is counted from per-message usage, once per message and with subagents, and marked an estimate.
