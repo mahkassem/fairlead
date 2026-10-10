@@ -22,6 +22,8 @@ mod import_rules_cmd;
 mod init_cmd;
 mod knowledge;
 mod lessons_cmd;
+mod mcp_cmd;
+mod mcp_tools;
 mod migrate_cmd;
 mod migrate_notes;
 mod plan_cmd;
@@ -104,6 +106,8 @@ enum Command {
         #[arg(long, value_name = "FILE_OR_CHECK")]
         explain: String,
     },
+    /// Serve the plan, the brief and the other read-only commands to an agent over MCP (stdio).
+    Mcp,
     /// Tokens and cost per agent session, read as counts only.
     Tokens {
         #[command(subcommand)]
@@ -556,6 +560,7 @@ fn main() -> ExitCode {
         }) => plan_cmd::run_plan(&cwd(), changes, json, out, schema),
         Some(Command::Ci { action }) => ci_cmd::run(action, &cwd()),
         Some(Command::Replay { action }) => replay_cmd::run(action),
+        Some(Command::Mcp) => mcp_cmd::run(&cwd()),
         Some(Command::Tokens { action }) => tokens::run(action, &cwd()),
         Some(Command::Test { changes, explain }) => {
             plan_cmd::run_explain(&cwd(), changes, &explain)
