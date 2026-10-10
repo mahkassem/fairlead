@@ -42,6 +42,7 @@ With `--fetch-missing`, the recorded heads and bases the clone lacks are fetched
 | quarantined | a `[[replay.quarantine]]` entry declares the test flaky in this job (below) |
 | environment | the job failed alike across unrelated pull requests once its runner image changed (below) |
 | inherited | the failure came with the base branch: the base's own push run failed the test in the job, or three or more unrelated pull requests on the same base did (below) |
+| recurring | the test failed in the job across three or more unrelated pull requests on different bases, none of them touching it (below) |
 | ignored | `replay.ignore` names the job, such as one that only aggregates others, or it failed only in steps `replay.ignore_steps` names, such as an install |
 
 Recall is hits over hits and misses. Strict recall also counts unconfirmed failures as misses.
@@ -92,6 +93,18 @@ When a floating runner label such as `ubuntu-latest` moves to a new image, a job
 
 Wave failures get the outcome `environment`: kept out of adjusted recall and counted in raw recall, hits and misses alike, like inherited ones. The report lists each wave with its job, test, old and new image, when the new one appeared, and its pull requests. Only failed jobs' logs are read, so an image is known only from failures, and datasets fetched before this have none.
 
+## Recurring failures
+
+A flaky test fails now and then whatever a pull request changed. Replay calls a failure flaky only when another attempt of the same run passed the job, so a test that fails again on its re-run, or never gets one, would count against a plan that had no reason to select it. *Since 0.10.0*, `replay run` sets such failures aside when all of these hold:
+
+- the same test failed in the same job for three or more pull requests that changed no file in common;
+- none of them touched the test, or a file beside it that isn't another test, so none of their changes is a likely cause;
+- and the failures weren't already explained as quarantined, inherited or a runner image wave.
+
+These failures get the outcome `recurring`. As with inherited and wave failures, hits and misses alike are kept out of adjusted recall and counted in raw recall, so setting them aside can't be used to raise recall. The report lists each test with its job and pull requests, and a `[[replay.quarantine]]` entry to add if a person confirms the test is flaky. A real gap in the graph that unrelated changes keep hitting looks the same, so read the list before adding the entries; raw recall still counts them.
+
+A test file is recognised by its name: `x.test.ts`, `x.spec.ts`, `test_x.py`, `x_test.py`, `x_test.go`, and `XTest` or `XTests` in Java, Kotlin and PHP.
+
 ## Quarantine
 
 A test that fails in one CI job whatever changes, such as a platform-specific flake, measures that job rather than the planner. A `[[replay.quarantine]]` entry declares it:
@@ -123,7 +136,7 @@ To record them, add `--event schedule` to `replay fetch` (beside `--event push` 
 
 ## The report
 
-Per repository: runs replayed, attributed failures against the gate, recall and strict recall (overall and per event, since merge queue runs usually run everything and are the better evidence), hits by how they were selected (by the plan, because the plan selected everything, or as a check), the other outcomes, unwatched jobs by name, the median and 90th-percentile share of test files selected, the share of plans that selected everything, and the first (cold), median and 90th-percentile planning time. Each miss lists the changed files and an owner rule that would have caught it. Push runs have their own line, `push (after merge)`, and scheduled runs theirs, `schedule (full runs)` (*since 0.9.0*), with their misses counted as escapes; for a repository whose pull requests run the plan, that line is the recall that matters, and for one whose pushes run the plan too, the scheduled line is. `--json` prints the same as JSON.
+Per repository: runs replayed, attributed failures against the gate, recall and strict recall (overall and per event, since merge queue runs usually run everything and are the better evidence), hits by how they were selected (by the plan, because the plan selected everything, or as a check), the other outcomes, unwatched jobs by name, the median and 90th-percentile share of test files selected, the share of plans that selected everything, and the first (cold), median and 90th-percentile planning time. Each miss lists its job (*since 0.10.0*), the changed files and an owner rule that would have caught it, built from the first changed file that isn't a test or a document (*since 0.10.0*). When only tests or documents changed, no rule is suggested: another test or a README can't break the test, so it likelier failed on its own. Push runs have their own line, `push (after merge)`, and scheduled runs theirs, `schedule (full runs)` (*since 0.9.0*), with their misses counted as escapes; for a repository whose pull requests run the plan, that line is the recall that matters, and for one whose pushes run the plan too, the scheduled line is. `--json` prints the same as JSON.
 
 ## Limits
 
