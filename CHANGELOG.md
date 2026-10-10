@@ -4,6 +4,16 @@
 
 ### New
 
+- `fairlead insights` ([#7](https://github.com/mahkassem/fairlead/issues/7)) sums up how the setup works over the last 30 days, or `--since`.
+  - **From the event log:** the write hook's decisions and denies by rule, `done` failures by step, skill routing's hit rate with skills offered and unused or used unoffered, lessons never offered, and tokens and cost.
+  - **From CI's reports:** `--replay` adds a replay report's recall, misses and recurring tests, and `--results` adds the escapes `ci run --judge` found.
+  - **`--suggest`** lists only changes the evidence backs:
+    - an owner rule that two escapes or misses needed;
+    - a quarantine entry for a recurring test;
+    - narrowing a route offered in ten measured sessions and never used;
+    - `guard.on_finding = "deny"` when twenty warnings never reached a commit.
+  - **`--write`** applies only the one-key guard change, with a line edit that keeps the file's comments. It prints the rest, and never commits.
+  - See [Insights](https://mahkassem.github.io/fairlead/docs/insights.html).
 - `fairlead doctor --score`: readiness out of 100 on a fixed, versioned rubric ([#7](https://github.com/mahkassem/fairlead/issues/7)). Ten items, each earned by evidence rather than config alone: a project file with no problems, a runner for every test file, hooks installed for each agent the repository shows, a `done` that passed in the last 30 days, `fairlead ci` in a workflow (with stages), a replay report from the last 30 days that met its gate, recall of 95% or more beside a median plan that selects less than everything, a write the hook checked in the last 7 days, every SKILL.md routed, and lessons with none overdue. It lists the three fixes worth the most; `--json` prints the items, `--min N` exits 1 below N, and `--replay FILE` names the report, else `.fairlead/replay.json`. See [Readiness score](https://mahkassem.github.io/fairlead/docs/score.html).
 - `fairlead mcp`, an MCP server over stdio ([#6](https://github.com/mahkassem/fairlead/issues/6)). It serves nine read-only tools: `plan`, `explain`, `brief`, `context`, `find`, `receipt`, `next`, `lessons` and `skills_report`. Each runs the command it names as a child process, so nothing a command prints reaches the protocol stream, and a call is killed after 60 seconds. JSON results come back as text and as `structuredContent`, with results over 256 KB cut and marked. Paths must stay inside the repository and option values can't start with `-`; a refused call is a tool error the agent can read, not a protocol error. Each call adds an `mcp` event naming the tool, never its arguments. Every tool takes an optional `session`. `done` isn't served: it runs the tests, and a call over MCP can't be cancelled midway. See [MCP server](https://mahkassem.github.io/fairlead/docs/mcp.html).
 - Trackers: `[tracker]` links a change to its task, and the brief shows the task the branch names ([#6](https://github.com/mahkassem/fairlead/issues/6)).
