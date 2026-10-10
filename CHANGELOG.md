@@ -4,6 +4,13 @@
 
 ### New
 
+- Tokens and cost per agent session ([#6](https://github.com/mahkassem/fairlead/issues/6)), read as counts only.
+  - The Stop hook records a Claude Code session's totals from its transcript: the `cost-state` lines Claude Code writes, which count subagents and its own background calls and carry the cost.
+  - A transcript without them is counted from per-message usage, once per message and with subagents, and marked an estimate.
+  - `fairlead tokens import FILE` records a headless `claude -p --output-format json` run.
+  - `fairlead tokens report` shows the newest totals per session and source.
+  - Nothing but numbers reaches the event log, and `guard.events = "off"` records none.
+  - See [Tokens and cost](https://mahkassem.github.io/fairlead/docs/tokens.html).
 - `fairlead doctor --score`: readiness out of 100 on a fixed, versioned rubric ([#7](https://github.com/mahkassem/fairlead/issues/7)). Ten items, each earned by evidence rather than config alone: a project file with no problems, a runner for every test file, hooks installed for each agent the repository shows, a `done` that passed in the last 30 days, `fairlead ci` in a workflow (with stages), a replay report from the last 30 days that met its gate, recall of 95% or more beside a median plan that selects less than everything, a write the hook checked in the last 7 days, every SKILL.md routed, and lessons with none overdue. It lists the three fixes worth the most; `--json` prints the items, `--min N` exits 1 below N, and `--replay FILE` names the report, else `.fairlead/replay.json`. See [Readiness score](https://mahkassem.github.io/fairlead/docs/score.html).
 - `fairlead mcp`, an MCP server over stdio ([#6](https://github.com/mahkassem/fairlead/issues/6)). It serves nine read-only tools: `plan`, `explain`, `brief`, `context`, `find`, `receipt`, `next`, `lessons` and `skills_report`. Each runs the command it names as a child process, so nothing a command prints reaches the protocol stream, and a call is killed after 60 seconds. JSON results come back as text and as `structuredContent`, with results over 256 KB cut and marked. Paths must stay inside the repository and option values can't start with `-`; a refused call is a tool error the agent can read, not a protocol error. Each call adds an `mcp` event naming the tool, never its arguments. Every tool takes an optional `session`. `done` isn't served: it runs the tests, and a call over MCP can't be cancelled midway. See [MCP server](https://mahkassem.github.io/fairlead/docs/mcp.html).
 - Trackers: `[tracker]` links a change to its task, and the brief shows the task the branch names ([#6](https://github.com/mahkassem/fairlead/issues/6)).
