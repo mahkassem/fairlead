@@ -4,6 +4,7 @@
 
 mod agents_cmd;
 mod bench_cmd;
+mod blueprint;
 mod brief_cmd;
 mod ci_cmd;
 mod ci_judge;
