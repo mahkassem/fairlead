@@ -11,6 +11,7 @@
 ### Fixed
 
 - Replay's `phpunit` extractor reads Collision's format too, which PHPUnit prints under the printer Laravel installs, and both PHP extractors read a `FAILED` line cut to the terminal's width: its class comes from the `FAIL` header the test was listed under. Such failures used to be unattributed. See [Replay](https://mahkassem.github.io/fairlead/docs/replay.html).
+- Replay sets recurring failures aside ([#184](https://github.com/mahkassem/fairlead/issues/184)). A test failing in one job across three or more unrelated pull requests on different bases, none touching it, gets the outcome `recurring`: kept out of adjusted recall and counted in raw recall, hits and misses alike, and listed with a `[[replay.quarantine]]` entry to confirm. On okhttp, flaky network tests counted as misses against changes that couldn't reach them. A miss's suggested owner rule now covers the first changed file that isn't a test or a document, and none is suggested when only tests or documents changed. Each miss names its job, so the same test missed in two jobs no longer reads as a duplicate, and `--json` gains `job` on each miss. `XTest`, `XTests`, `test_x` and `x_test` files count as tests when deciding whether a change touched a test, as `.test.` and `.spec.` files did. See [Recurring failures](https://mahkassem.github.io/fairlead/docs/replay.html#recurring-failures).
 
 ## 0.9.0 (2026-10-06)
 
