@@ -804,6 +804,9 @@ pub enum Escapes {
     Report,
     /// Also a non-zero exit from `ci report`, so the escape itself can be a required check.
     Fail,
+    /// Also a GitHub issue per escape, labelled `fairlead-escape`: at most
+    /// five new ones a run, and a repeat is a note on the open one.
+    File,
 }
 
 /// What `fairlead brief` keeps, and whether an agent that edits without one is told.

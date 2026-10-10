@@ -194,6 +194,15 @@ steps:
 
 The run's exit code is its tests' either way. `ci.escapes = "fail"` also makes `ci report` exit 1 when there's an escape, so the escape can be its own required check; the default, `"report"`, only reports it.
 
+*Since 0.10.0*, `ci.escapes = "file"` also opens a GitHub issue for each escape, so a person sees it after the merge:
+
+- Each issue is labelled `fairlead-escape`. It names the test, the runner, the merge commit and the run, and suggests the rule that would have selected the test.
+- An escape is keyed on its runner and test. If the same test escapes again while its issue is open, the issue gets a note instead, at most one a day. If the issue is closed, a new one is opened that names the old one. Closed issues are never reopened.
+- One run opens at most five new issues and lists the rest as not filed.
+- Filing is best effort: a failure to file is printed, and the run's outcome stays its tests'.
+
+The job that runs `ci run --judge` needs `issues: write` and `GITHUB_TOKEN` in its environment. `fairlead ci workflow` doesn't add that job, so add the permission where you run the judge.
+
 ## `fairlead ci report --plan PATH`
 
 Writes one Markdown summary of the run. It goes to `$GITHUB_STEP_SUMMARY` when GitHub Actions sets it, else stdout. The summary has:
@@ -217,7 +226,7 @@ Results from another plan are refused with exit code 2.
 ```toml
 [ci]
 comment = false    # also keep a pull request comment up to date
-escapes = "report" # or "fail": `ci report` exits 1 on an escape `ci run --judge` found
+escapes = "report" # or "fail": `ci report` exits 1 on an escape `ci run --judge` found; or "file": a GitHub issue per escape
 ```
 
 ## GitLab CI
