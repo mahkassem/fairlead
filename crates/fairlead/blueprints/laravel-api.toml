@@ -1,0 +1,38 @@
+name = "laravel-api"
+description = "A Laravel app or API: the laravel pack, migrations that never change once run, size limits, a skill for the HTTP layer, and a staged CI workflow"
+detect = ["artisan"]
+ci_workflow = true
+config = '''
+extends = ["laravel"]
+
+[stages]
+environments = ["main"]
+
+[guard.migrations]
+files = ["database/migrations/*.php"]
+
+[guard.size]
+files = ["app/**/*.php"]
+file_lines = 600
+function_lines = 80
+
+[[skills.routes]]
+skill = ".claude/skills/laravel-api/SKILL.md"
+paths = ["app/Http/**", "routes/**"]
+'''
+
+[[files]]
+path = ".claude/skills/laravel-api/SKILL.md"
+text = '''
+---
+name: laravel-api
+description: How this project's HTTP layer is built. Load it before editing a controller, a form request, a resource or a route.
+---
+
+Replace this with the team's own rules. A start:
+
+- Validate input in a Form Request, not in the controller.
+- Return API Resources, never models.
+- A new endpoint has a feature test under tests/Feature that calls it through the route.
+- A schema change is a new migration; a migration that has run is never edited.
+'''

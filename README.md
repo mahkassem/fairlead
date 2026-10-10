@@ -160,7 +160,8 @@ This README documents Fairlead 0.9.0. Each command, by what it's for:
   skill routing on the repository's history, and `skills report`, the hit
   rate of what routing offers against what agents load.
 - **Getting started:** `init` writes a first config from what the repository
-  shows.
+  shows, and `init --blueprint` adds a starting point for a kind of project:
+  config, starter skills and the CI workflow.
 - **The config:** `config check`, `show` and `schema`.
 - **Upgrading:** `migrate`, which brings the hooks, the config's version
   floor and the version pins to the release you installed. *Since 0.7.0.*

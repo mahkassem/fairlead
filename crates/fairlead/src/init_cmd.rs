@@ -14,9 +14,13 @@ pub struct InitArgs {
     /// Print the config instead of writing it.
     #[arg(long)]
     dry_run: bool,
-    /// Replace a `fairlead.toml` that's already there.
+    /// Replace a `fairlead.toml` that's already there, and a blueprint's files.
     #[arg(long)]
     force: bool,
+    /// Also write a blueprint: a built-in (laravel-api, vite-react), or a
+    /// blueprint file or folder of the team's own.
+    #[arg(long, value_name = "NAME_OR_PATH")]
+    blueprint: Option<String>,
 }
 
 /// A test runner the repository shows, with the test files its `match` finds.
@@ -53,6 +57,18 @@ pub fn run(args: InitArgs, cwd: &Path) -> ExitCode {
         return ExitCode::from(2);
     }
     let files = fairlead_lang::tree::Tree::scan(&fairlead_lang::tree::plain(&root)).files;
+    let blueprint = match args
+        .blueprint
+        .as_deref()
+        .map(|b| crate::blueprint::load(b, cwd))
+    {
+        Some(Ok(bp)) => Some(bp),
+        Some(Err(e)) => {
+            eprintln!("fairlead: {e}");
+            return ExitCode::from(2);
+        }
+        None => None,
+    };
     let found = detect(&root, &files);
     if found.runners.is_empty() && found.checks.is_empty() {
         eprintln!("fairlead: found no test runner init knows here; the book's Configuration page shows how to add one");
@@ -61,33 +77,117 @@ pub fn run(args: InitArgs, cwd: &Path) -> ExitCode {
         }
         return ExitCode::FAILURE;
     }
-    let text = render(&found);
+    let mut text = render(&found);
+    if let Some(bp) = &blueprint {
+        text = with_blueprint(&text, bp);
+    }
     if args.dry_run {
         print!("{text}");
+        for f in blueprint.iter().flat_map(|bp| &bp.files) {
+            println!("# would write {}", f.path);
+        }
         return ExitCode::SUCCESS;
     }
-    if let Err(e) = std::fs::write(&target, &text) {
+    // Checked beside the target before it replaces it, so a config that
+    // doesn't load never lands; packs a blueprint names resolve from there.
+    let draft = root.join(".fairlead.init.toml");
+    if let Err(e) = std::fs::write(&draft, &text) {
+        eprintln!("fairlead: could not write {}: {e}", draft.display());
+        return ExitCode::from(2);
+    }
+    let checked = match config::load_file(&draft, &[]) {
+        Ok(loaded) => config::validate(&loaded.config)
+            .into_iter()
+            .map(|p| format!("{}: {}", p.key, p.message))
+            .collect::<Vec<_>>(),
+        Err(e) => vec![format!("the config init made doesn't load: {e}")],
+    };
+    if !checked.is_empty() {
+        let _ = std::fs::remove_file(&draft);
+        for line in checked {
+            eprintln!("fairlead: {line}");
+        }
+        return ExitCode::from(2);
+    }
+    if let Err(e) = std::fs::rename(&draft, &target) {
+        let _ = std::fs::remove_file(&draft);
         eprintln!("fairlead: could not write {}: {e}", target.display());
         return ExitCode::from(2);
     }
-    match config::load_file(&target, &[]) {
-        Ok(loaded) => {
-            let problems = config::validate(&loaded.config);
-            if !problems.is_empty() {
-                for p in problems {
-                    eprintln!("fairlead: {}: {}", p.key, p.message);
-                }
-                return ExitCode::from(2);
-            }
-        }
-        Err(e) => {
-            eprintln!("fairlead: the config init wrote doesn't load: {e}");
+    println!("fairlead: wrote {}", target.display());
+    if let Some(bp) = &blueprint {
+        if let Err(e) = write_blueprint(&root, bp, args.force) {
+            eprintln!("fairlead: {e}");
             return ExitCode::from(2);
         }
+    } else if let Some(bp) = crate::blueprint::suggest(&files) {
+        println!(
+            "  this looks like {}: `fairlead init --blueprint {} --force` also adds {}",
+            bp.name, bp.name, bp.description
+        );
     }
-    println!("fairlead: wrote {}", target.display());
     summary(&found);
     ExitCode::SUCCESS
+}
+
+/// The detected config with a blueprint's: its top-level keys go before the
+/// first table, where TOML reads them as top-level, and its tables at the end.
+fn with_blueprint(text: &str, bp: &crate::blueprint::Blueprint) -> String {
+    let lines: Vec<&str> = bp.config.trim().lines().collect();
+    let split = lines
+        .iter()
+        .position(|l| l.trim_start().starts_with('['))
+        .unwrap_or(lines.len());
+    let top = lines[..split].join("\n");
+    let tables = lines[split..].join("\n");
+    let at = text.find("\n[").map_or(text.len(), |i| i + 1);
+    let mut out = text[..at].to_string();
+    if !top.trim().is_empty() {
+        out.push_str(&format!(
+            "# From the {} blueprint.\n{}\n\n",
+            bp.name,
+            top.trim()
+        ));
+    }
+    out.push_str(&text[at..]);
+    if !tables.trim().is_empty() {
+        out.push_str(&format!(
+            "\n# From the {} blueprint.\n{}\n",
+            bp.name,
+            tables.trim()
+        ));
+    }
+    out
+}
+
+/// A blueprint's starter files, never over one that's there unless forced,
+/// then its CI workflow.
+fn write_blueprint(
+    root: &Path,
+    bp: &crate::blueprint::Blueprint,
+    force: bool,
+) -> Result<(), String> {
+    for f in &bp.files {
+        let path = root.join(&f.path);
+        if path.exists() && !force {
+            println!(
+                "  kept {}: it's there already (--force replaces it)",
+                f.path
+            );
+            continue;
+        }
+        if let Some(dir) = path.parent() {
+            std::fs::create_dir_all(dir)
+                .map_err(|e| format!("could not create {}: {e}", dir.display()))?;
+        }
+        std::fs::write(&path, f.text.trim_start())
+            .map_err(|e| format!("could not write {}: {e}", path.display()))?;
+        println!("  wrote {}", f.path);
+    }
+    if bp.ci_workflow {
+        crate::ci_workflow::run(root, true)?;
+    }
+    Ok(())
 }
 
 fn summary(found: &Found) {

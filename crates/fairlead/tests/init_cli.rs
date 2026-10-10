@@ -308,3 +308,76 @@ fn ava_and_minitest_are_recognised() {
         "{out}"
     );
 }
+
+fn vite(name: &str) -> PathBuf {
+    repo(
+        name,
+        &[
+            (
+                "package.json",
+                r#"{"devDependencies": {"vitest": "^3", "vite": "^6"}}"#,
+            ),
+            ("vite.config.ts", "export default {};\n"),
+            ("src/App.tsx", "export const App = () => null;\n"),
+            ("src/App.test.tsx", "import { App } from './App';\n"),
+        ],
+    )
+}
+
+#[test]
+fn a_blueprint_adds_its_config_files_and_workflow_and_init_alone_names_it() {
+    let dir = vite("bp-vite");
+    let (code, out) = fairlead(&dir, &["init"]);
+    assert_eq!(code, 0, "{out}");
+    assert!(
+        out.contains("this looks like vite-react: `fairlead init --blueprint vite-react --force`"),
+        "{out}"
+    );
+    assert!(
+        !dir.join(".claude/skills/vite-react/SKILL.md").exists(),
+        "a suggestion writes nothing"
+    );
+    let (code, out) = fairlead(&dir, &["init", "--blueprint", "vite-react", "--force"]);
+    assert_eq!(code, 0, "{out}");
+    let toml = std::fs::read_to_string(dir.join("fairlead.toml")).unwrap();
+    assert!(
+        toml.contains("# From the vite-react blueprint.\n[stages]"),
+        "{toml}"
+    );
+    assert!(dir.join(".claude/skills/vite-react/SKILL.md").is_file());
+    assert!(dir.join(".github/workflows/fairlead.yml").is_file());
+    let (code, out) = fairlead(&dir, &["config", "check"]);
+    assert_eq!(code, 0, "{out}");
+    std::fs::write(dir.join(".claude/skills/vite-react/SKILL.md"), "ours\n").unwrap();
+    std::fs::remove_file(dir.join("fairlead.toml")).unwrap();
+    let (code, out) = fairlead(&dir, &["init", "--blueprint", "vite-react"]);
+    assert_eq!(code, 0, "{out}");
+    assert!(
+        out.contains("kept .claude/skills/vite-react/SKILL.md"),
+        "{out}"
+    );
+    assert_eq!(
+        std::fs::read_to_string(dir.join(".claude/skills/vite-react/SKILL.md")).unwrap(),
+        "ours\n"
+    );
+}
+
+#[test]
+fn a_blueprint_whose_config_doesnt_load_leaves_no_config_behind() {
+    let dir = vite("bp-bad");
+    std::fs::write(
+        dir.join("ours.toml"),
+        "name = \"ours\"\ndescription = \"x\"\nconfig = '''\nextends = [\"nope\"]\n'''\n",
+    )
+    .unwrap();
+    let (code, out) = fairlead(&dir, &["init", "--blueprint", "ours.toml"]);
+    assert_eq!(code, 2, "{out}");
+    assert!(!dir.join("fairlead.toml").exists(), "{out}");
+    assert!(!dir.join(".fairlead.init.toml").exists());
+    let (code, out) = fairlead(&dir, &["init", "--blueprint", "nope"]);
+    assert_eq!(code, 2);
+    assert!(
+        out.contains("neither a built-in blueprint (laravel-api, vite-react)"),
+        "{out}"
+    );
+}

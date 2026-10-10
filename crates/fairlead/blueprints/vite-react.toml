@@ -1,0 +1,33 @@
+name = "vite-react"
+description = "A Vite and React app: size limits for components, a skill for the component layer, and a staged CI workflow"
+detect = ["vite.config.ts", "vite.config.js", "vite.config.mts", "vite.config.mjs"]
+ci_workflow = true
+config = '''
+[stages]
+environments = ["main"]
+
+[guard.size]
+files = ["src/**/*.{ts,tsx}"]
+exclude = ["src/**/*.gen.ts"]
+file_lines = 400
+function_lines = 80
+
+[[skills.routes]]
+skill = ".claude/skills/vite-react/SKILL.md"
+paths = ["src/**/*.tsx"]
+'''
+
+[[files]]
+path = ".claude/skills/vite-react/SKILL.md"
+text = '''
+---
+name: vite-react
+description: How this project's React components are built. Load it before adding or changing a component.
+---
+
+Replace this with the team's own rules. A start:
+
+- One component per file, named after the file.
+- State that two components share lives in their nearest common parent or a hook, not a global.
+- A component with logic has a test beside it, `*.test.tsx`, that renders it and checks what a user sees.
+'''
