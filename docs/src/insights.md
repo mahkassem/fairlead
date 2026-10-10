@@ -36,3 +36,13 @@ The event log is local, so the first five sections reflect the machine `insights
 | `guard.on_finding = "deny"` | twenty warned writes, and no finding reached a commit | yes |
 
 `--write` applies only the guard change, because it's the one that changes a single key. It edits that line in `fairlead.toml`, or adds it under `[guard]`, so the file's comments and order stay as they were. The rest are printed for a person to judge. Nothing is committed.
+
+## Weekly summary
+
+`fairlead ci workflow --insights --write` writes `.github/workflows/fairlead-insights.yml`. That workflow runs on Mondays at 05:17 UTC, or by hand, and does three things:
+
+1. Replays the last 30 days of the `fairlead.yml` workflow's runs.
+2. Runs `fairlead insights --since` seven days ago, with that replay report and `--suggest`.
+3. Puts the result in the run's summary.
+
+It runs no tests. It's kept apart from `fairlead.yml` so the schedule never starts a full test run, and it needs only `contents: read` and `actions: read`. It sits on CI's side, so the event log's sections are empty there: the replay's recall, misses and recurring tests carry the summary. Run `fairlead insights` locally for the event log. As with `fairlead.yml`, `--write` replaces only a file this command wrote.

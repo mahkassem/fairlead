@@ -92,6 +92,10 @@ pub enum CiAction {
         /// only a file this command wrote.
         #[arg(long)]
         write: bool,
+        /// The weekly insights workflow instead, `fairlead-insights.yml`:
+        /// replay and `fairlead insights` in the run's summary, no tests.
+        #[arg(long)]
+        insights: bool,
     },
 }
 
@@ -133,7 +137,7 @@ pub fn run(action: CiAction, cwd: &Path) -> ExitCode {
             receipt,
             comment,
         } => crate::ci_report::run(cwd, &plan, results.as_deref(), receipt.as_deref(), comment),
-        CiAction::Workflow { write } => crate::ci_workflow::run(cwd, write),
+        CiAction::Workflow { write, insights } => crate::ci_workflow::run(cwd, write, insights),
     };
     result.unwrap_or_else(|e| {
         eprintln!("{e}");
