@@ -13,13 +13,14 @@ fairlead config schema         # JSON Schema, for editor autocomplete
 
 Later layers override earlier ones:
 
-1. Built-in defaults.
-2. The project file: `fairlead.toml` or `fairlead.yaml`, found by walking up from the current directory, never past the repository root (the first directory holding `.git`). Two in the same directory is an error.
-3. The environment's shared file, `fairlead.<name>.toml` (or `.yaml`), when an environment is named. See [Environments](#environments).
-4. The local file, `fairlead.local.toml` (or `.yaml`), next to the project file. Keep it out of git. It's ignored when the `CI` environment variable is set.
-5. The environment's local file, `fairlead.<name>.local.toml`, also out of git and ignored in CI.
-6. Environment variables: `FAIRLEAD_` followed by the key path, with sections separated by a double underscore. So `FAIRLEAD_TESTS__UNREACHED=all` sets `tests.unreached`.
-7. `--set key=value`, for one run: `fairlead config show --set tests.unreached=all`.
+1. Built-in defaults, then any [framework packs](graph.md#framework-packs) the files below name in `extends`.
+2. *Since 0.10.0:* the workspace file, when the repository is in a [workspace](workspace.md) folder. Its `[workspace]` table is left out, and it's ignored when the `CI` environment variable is set.
+3. The project file: `fairlead.toml` or `fairlead.yaml`, found by walking up from the current directory, never past the repository root (the first directory holding `.git`). Two in the same directory is an error.
+4. The environment's shared file, `fairlead.<name>.toml` (or `.yaml`), when an environment is named. See [Environments](#environments).
+5. The local file, `fairlead.local.toml` (or `.yaml`), next to the project file. Keep it out of git. It's ignored when the `CI` environment variable is set.
+6. The environment's local file, `fairlead.<name>.local.toml`, also out of git and ignored in CI.
+7. Environment variables: `FAIRLEAD_` followed by the key path, with sections separated by a double underscore. So `FAIRLEAD_TESTS__UNREACHED=all` sets `tests.unreached`.
+8. `--set key=value`, for one run: `fairlead config show --set tests.unreached=all`.
 
 For environment variables and `--set`, a value that parses as a TOML boolean, number or array (`true`, `30`, `["a", "b"]`) is used as that type; anything else, dates included, is a string. Environment variables apply in name order.
 

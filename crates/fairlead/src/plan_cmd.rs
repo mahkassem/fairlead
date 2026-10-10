@@ -19,10 +19,13 @@ pub struct Changes {
     pub base: Option<String>,
     /// Plan for these paths instead of asking git.
     #[arg(long, num_args = 1..)]
-    files: Vec<String>,
+    pub files: Vec<String>,
     /// Override a config value for this run.
     #[arg(long = "set", value_name = "KEY=VALUE")]
-    sets: Vec<String>,
+    pub sets: Vec<String>,
+    /// In a workspace, only this repository.
+    #[arg(long, value_name = "NAME")]
+    pub repo: Option<String>,
     /// Plan everything whatever changed, for this reason; a full CI stage sets it.
     #[arg(skip)]
     pub everything: Option<String>,
@@ -35,6 +38,7 @@ impl Changes {
             base,
             files,
             sets,
+            repo: None,
             everything: None,
         }
     }
@@ -186,6 +190,14 @@ pub fn run_plan(
         );
         return ExitCode::SUCCESS;
     }
+    match crate::workspace_cmd::resolve(cwd, &changes) {
+        Ok(Some(ws)) => return crate::workspace_cmd::run_plan(&ws, cwd, changes, json, out),
+        Ok(None) => {}
+        Err(e) => {
+            eprintln!("{e}");
+            return ExitCode::from(2);
+        }
+    }
     let planned = match make(cwd, &changes) {
         Ok(p) => p,
         Err(e) => {
@@ -209,6 +221,14 @@ pub fn run_plan(
 }
 
 pub fn run_explain(cwd: &Path, changes: Changes, target: &str) -> ExitCode {
+    match crate::workspace_cmd::resolve(cwd, &changes) {
+        Ok(Some(ws)) => return crate::workspace_cmd::run_explain(&ws, cwd, changes, target),
+        Ok(None) => {}
+        Err(e) => {
+            eprintln!("{e}");
+            return ExitCode::from(2);
+        }
+    }
     let planned = match make(cwd, &changes) {
         Ok(p) => p,
         Err(e) => {
