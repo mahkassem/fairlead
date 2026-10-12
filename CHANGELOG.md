@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- The minimum Rust version for building from source is 1.95, up from 1.90, for `oxc_resolver` 11.24. The release binaries and the npm package are unaffected.
+
 ## 0.10.0 (2026-10-12)
 
 ### New
