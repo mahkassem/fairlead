@@ -64,7 +64,7 @@ jobs:
         run: test -f "$CONFIG" || { echo "no $CONFIG"; exit 1; }
       - uses: dtolnay/rust-toolchain@e2a55d2ffb04f378e9626c28d38b36d230d1e12f # master
         with:
-          toolchain: "1.94.1"
+          toolchain: "1.95.0"
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
       - run: cargo build --release --locked -p fairlead
       - name: Clone the repository, full history without blobs

@@ -143,7 +143,7 @@ fn prune(dir: &Path, commit: &str) {
         .filter(|e| e.file_name() != commit)
         .filter_map(|e| Some((e.metadata().ok()?.modified().ok()?, e.path())))
         .collect();
-    others.sort_by(|a, b| b.0.cmp(&a.0));
+    others.sort_by_key(|b| std::cmp::Reverse(b.0));
     for (_, path) in others.into_iter().skip(KEEP - 1) {
         let _ = std::fs::remove_file(path);
     }
