@@ -17,7 +17,9 @@ use fairlead_replay::window::Window;
 #[derive(Subcommand)]
 pub enum ReplayAction {
     /// Record a repository's completed pull request and merge queue runs.
-    /// Needs GITHUB_TOKEN (or GH_TOKEN) and curl.
+    /// Needs GITHUB_TOKEN (or GH_TOKEN) and curl. In GitHub Actions the token
+    /// needs `contents`, `actions` and `pull-requests` read, and `checks` read
+    /// for annotations; without that last one the fetch warns and goes on.
     Fetch {
         /// The repository, as owner/name.
         #[arg(long)]

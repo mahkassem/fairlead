@@ -551,3 +551,25 @@ fn an_event_replay_does_not_record_stops_the_fetch() {
     assert!(rows.is_empty());
     assert!(matches!(stop, Stop::Error(e) if e.contains("`workflow_dispatch`")));
 }
+
+#[test]
+fn a_token_that_cannot_read_annotations_records_the_runs_without_them() {
+    let mut http = api();
+    http.status
+        .insert("/repos/o/r/check-runs/101/annotations".into(), 403);
+    let (rows, stop) = fetch(&http, &opts(None), &BTreeSet::new());
+    assert_eq!(stop, Stop::Complete, "a missing checks scope isn't a stop");
+    let first = rows
+        .iter()
+        .find(|r| r.run_id == 11 && r.attempt == 1)
+        .unwrap();
+    assert!(first.jobs[0].annotations.is_empty());
+    assert!(
+        !first.jobs[0].log.is_empty(),
+        "the job's log is still fetched"
+    );
+    assert!(
+        http.paused.lock().unwrap().is_empty(),
+        "no wait for a refusal"
+    );
+}

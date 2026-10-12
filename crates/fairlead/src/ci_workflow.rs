@@ -349,7 +349,7 @@ pub const INSIGHTS_PATH: &str = ".github/workflows/fairlead-insights.yml";
 /// `fairlead insights` in the run's summary. It runs no tests.
 pub fn render_insights() -> String {
     let mut out = format!(
-        "{MARKER} --insights from the Fairlead config.\n# Run `fairlead ci workflow --insights --write` again rather than editing it.\nname: fairlead insights\n\non:\n  schedule:\n    - cron: \"17 5 * * 1\"   # Mondays, 05:17 UTC\n  workflow_dispatch:\n\npermissions:\n  contents: read\n  actions: read   # the test workflow's runs and logs, for replay\n\njobs:\n  insights:\n    name: insights\n    runs-on: ubuntu-latest\n    steps:\n      - uses: {CHECKOUT}\n        with:\n          fetch-depth: 0\n"
+        "{MARKER} --insights from the Fairlead config.\n# Run `fairlead ci workflow --insights --write` again rather than editing it.\nname: fairlead insights\n\non:\n  schedule:\n    - cron: \"17 5 * * 1\"   # Mondays, 05:17 UTC\n  workflow_dispatch:\n\npermissions:\n  contents: read\n  actions: read         # the test workflow's runs and logs, for replay\n  pull-requests: read   # the pull request each run belongs to\n  checks: read          # the annotations that name a failing test\n\njobs:\n  insights:\n    name: insights\n    runs-on: ubuntu-latest\n    steps:\n      - uses: {CHECKOUT}\n        with:\n          fetch-depth: 0\n"
     );
     install(&mut out);
     out.push_str(

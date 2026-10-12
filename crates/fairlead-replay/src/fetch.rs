@@ -63,6 +63,17 @@ const SERVER_ERROR_WAIT: u64 = 5;
 fn with_retry<T>(
     http: &dyn Http,
     what: &str,
+    call: impl FnMut() -> Result<Reply<T>, String>,
+) -> Result<Reply<T>, String> {
+    with_retry_or_refused(http, what, false, call)
+}
+
+/// `with_retry`, but with `refused_ok` a plain refusal (a 403 that isn't a
+/// rate limit, such as a token without the scope) comes back as the reply.
+fn with_retry_or_refused<T>(
+    http: &dyn Http,
+    what: &str,
+    refused_ok: bool,
     mut call: impl FnMut() -> Result<Reply<T>, String>,
 ) -> Result<Reply<T>, String> {
     let mut attempt = 0;
@@ -82,6 +93,9 @@ fn with_retry<T>(
             return Ok(reply);
         }
         let limited = reply.message.to_ascii_lowercase().contains("rate limit");
+        if refused_ok && !limited && reply.status == 403 {
+            return Ok(reply);
+        }
         if !limited || reply.remaining == Some(0) || attempt >= RETRIES {
             let why = if reply.message.is_empty() {
                 "no message"
@@ -119,6 +133,28 @@ fn get(http: &dyn Http, path: &str) -> Result<Value, String> {
 /// Like `get`, but a resource GitHub no longer has (404, 410) reads as `null`.
 fn get_gone_ok(http: &dyn Http, path: &str) -> Result<Value, String> {
     request(http, path, true)
+}
+
+static ANNOTATIONS_REFUSED: std::sync::Once = std::sync::Once::new();
+
+/// A job's annotations, or none when the token can't read them: they sharpen
+/// which test failed, but the run, its jobs and its log are worth a row anyway.
+fn annotations(http: &dyn Http, path: &str) -> Result<Vec<Value>, String> {
+    let reply = with_retry_or_refused(http, path, true, || http.get_json(path))?;
+    match reply.status {
+        200 => Ok(reply.body.as_array().cloned().unwrap_or_default()),
+        404 | 410 => Ok(Vec::new()),
+        403 => {
+            ANNOTATIONS_REFUSED.call_once(|| {
+                eprintln!(
+                    "fetch: GitHub refused check run annotations ({}); fetching without them. The token needs `checks: read`",
+                    reply.message
+                );
+            });
+            Ok(Vec::new())
+        }
+        status => Err(format!("GitHub answered {status} for {path}")),
+    }
 }
 
 fn str_of<'v>(v: &'v Value, key: &str) -> &'v str {
@@ -311,11 +347,10 @@ fn job_of(http: &dyn Http, repo: &str, job: &Value) -> Result<Job, String> {
         .map(|s| str_of(s, "name").to_string())
         .collect();
     let id = job.get("id").and_then(Value::as_u64).unwrap_or(0);
-    let notes = get_gone_ok(
+    let notes = annotations(
         http,
         &format!("/repos/{repo}/check-runs/{id}/annotations?per_page=50"),
     )?;
-    let notes = notes.as_array().cloned().unwrap_or_default();
     out.annotations_capped = notes.len() >= ANNOTATION_CAP;
     out.annotations = notes
         .iter()
