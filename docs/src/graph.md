@@ -39,7 +39,7 @@ Each file matching `from` depends on every file its `to` globs match. A `{name}`
 
 ### Names in the code
 
-*Unreleased:* some dependencies are named in a file's text rather than imported: a view by name, a config file by its key, a model's factory by convention. A rule with `find` searches each `from` file's text with a regex, and links only the files it matches in. Its capture, if it has one, fills `{1}` in `to`, and `{1|path}` fills it with its dots as slashes:
+*Since 0.10.0:* some dependencies are named in a file's text rather than imported: a view by name, a config file by its key, a model's factory by convention. A rule with `find` searches each `from` file's text with a regex, and links only the files it matches in. Its capture, if it has one, fills `{1}` in `to`, and `{1|path}` fills it with its dots as slashes:
 
 ```toml
 [[graph.edges]]
@@ -57,7 +57,7 @@ The first makes a controller that calls `view('users.index')` depend on `resourc
 
 ## Framework packs
 
-*Unreleased:* a framework makes dependencies by convention, the same in every project that uses it. A pack bundles the rules for one framework, and a config names it in `extends`:
+*Since 0.10.0:* a framework makes dependencies by convention, the same in every project that uses it. A pack bundles the rules for one framework, and a config names it in `extends`:
 
 ```toml
 extends = ["laravel"]

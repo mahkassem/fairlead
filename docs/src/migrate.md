@@ -220,6 +220,24 @@ For you to decide:
   as a use until `fairlead hooks uninstall --gemini` and
   `hooks install --gemini` write this release's.
 
+### To 0.10.0
+
+Migrate updates nothing in your files: every new table is optional.
+
+For you to decide:
+
+- Replay sets recurring failures aside: a test failing in one job across
+  three or more unrelated pull requests gets the outcome `recurring` and
+  leaves adjusted recall, so a gate can pass that failed before. Confirm
+  the `[[replay.quarantine]]` entries it lists ([Recurring
+  failures](replay.md#recurring-failures)).
+- `fairlead doctor --score` rates the setup out of 100 and names the three
+  fixes worth the most ([Readiness score](score.md)); `fairlead ci workflow
+  --insights --write` adds the weekly summary ([Insights](insights.md)).
+- `fairlead mcp` serves read-only tools to an agent ([MCP server](mcp.md)),
+  `[tracker]` puts a branch's task in the brief ([Trackers](trackers.md)),
+  and `ci.escapes = "file"` opens an issue per escape ([CI](ci.md)).
+
 ### To 0.9.0
 
 Migrate updates:
