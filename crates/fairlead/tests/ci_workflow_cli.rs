@@ -177,7 +177,12 @@ fn the_insights_workflow_runs_weekly_runs_no_tests_and_is_written_beside_the_tes
         text.contains("  schedule:\n    - cron: \"17 5 * * 1\""),
         "{text}"
     );
-    assert!(text.contains("  actions: read"), "{text}");
+    for scope in ["contents", "actions", "pull-requests", "checks"] {
+        assert!(
+            text.contains(&format!("  {scope}: read")),
+            "replay fetch needs {scope}: {text}"
+        );
+    }
     assert!(
         !text.contains("fairlead ci run") && !text.contains("pull_request"),
         "a schedule here starts no test run: {text}"

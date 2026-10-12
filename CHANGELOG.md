@@ -10,6 +10,10 @@
 
 - The minimum Rust version for building from source is 1.95, up from 1.90, for `oxc_resolver` 11.24. The release binaries and the npm package are unaffected.
 
+### Fixed
+
+- The weekly workflow `ci workflow --insights` writes grants `pull-requests: read` and `checks: read` as well, which `replay fetch` needs for a run's pull request and its annotations; with only `contents` and `actions` it stopped at the first pull request run ([#201](https://github.com/mahkassem/fairlead/issues/201)). `replay fetch --help` and the replay docs name the scopes, and a token that can't read annotations now gets one warning and a fetch without them instead of a stop. Run `ci workflow --insights --write` again to update the file.
+
 ## 0.10.0 (2026-10-12)
 
 ### New

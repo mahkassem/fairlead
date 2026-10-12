@@ -45,4 +45,4 @@ The event log is local, so the first five sections reflect the machine `insights
 2. Runs `fairlead insights --since` seven days ago, with that replay report and `--suggest`.
 3. Puts the result in the run's summary.
 
-It runs no tests. It's kept apart from `fairlead.yml` so the schedule never starts a full test run, and it needs only `contents: read` and `actions: read`. It sits on CI's side, so the event log's sections are empty there: the replay's recall, misses and recurring tests carry the summary. Run `fairlead insights` locally for the event log. As with `fairlead.yml`, `--write` replaces only a file this command wrote.
+It runs no tests. It's kept apart from `fairlead.yml` so the schedule never starts a full test run, and it needs only read scopes: `contents` and `actions`, plus `pull-requests` and `checks` for `replay fetch` (a run's pull request and its annotations). It sits on CI's side, so the event log's sections are empty there: the replay's recall, misses and recurring tests carry the summary. Run `fairlead insights` locally for the event log. As with `fairlead.yml`, `--write` replaces only a file this command wrote.
