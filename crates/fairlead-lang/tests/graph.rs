@@ -782,3 +782,57 @@ fn python_imports_reach_modules_their_packages_and_a_test_its_conftests() {
     let py = s.providers.iter().find(|p| p.id == "python").unwrap();
     assert_eq!(py.files, 9);
 }
+
+#[test]
+fn a_find_rule_links_what_each_file_names_in_its_text_and_counts_what_names_nothing() {
+    let dir = repo(
+        "find",
+        &[
+            ("app/Http/Users.php", "<?php return view('users.index');\n"),
+            ("app/Http/Gone.php", "<?php return view('missing.page');\n"),
+            ("resources/views/users/index.blade.php", "<h1>users</h1>\n"),
+            ("tests/UsersTest.php", "<?php use RefreshDatabase;\n"),
+            ("tests/PlainTest.php", "<?php\n"),
+            ("database/migrations/create_users.php", "<?php\n"),
+        ],
+    );
+    let rule = |from: &str, find: &str, to: &str| fairlead_core::config::EdgeRule {
+        from: from.into(),
+        to: vec![to.into()],
+        find: Some(find.into()),
+    };
+    let mut config = Config::default();
+    config.graph.edges = vec![
+        rule(
+            "app/**/*.php",
+            r"\bview\(\s*'([\w.]+)",
+            "resources/views/{1|path}.blade.php",
+        ),
+        rule(
+            "tests/**/*.php",
+            r"\bRefreshDatabase\b",
+            "database/migrations/**",
+        ),
+    ]
+    .into();
+    let scan = build(&dir, &config).unwrap();
+    assert!(depends(
+        &scan,
+        "app/Http/Users.php",
+        "resources/views/users/index.blade.php"
+    ));
+    assert!(depends(
+        &scan,
+        "tests/UsersTest.php",
+        "database/migrations/create_users.php"
+    ));
+    assert!(!depends(
+        &scan,
+        "tests/PlainTest.php",
+        "database/migrations/create_users.php"
+    ));
+    assert_eq!(
+        scan.rules.unresolved,
+        [("app/**/*.php".to_string(), 1, "missing.page".to_string())]
+    );
+}

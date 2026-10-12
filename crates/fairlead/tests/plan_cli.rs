@@ -447,3 +447,74 @@ fn config_check_warns_about_an_owner_rule_that_names_no_test() {
     );
     assert!(!err.contains("tests.owners[1]"), "{err}");
 }
+
+#[test]
+fn the_laravel_pack_links_feature_tests_to_the_http_layer_and_stops_at_the_boot_path() {
+    let dir =
+        std::env::temp_dir().join(format!("fairlead-plan-cli-laravel-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    git(&dir, &["init", "-q", "-b", "main"]);
+    write(&dir, "fairlead.toml", "extends = [\"laravel\"]\n\n[tests]\nmatch = { replace = [\"tests/**/*Test.php\"] }\n\n[[tests.runners]]\nid = \"phpunit\"\nmatch = [\"tests/**/*Test.php\"]\ncommand = [\"vendor/bin/phpunit\", \"{files}\"]\n");
+    write(&dir, "composer.json", "{\"autoload\": {\"psr-4\": {\"App\\\\\": \"app/\"}}, \"autoload-dev\": {\"psr-4\": {\"Tests\\\\\": \"tests/\"}}}\n");
+    write(
+        &dir,
+        "bootstrap/app.php",
+        "<?php\nrequire __DIR__ . '/../routes/web.php';\n",
+    );
+    write(&dir, "routes/web.php", "<?php\nuse App\\Http\\Controllers\\UserController;\nRoute::get('/users', [UserController::class, 'index']);\n");
+    write(&dir, "app/Http/Controllers/UserController.php", "<?php\nnamespace App\\Http\\Controllers;\nclass UserController { public function index() { return view('users.index'); } }\n");
+    write(
+        &dir,
+        "resources/views/users/index.blade.php",
+        "<h1>Users</h1>\n",
+    );
+    write(
+        &dir,
+        "app/Providers/AppServiceProvider.php",
+        "<?php\nnamespace App\\Providers;\nclass AppServiceProvider {}\n",
+    );
+    write(
+        &dir,
+        "app/Support/Money.php",
+        "<?php\nnamespace App\\Support;\nclass Money {}\n",
+    );
+    write(&dir, "tests/TestCase.php", "<?php\nnamespace Tests;\nabstract class TestCase { public function createApplication() { return require __DIR__ . '/../bootstrap/app.php'; } }\n");
+    write(&dir, "tests/Feature/UsersTest.php", "<?php\nnamespace Tests\\Feature;\nuse Tests\\TestCase;\nclass UsersTest extends TestCase {}\n");
+    write(&dir, "tests/Unit/MoneyTest.php", "<?php\nnamespace Tests\\Unit;\nuse Tests\\TestCase;\nuse App\\Support\\Money;\nclass MoneyTest extends TestCase {}\n");
+    git(&dir, &["add", "-A"]);
+    git(&dir, &["commit", "-q", "-m", "app"]);
+    let plan = |file: &str| -> (Vec<String>, bool) {
+        let out = fairlead_in(&dir, &["plan", "--files", file, "--json"]);
+        assert!(
+            out.status.success(),
+            "{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        let plan: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+        let tests = plan["tests"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|t| t["path"].as_str().unwrap().to_string())
+            .collect();
+        (tests, plan["all"].as_bool().unwrap_or(false))
+    };
+    assert_eq!(
+        plan("app/Http/Controllers/UserController.php"),
+        (vec!["tests/Feature/UsersTest.php".to_string()], false),
+        "the feature test, and not the unit test through the boot path"
+    );
+    assert_eq!(
+        plan("resources/views/users/index.blade.php").0,
+        ["tests/Feature/UsersTest.php"]
+    );
+    assert_eq!(
+        plan("app/Support/Money.php").0,
+        ["tests/Unit/MoneyTest.php"]
+    );
+    assert!(
+        plan("app/Providers/AppServiceProvider.php").1,
+        "a provider runs everything"
+    );
+}

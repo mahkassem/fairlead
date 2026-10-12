@@ -33,7 +33,7 @@ struct Gated {
     output: String,
 }
 
-pub fn run(cwd: &Path, write: bool) -> Result<ExitCode, String> {
+pub fn run(cwd: &Path, write: bool, insights: bool) -> Result<ExitCode, String> {
     let loaded =
         config::load(cwd, &LoadOptions::from_process(Vec::new())).map_err(|e| e.to_string())?;
     if let Some(p) = loaded.problems.first() {
@@ -41,6 +41,16 @@ pub fn run(cwd: &Path, write: bool) -> Result<ExitCode, String> {
             "the config has problems (see `fairlead config check`): {}: {}",
             p.key, p.message
         ));
+    }
+    if insights {
+        let text = render_insights();
+        if !write {
+            print!("{text}");
+            return Ok(ExitCode::SUCCESS);
+        }
+        let verb = write_generated(&crate::graph_cmd::repo_root(cwd).join(INSIGHTS_PATH), &text)?;
+        println!("fairlead: {verb} {INSIGHTS_PATH}");
+        return Ok(ExitCode::SUCCESS);
     }
     let text = render(&loaded.config)?;
     let gated = gated(&loaded.config)?;
@@ -50,8 +60,16 @@ pub fn run(cwd: &Path, write: bool) -> Result<ExitCode, String> {
         eprint!("{hints}");
         return Ok(ExitCode::SUCCESS);
     }
-    let path = crate::graph_cmd::repo_root(cwd).join(PATH);
-    let verb = match std::fs::read_to_string(&path) {
+    let verb = write_generated(&crate::graph_cmd::repo_root(cwd).join(PATH), &text)?;
+    println!("fairlead: {verb} {PATH}");
+    print!("{hints}");
+    Ok(ExitCode::SUCCESS)
+}
+
+/// Writes a generated workflow, replacing only a file this command wrote, and
+/// says whether it wrote, rewrote or left it unchanged.
+fn write_generated(path: &Path, text: &str) -> Result<&'static str, String> {
+    let verb = match std::fs::read_to_string(path) {
         Ok(old) if !old.starts_with(MARKER) => {
             return Err(format!(
                 "{} wasn't written by `fairlead ci workflow`, so it's left alone; move it aside or name its jobs' `if:` lines yourself (`fairlead ci workflow` prints them)",
@@ -66,10 +84,8 @@ pub fn run(cwd: &Path, write: bool) -> Result<ExitCode, String> {
         std::fs::create_dir_all(dir)
             .map_err(|e| format!("could not create {}: {e}", dir.display()))?;
     }
-    std::fs::write(&path, &text).map_err(|e| format!("could not write {}: {e}", path.display()))?;
-    println!("fairlead: {verb} {PATH}");
-    print!("{hints}");
-    Ok(ExitCode::SUCCESS)
+    std::fs::write(path, text).map_err(|e| format!("could not write {}: {e}", path.display()))?;
+    Ok(verb)
 }
 
 /// A job id GitHub accepts: letters, digits, `-` and `_`, not starting with a digit or `-`.
@@ -323,6 +339,23 @@ pub fn render(config: &Config) -> Result<String, String> {
         );
     }
     Ok(out)
+}
+
+/// Where `--insights` writes the weekly job, apart from the test workflow so
+/// a schedule never starts a full test run.
+pub const INSIGHTS_PATH: &str = ".github/workflows/fairlead-insights.yml";
+
+/// A weekly job that replays the test workflow's history and puts
+/// `fairlead insights` in the run's summary. It runs no tests.
+pub fn render_insights() -> String {
+    let mut out = format!(
+        "{MARKER} --insights from the Fairlead config.\n# Run `fairlead ci workflow --insights --write` again rather than editing it.\nname: fairlead insights\n\non:\n  schedule:\n    - cron: \"17 5 * * 1\"   # Mondays, 05:17 UTC\n  workflow_dispatch:\n\npermissions:\n  contents: read\n  actions: read   # the test workflow's runs and logs, for replay\n\njobs:\n  insights:\n    name: insights\n    runs-on: ubuntu-latest\n    steps:\n      - uses: {CHECKOUT}\n        with:\n          fetch-depth: 0\n"
+    );
+    install(&mut out);
+    out.push_str(
+        "      - name: Replay the last 30 days\n        env:\n          GITHUB_TOKEN: ${{ github.token }}\n        run: |\n          since=$(date -u -d '30 days ago' +%F)\n          fairlead replay fetch --repo \"$GITHUB_REPOSITORY\" --workflow fairlead.yml --data \"$RUNNER_TEMP/runs.jsonl\" --clone . --since \"$since\"\n          fairlead replay run --data \"$RUNNER_TEMP/runs.jsonl\" --clone . --json-out \"$RUNNER_TEMP/replay.json\" --quiet > /dev/null\n      - name: Insights\n        run: |\n          {\n            echo '## Fairlead insights'\n            echo '```'\n            fairlead insights --since \"$(date -u -d '7 days ago' +%F)\" --replay \"$RUNNER_TEMP/replay.json\" --suggest\n            echo '```'\n          } >> \"$GITHUB_STEP_SUMMARY\"\n",
+    );
+    out
 }
 
 /// The `if:` lines for a workflow a team wrote itself, one per gated id.

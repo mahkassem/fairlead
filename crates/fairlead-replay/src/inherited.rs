@@ -51,10 +51,22 @@ fn dir_of(path: &str) -> &str {
 /// beside it that isn't another test, such as a fixture or a helper. A
 /// sibling test can't break it.
 pub(crate) fn touches(changed: &str, test: &str) -> bool {
-    let name = changed.rsplit('/').next().unwrap_or(changed);
-    let sibling_test = name.contains(".test.") || name.contains(".spec.");
     changed == test
-        || (!dir_of(test).is_empty() && dir_of(changed) == dir_of(test) && !sibling_test)
+        || (!dir_of(test).is_empty() && dir_of(changed) == dir_of(test) && !is_test_name(changed))
+}
+
+/// Whether a path is named like a test in a language the graph reads:
+/// `x.test.ts`, `x.spec.ts`, `test_x.py`, `x_test.py`, `x_test.go`,
+/// `XTest.kt`, `XTests.java`, `XTest.php`.
+pub(crate) fn is_test_name(path: &str) -> bool {
+    let name = path.rsplit('/').next().unwrap_or(path);
+    let stem = name.split('.').next().unwrap_or(name);
+    name.contains(".test.")
+        || name.contains(".spec.")
+        || stem.starts_with("test_")
+        || stem.ends_with("_test")
+        || stem.ends_with("Test")
+        || stem.ends_with("Tests")
 }
 
 /// Marks inherited failures in place and reports each group.

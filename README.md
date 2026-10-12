@@ -108,17 +108,27 @@ of trying things like a stranger.
 - **One binary, everywhere.** Linux, macOS and Windows, installed with a shell
   script, PowerShell or npm.
 
-*It reads JavaScript and TypeScript since 0.2.0, and Python, Go, PHP and Vue,
-Svelte and Astro components since 0.5.0. An external provider feeds the graph
-for any other language, and a coverage map adds what imports can't show.
-Framework packs and folders of several repositories are on the way
-([#47](https://github.com/mahkassem/fairlead/issues/47)).*
-*Since 0.7.0:* Java and Kotlin, with Maven and Gradle runners that take the
-selected test classes.
+**What it reads, and what replay has proven.** A language counts as proven
+when replaying a public project's CI history judges at least 10 failures, at
+high recall:
+
+| Language | Since | Replay evidence |
+| --- | --- | --- |
+| JavaScript, TypeScript | 0.2.0 | Effect, pnpm and vitest, replayed weekly ([benchmarks](docs/src/benchmarks.md)) |
+| Python | 0.5.0 | poetry: 99.2% of 122 failures |
+| PHP | 0.5.0 | pterodactyl/panel and invoiceninja: 100% of 27 failures |
+| Go | 0.5.0 | Reads, not yet proven: opentelemetry-go has too few failures to judge |
+| Vue, Svelte, Astro components | 0.5.0 | Reads, not yet proven: no replay yet |
+| Java, Kotlin (Maven, Gradle) | 0.7.0 | Reads, not yet proven: okhttp at 92.6%, most misses look flaky ([#184](https://github.com/mahkassem/fairlead/issues/184)) |
+
+An external provider feeds the graph for any other language, and a coverage
+map adds what imports can't show. Framework packs and folders of several
+repositories are on the way
+([#47](https://github.com/mahkassem/fairlead/issues/47)).
 
 ## What it does
 
-This README documents Fairlead 0.9.0. Each command, by what it's for:
+This README documents Fairlead 0.10.0. Each command, by what it's for:
 
 - **The test plan:** `plan`, `test --explain`, the import graph (`graph`) and
   coverage maps (`coverage import`).
@@ -140,13 +150,18 @@ This README documents Fairlead 0.9.0. Each command, by what it's for:
   Codex and Cursor load it.
 - **Finding things:** `find` searches lessons, skills, docs headings and
   declared names, nearest the brief first.
+- **Agents over MCP:** `mcp` serves the plan, the brief, the receipt and the
+  other read-only commands as tools.
 - **What agents read first:** `agents sync` keeps the loop, the always-on
   lessons and the skill index in a marked block in AGENTS.md and CLAUDE.md.
-- **Measuring:** `replay`, the benchmarks, `skills eval`, which scores skill
-  routing on the repository's history, and `skills report`, the hit rate of
-  what routing offers against what agents load.
+- **Measuring:** `insights`, what the event log and CI's reports say about the
+  setup and the config changes they back; `tokens`, the tokens and cost of
+  each agent session; `replay`, the benchmarks, `skills eval`, which scores
+  skill routing on the repository's history, and `skills report`, the hit
+  rate of what routing offers against what agents load.
 - **Getting started:** `init` writes a first config from what the repository
-  shows.
+  shows, and `init --blueprint` adds a starting point for a kind of project:
+  config, starter skills and the CI workflow.
 - **The config:** `config check`, `show` and `schema`.
 - **Upgrading:** `migrate`, which brings the hooks, the config's version
   floor and the version pins to the release you installed. *Since 0.7.0.*
@@ -156,10 +171,16 @@ The [quick start](#quick-start) shows the first few, and the
 
 ## Status
 
-Pre-alpha. The latest release, v0.9.0, lets replay measure a project whose
+Pre-alpha. The latest release, v0.10.0, connects Fairlead to the rest of
+the work and measures the setup: an MCP server (`fairlead mcp`), trackers
+that put a branch's task in the brief, escapes filed as issues from CI,
+tokens and cost per session, a readiness score (`doctor --score`),
+`fairlead insights` with a weekly summary job, blueprints for `init`,
+framework packs, workspaces of several repositories, and replay setting
+recurring failures aside. v0.9.0 let replay measure a project whose
 pushes run the plan too, by reading its scheduled full runs (`replay fetch
---event schedule`), names each hop of a `test --explain` chain that isn't a
-plain import, and has `migrate` refresh Codex and Gemini CLI hooks. v0.8.0
+--event schedule`), named each hop of a `test --explain` chain that isn't a
+plain import, and had `migrate` refresh Codex and Gemini CLI hooks. v0.8.0
 added memory and skills: lessons in `.fairlead/lessons/` written by
 `fairlead learn` or imported from a document a team already keeps, skills
 routed by what a change reaches, `fairlead find`, `fairlead context` and

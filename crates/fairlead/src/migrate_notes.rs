@@ -177,6 +177,19 @@ pub const RELEASES: &[(&str, &[Note])] = &[
             },
         ],
     ),
+    (
+        "0.10.0",
+        &[
+            Note {
+                text: "Replay sets recurring failures aside: a test failing in one job across three or more unrelated pull requests leaves adjusted recall, so a gate can pass that failed before; confirm the `[[replay.quarantine]]` entries it lists (see Replay).",
+                applies: uses_replay,
+            },
+            Note {
+                text: "`fairlead doctor --score` rates the setup out of 100, and `fairlead ci workflow --insights --write` adds a weekly summary of how it works (see Readiness score, Insights).",
+                applies: always,
+            },
+        ],
+    ),
 ];
 
 /// Config tables and keys by the release that added them. The top-level
@@ -204,6 +217,10 @@ pub const SINCE: &[(&str, &str)] = &[
     ("tests.runners.from", "0.8"),
     ("checks.from", "0.8"),
     ("guard.commands.unless", "0.8"),
+    ("extends", "0.10"),
+    ("graph.edges.find", "0.10"),
+    ("workspace", "0.10"),
+    ("tracker", "0.10"),
 ];
 
 /// Top-level tables every released config format has had.

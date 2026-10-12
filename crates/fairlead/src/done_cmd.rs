@@ -223,6 +223,7 @@ pub fn stop() -> ExitCode {
         .or_else(|| std::env::current_dir().ok())
         .unwrap_or_default();
     let asked = call["stop_hook_active"].as_bool().unwrap_or(false);
+    crate::tokens::record_from_hook(&dir, &call);
     match stop_reason(&dir, asked) {
         Some(reason) => {
             eprintln!("{reason}");

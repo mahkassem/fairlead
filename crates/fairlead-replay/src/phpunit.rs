@@ -2,7 +2,8 @@
 //! `1) Tests\Unit\FooTest::test_bar` under a `There was 1 failure:` header,
 //! followed by the stack, whose frames end in `path.php:line`. Pest, and
 //! Laravel's `artisan test`, print `FAILED  Tests\Unit\FooTest > title` and
-//! then `at path.php:line`. The frame or `at` path names the test file only
+//! then `at path.php:line`, under a `FAIL  Tests\Unit\FooTest` header whose
+//! `⨯` lines name the failed tests. The frame or `at` path names the test file only
 //! when its file name is the class's, since the error may have been thrown
 //! in the code under test; otherwise the path comes from the class name,
 //! without its first namespace segment, for the suffix match to find.
@@ -100,26 +101,78 @@ pub fn phpunit(lines: &[String]) -> Vec<Printed> {
 
 pub fn pest(lines: &[String]) -> Vec<Printed> {
     static FAILED: OnceLock<Regex> = OnceLock::new();
+    static HEADER: OnceLock<Regex> = OnceLock::new();
+    static PASS: OnceLock<Regex> = OnceLock::new();
+    static CROSS: OnceLock<Regex> = OnceLock::new();
+    static CUT: OnceLock<Regex> = OnceLock::new();
     let failed = re(
         &FAILED,
         r"^\s*(?:FAILED|•)\s+(?P<class>[\w\\]+)\s+>\s+(?P<title>.+?)(?:\s{2,}\S+)?\s*$",
     );
+    let header = re(&HEADER, r"^\s*FAIL\s+(?P<class>[\w\\]+)\s*$");
+    let pass = re(&PASS, r"^\s*PASS\s");
+    let cross = re(&CROSS, r"^\s*⨯\s+(?P<title>.+?)(?:\s+[\d.]+m?s)?\s*$");
+    let cut = re(&CUT, r"^\s*FAILED\s+(?P<prefix>[\w\\]+)…");
     let mut out = Vec::new();
+    let mut named: Vec<String> = Vec::new();
+    // Collision cuts a `FAILED` line to the terminal's width, class and
+    // all, so the class then comes from the `FAIL` header it began.
+    let mut current: Option<&str> = None;
+    let mut seen: Vec<&str> = Vec::new();
+    let mut fallback: Vec<(&str, Option<String>, Option<String>)> = Vec::new();
     for (i, line) in lines.iter().enumerate() {
-        let Some(c) = failed.captures(line) else {
+        if let Some(c) = header.captures(line) {
+            current = c.name("class").map(|m| m.as_str());
+            seen.extend(current);
             continue;
+        }
+        if pass.is_match(line) {
+            current = None;
+            continue;
+        }
+        let frames = || {
+            lines[i + 1..]
+                .iter()
+                .take(PEST_LOOKAHEAD)
+                .take_while(|l| !failed.is_match(l) && !header.is_match(l) && !cut.is_match(l))
+                .filter_map(|l| frame(l))
         };
-        let frames = lines[i + 1..]
-            .iter()
-            .take(PEST_LOOKAHEAD)
-            .take_while(|l| !failed.is_match(l))
-            .filter_map(|l| frame(l));
+        if let Some(c) = failed.captures(line) {
+            named.push(c["class"].to_string());
+            push(
+                &mut out,
+                Printed {
+                    path: test_path(&c["class"], frames()),
+                    project: None,
+                    title: pest_title(&c["title"]),
+                },
+            );
+            continue;
+        }
+        if let Some(c) = cut.captures(line) {
+            if let Some(class) = seen.iter().rev().find(|h| h.starts_with(&c["prefix"])) {
+                fallback.push((class, None, Some(test_path(class, frames()))));
+            }
+            continue;
+        }
+        if let Some((class, c)) = current.zip(cross.captures(line)) {
+            fallback.push((class, pest_title(&c["title"]), None));
+        }
+    }
+    for (class, _, _) in &fallback {
+        if named.iter().any(|n| n == class) {
+            continue;
+        }
+        named.push(class.to_string());
+        let mine = || fallback.iter().filter(|(c, _, _)| c == class);
         push(
             &mut out,
             Printed {
-                path: test_path(&c["class"], frames),
+                path: mine()
+                    .find_map(|(_, _, path)| path.clone())
+                    .unwrap_or_else(|| test_path(class, std::iter::empty())),
                 project: None,
-                title: pest_title(&c["title"]),
+                title: mine().find_map(|(_, title, _)| title.clone()),
             },
         );
     }

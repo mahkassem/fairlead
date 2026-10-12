@@ -13,6 +13,7 @@ pub mod inherited;
 pub mod jvm;
 pub mod phpunit;
 pub mod quarantine;
+pub mod recurring;
 pub mod report;
 pub mod run;
 pub mod waves;

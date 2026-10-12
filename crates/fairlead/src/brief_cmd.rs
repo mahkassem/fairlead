@@ -58,6 +58,9 @@ pub struct Brief {
     /// The branch HEAD was on, so `resume` can find the brief from a new session.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub branch: Option<String>,
+    /// The task the branch names, from `[tracker]`: outside text, cleaned.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub task: Option<crate::tracker::Task>,
     pub paths: Vec<String>,
     /// Named paths that aren't in the tree yet.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -195,6 +198,15 @@ pub fn build(
         .map_or(now.clone(), |b| b.created_at.clone());
     let mut made = assemble(&planned, &root, id, session, base, created, now)?;
     made.branch = git::branch(&root);
+    // A task is read once per brief: a tracker call can take seconds.
+    made.task = match earlier.and_then(|b| b.task) {
+        Some(task) => Some(task),
+        None => crate::tracker::for_branch(&root, &loaded.config.tracker, made.branch.as_deref())
+            .unwrap_or_else(|e| {
+                made.warnings.push(format!("tracker: {e}"));
+                None
+            }),
+    };
     if let Some(store) = &store {
         store.save(&made)?;
     }
@@ -297,6 +309,7 @@ fn assemble(
         updated_at,
         base,
         branch: None,
+        task: None,
         paths,
         new,
         plan_id: plan.plan_id.clone(),
@@ -372,6 +385,28 @@ fn assemble(
 
 /// The brief as an agent reads it: a line per section with its source on
 /// the right, and the first few items of each unless `all`.
+/// The task row: the tracker's words, quoted as text from outside.
+fn task_lines(t: &crate::tracker::Task) -> String {
+    if t.source == "agent" {
+        return format!(
+            "task     {}  look it up with your tracker tool; Fairlead doesn't read it\n",
+            t.id
+        );
+    }
+    let mut out = format!("task     {}  \"{}\"", t.id, t.title);
+    if let Some(status) = &t.status {
+        out.push_str(&format!("  [{status}]"));
+    }
+    if let Some(url) = &t.url {
+        out.push_str(&format!("  {url}"));
+    }
+    out.push('\n');
+    if let Some(done) = &t.done_when {
+        out.push_str(&format!("  done when (from the tracker): {done}\n"));
+    }
+    out
+}
+
 pub fn text(b: &Brief, all: bool) -> String {
     let mut out = String::new();
     let base = b
@@ -388,6 +423,9 @@ pub fn text(b: &Brief, all: bool) -> String {
         out.push_str(&format!(
             "  new      {p}: not in the tree yet, so nothing reaches it\n"
         ));
+    }
+    if let Some(t) = &b.task {
+        out.push_str(&task_lines(t));
     }
     let head = |out: &mut String, name: &str, summary: String, source: &str| {
         out.push_str(&format!("{name:<8} {summary:<56} {source}\n"));

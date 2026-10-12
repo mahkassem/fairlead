@@ -30,6 +30,8 @@ fairlead doctor
 
 `doctor` prints the version, the platform and the config file Fairlead would
 use from the current directory.
+`doctor --score` rates how ready the repository is, out of 100, and names the
+fixes worth the most ([Readiness score](score.md)).
 
 ## A first config: `fairlead init`
 

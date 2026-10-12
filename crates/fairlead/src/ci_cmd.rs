@@ -92,6 +92,10 @@ pub enum CiAction {
         /// only a file this command wrote.
         #[arg(long)]
         write: bool,
+        /// The weekly insights workflow instead, `fairlead-insights.yml`:
+        /// replay and `fairlead insights` in the run's summary, no tests.
+        #[arg(long)]
+        insights: bool,
     },
 }
 
@@ -133,7 +137,7 @@ pub fn run(action: CiAction, cwd: &Path) -> ExitCode {
             receipt,
             comment,
         } => crate::ci_report::run(cwd, &plan, results.as_deref(), receipt.as_deref(), comment),
-        CiAction::Workflow { write } => crate::ci_workflow::run(cwd, write),
+        CiAction::Workflow { write, insights } => crate::ci_workflow::run(cwd, write, insights),
     };
     result.unwrap_or_else(|e| {
         eprintln!("{e}");
@@ -400,6 +404,21 @@ fn execute(
         }
     }
     crate::ci_judge::print(&judged);
+    let files = config
+        .as_ref()
+        .is_some_and(|c| c.ci.escapes == fairlead_core::config::Escapes::File);
+    if files && judged.iter().any(|v| v.fix.is_some()) {
+        // Filing is best effort: a run that found an escape stays the run's outcome.
+        let filed = crate::escapes::run_from_env().and_then(|run| {
+            crate::escapes::file(&fairlead_replay::github::Curl::from_env(), &run, &judged)
+        });
+        match filed {
+            Ok(lines) => lines
+                .iter()
+                .for_each(|l| println!("fairlead: escape issue: {l}")),
+            Err(e) => eprintln!("fairlead: couldn't file escapes: {e}"),
+        }
+    }
     if let Some(path) = results {
         crate::ci_report::write_results(&cwd.join(path), &plan, ran, &judged, started)?;
     }

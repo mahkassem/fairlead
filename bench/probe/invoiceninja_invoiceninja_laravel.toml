@@ -1,0 +1,20 @@
+extends = ["laravel"]
+
+# invoiceninja/invoiceninja's phpunit workflow: PHPUnit over tests/.
+# With the Laravel framework pack.
+
+[tests]
+match = { replace = ["tests/**/*Test.php"] }
+
+[[tests.runners]]
+id = "php"
+match = ["tests/**/*Test.php"]
+command = ["vendor/bin/phpunit", "{files}"]
+
+[replay]
+window_days = 90
+min_failures = 10
+
+[[replay.failures]]
+runner = "php"
+extractor = "phpunit"

@@ -247,6 +247,33 @@ fn pest_also_reads_phpunits_format_which_artisan_test_prints_under_parallel() {
 }
 
 #[test]
+fn a_failed_line_cut_to_the_terminals_width_takes_its_class_from_the_fail_header() {
+    let expected = [
+        printed(
+            "tests/Feature/Reports/ExportTest.php",
+            None,
+            Some("exports the monthly report as csv"),
+        ),
+        printed(
+            "tests/Unit/Imports/InvoiceXmlExtractorTest.php",
+            None,
+            Some("extracts the payload from a pdf"),
+        ),
+        printed(
+            "Feature/ClientPortal/PaymentMethodsTest.php",
+            None,
+            Some("another client is forbidden"),
+        ),
+    ];
+    let log = fixture("collision-cut.log");
+    for extractor in [Extractor::Pest, Extractor::Phpunit] {
+        assert_eq!(extract(&extractor, &log), expected);
+        let excerpt = fairlead_replay::dataset::log_excerpt(&log).join("\n");
+        assert_eq!(extract(&extractor, &excerpt), expected, "excerpt");
+    }
+}
+
+#[test]
 fn go_test_names_each_failed_test_by_its_logged_file_a_panic_frame_or_a_compile_error() {
     let price = "/example.com/shop/price/price_test.go";
     let expected = [

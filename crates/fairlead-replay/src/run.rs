@@ -49,6 +49,9 @@ pub enum Outcome {
     /// The job failed alike across unrelated pull requests once its runner
     /// image changed: the image, not the change, is the likelier cause.
     Environment,
+    /// The test failed in the job across unrelated pull requests on different
+    /// bases, none touching it: the test is the likelier cause, often flaky.
+    Recurring,
 }
 
 /// How a hit's target came to be in the plan.
@@ -107,6 +110,7 @@ pub struct Replayed {
     pub quarantine: Vec<crate::quarantine::Entry>,
     pub inherited: Vec<crate::inherited::Group>,
     pub waves: Vec<crate::waves::Wave>,
+    pub recurring: Vec<crate::recurring::Group>,
 }
 
 /// A `[[replay.failures]]` or `[[replay.checks]]` entry, compiled.
@@ -399,6 +403,7 @@ pub fn replay_with(
     // so only what quarantine leaves can be inherited.
     out.inherited = crate::inherited::apply(&mut out.failures, &rows);
     out.waves = crate::waves::apply(&mut out.failures, &rows);
+    out.recurring = crate::recurring::apply(&mut out.failures);
     out
 }
 

@@ -108,8 +108,9 @@ pub fn extract(extractor: &Extractor, log: &str) -> Vec<Printed> {
     let lines: Vec<String> = log.lines().map(clean).collect();
     match extractor {
         Extractor::Bun => return bun(&lines),
-        Extractor::Phpunit => return crate::phpunit::phpunit(&lines),
-        Extractor::Pest => {
+        // PHPUnit under Collision's printer, as Laravel installs it, prints
+        // Pest's format.
+        Extractor::Phpunit | Extractor::Pest => {
             let mut out = crate::phpunit::pest(&lines);
             for p in crate::phpunit::phpunit(&lines) {
                 if !out.contains(&p) {

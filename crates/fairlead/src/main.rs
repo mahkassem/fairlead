@@ -4,6 +4,7 @@
 
 mod agents_cmd;
 mod bench_cmd;
+mod blueprint;
 mod brief_cmd;
 mod ci_cmd;
 mod ci_judge;
@@ -12,6 +13,7 @@ mod ci_workflow;
 mod context_cmd;
 mod coverage_cmd;
 mod done_cmd;
+mod escapes;
 mod find_cmd;
 mod graph_cmd;
 mod guard_cmd;
@@ -20,8 +22,11 @@ mod hooks_cmd;
 mod import_cmd;
 mod import_rules_cmd;
 mod init_cmd;
+mod insights_cmd;
 mod knowledge;
 mod lessons_cmd;
+mod mcp_cmd;
+mod mcp_tools;
 mod migrate_cmd;
 mod migrate_notes;
 mod plan_cmd;
@@ -29,12 +34,16 @@ mod receipt_cmd;
 mod replay_cmd;
 mod resume_cmd;
 mod reuse;
+mod score_cmd;
 mod since_green;
 mod skills_cmd;
 mod skills_eval_cmd;
 mod skills_report_cmd;
 mod stage;
 mod step;
+mod tokens;
+mod tracker;
+mod workspace_cmd;
 
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
@@ -62,7 +71,10 @@ struct Cli {
 #[derive(Subcommand)]
 enum Command {
     /// Report the binary, the platform and the config Fairlead would use here.
-    Doctor,
+    Doctor {
+        #[command(flatten)]
+        args: score_cmd::DoctorArgs,
+    },
     /// Write a first fairlead.toml from what the repository shows: its test runners, and a check for each language the graph doesn't read.
     Init {
         #[command(flatten)]
@@ -97,6 +109,18 @@ enum Command {
         /// Why this test file or check is in the plan, or why it isn't.
         #[arg(long, value_name = "FILE_OR_CHECK")]
         explain: String,
+    },
+    /// Serve the plan, the brief and the other read-only commands to an agent over MCP (stdio).
+    Mcp,
+    /// Tokens and cost per agent session, read as counts only.
+    Tokens {
+        #[command(subcommand)]
+        action: tokens::TokensAction,
+    },
+    /// What the event log and CI's reports say about the setup, and the config changes they back.
+    Insights {
+        #[command(flatten)]
+        args: insights_cmd::InsightsArgs,
     },
     /// Replay recorded CI failures against the planner.
     Replay {
@@ -508,7 +532,10 @@ fn main() -> ExitCode {
         std::env::set_var(config::ENV_NAME, name);
     }
     match cli.command {
-        Some(Command::Doctor) => {
+        Some(Command::Doctor { args }) if args.score => {
+            score_cmd::run(&args, &cwd(), &LoadOptions::from_process(Vec::new()))
+        }
+        Some(Command::Doctor { .. }) => {
             print!(
                 "{}",
                 doctor_report(&cwd(), &LoadOptions::from_process(Vec::new()))
@@ -542,6 +569,9 @@ fn main() -> ExitCode {
         }) => plan_cmd::run_plan(&cwd(), changes, json, out, schema),
         Some(Command::Ci { action }) => ci_cmd::run(action, &cwd()),
         Some(Command::Replay { action }) => replay_cmd::run(action),
+        Some(Command::Insights { args }) => insights_cmd::run(args, &cwd()),
+        Some(Command::Mcp) => mcp_cmd::run(&cwd()),
+        Some(Command::Tokens { action }) => tokens::run(action, &cwd()),
         Some(Command::Test { changes, explain }) => {
             plan_cmd::run_explain(&cwd(), changes, &explain)
         }

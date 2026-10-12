@@ -4,9 +4,12 @@
 mod agents;
 mod knowledge;
 mod load;
+mod packs;
 mod quarantine;
 mod stages;
+mod tracker;
 mod validate;
+pub mod workspace;
 
 pub use agents::{Agents, AgentsWrite};
 pub use knowledge::{Learn, Memory, SkillRoute, Skills};
@@ -16,6 +19,7 @@ pub use load::{
 };
 pub use quarantine::{Condition, Os, PlatformQuarantine};
 pub use stages::{CiStage, Stages};
+pub use tracker::{Tracker, TrackerKind};
 pub use validate::{is_date, plan_globs, validate, Problem, GUARD_RULES};
 
 use schemars::JsonSchema;
@@ -78,6 +82,11 @@ pub struct Config {
     /// The oldest Fairlead version this config needs, such as "0.2".
     #[serde(skip_serializing_if = "Option::is_none")]
     pub fairlead: Option<String>,
+    /// Framework packs layered under this config: a built-in pack's name,
+    /// such as "laravel", or a pack file's path from the project root. Left
+    /// out of the digest when empty; a pack's rules count through the merge.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub extends: Vec<String>,
     pub modules: Modules,
     pub graph: Graph,
     pub tests: Tests,
@@ -101,6 +110,36 @@ pub struct Config {
     /// absent unless a layer sets it.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub stages: Option<Stages>,
+    /// Where a change's task lives. Left out of the digest unless set.
+    #[serde(skip_serializing_if = "Tracker::is_unset")]
+    pub tracker: Tracker,
+    /// Only in a workspace file, in a folder holding several repositories;
+    /// a repository's own file can't set it.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub workspace: Option<Workspace>,
+}
+
+/// The repositories of a workspace folder.
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields, default)]
+pub struct Workspace {
+    /// The repositories, by path from the workspace folder. Empty means
+    /// every git repository one level down.
+    pub repos: Vec<WorkspaceRepo>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct WorkspaceRepo {
+    /// The repository's folder, from the workspace folder.
+    pub path: String,
+    /// What `--repo` calls it; defaults to the folder's name.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    /// The branch or commit its changes are measured from; defaults to its
+    /// remote's default branch.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub base: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
@@ -203,6 +242,29 @@ pub struct EdgeRule {
     pub from: String,
     /// The files they depend on, with the same `{name}`s as `from`.
     pub to: Vec<String>,
+    /// A regex searched in each `from` file's text: the rule links only the
+    /// files it matches in, and its capture, if any, fills `{1}` in `to`
+    /// (`{1|path}` with its dots as slashes). Left out of the digest when unset.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub find: Option<String>,
+}
+
+/// The placeholders `{1}` and `{1|path}` become in a `to` glob, since a
+/// capture's name can't start with a digit or hold `|`.
+pub const FOUND: &str = "found";
+pub const FOUND_PATH: &str = "found_path";
+
+impl EdgeRule {
+    /// The `to` globs as the matcher reads them.
+    pub fn targets(&self) -> Vec<String> {
+        self.to
+            .iter()
+            .map(|t| {
+                t.replace("{1|path}", &format!("{{{FOUND_PATH}}}"))
+                    .replace("{1}", &format!("{{{FOUND}}}"))
+            })
+            .collect()
+    }
 }
 
 impl Default for Graph {
@@ -747,6 +809,9 @@ pub enum Escapes {
     Report,
     /// Also a non-zero exit from `ci report`, so the escape itself can be a required check.
     Fail,
+    /// Also a GitHub issue per escape, labelled `fairlead-escape`: at most
+    /// five new ones a run, and a repeat is a note on the open one.
+    File,
 }
 
 /// What `fairlead brief` keeps, and whether an agent that edits without one is told.

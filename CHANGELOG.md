@@ -6,6 +6,54 @@
 
 - `fairlead hooks install --codex` and `--gemini` add the `SessionStart` hook that runs `fairlead resume --hook`, as Claude Code's install does ([#162](https://github.com/mahkassem/fairlead/issues/162)). Both CLIs now have a `SessionStart` event that sends the session's `cwd` and reads `hookSpecificOutput.additionalContext` back, the same shape Claude Code uses, so a new Codex or Gemini CLI session starts with where the last one on the branch stopped. `brief.resume = false` leaves it out, and `fairlead migrate --write` adds it to hooks installed before. See [The SessionStart hook](https://mahkassem.github.io/fairlead/docs/context.html#the-sessionstart-hook).
 
+## 0.10.0 (2026-10-12)
+
+### New
+
+- The weekly summary ([#7](https://github.com/mahkassem/fairlead/issues/7)). `fairlead ci workflow --insights --write` writes `.github/workflows/fairlead-insights.yml`, which on Mondays (or by hand) replays the last 30 days of `fairlead.yml` and puts `fairlead insights --suggest` in the run's summary. It runs no tests, so the schedule never starts a full test run, and it needs only `contents: read` and `actions: read`. See [Weekly summary](https://mahkassem.github.io/fairlead/docs/insights.html#weekly-summary).
+- Tokens and cost per agent session ([#6](https://github.com/mahkassem/fairlead/issues/6)), read as counts only.
+  - The Stop hook records a Claude Code session's totals from its transcript: the `cost-state` lines Claude Code writes, which count subagents and its own background calls and carry the cost.
+  - A transcript without them is counted from per-message usage, once per message and with subagents, and marked an estimate.
+  - `fairlead tokens import FILE` records a headless `claude -p --output-format json` run.
+  - `fairlead tokens report` shows the newest totals per session and source.
+  - Nothing but numbers reaches the event log, and `guard.events = "off"` records none.
+  - See [Tokens and cost](https://mahkassem.github.io/fairlead/docs/tokens.html).
+- `fairlead insights` ([#7](https://github.com/mahkassem/fairlead/issues/7)) sums up how the setup works over the last 30 days, or `--since`.
+  - **From the event log:** the write hook's decisions and denies by rule, `done` failures by step, skill routing's hit rate with skills offered and unused or used unoffered, lessons never offered, and tokens and cost.
+  - **From CI's reports:** `--replay` adds a replay report's recall, misses and recurring tests, and `--results` adds the escapes `ci run --judge` found.
+  - **`--suggest`** lists only changes the evidence backs:
+    - an owner rule that two escapes or misses needed;
+    - a quarantine entry for a recurring test;
+    - narrowing a route offered in ten measured sessions and never used;
+    - `guard.on_finding = "deny"` when twenty warnings never reached a commit.
+  - **`--write`** applies only the one-key guard change, with a line edit that keeps the file's comments. It prints the rest, and never commits.
+  - See [Insights](https://mahkassem.github.io/fairlead/docs/insights.html).
+- Blueprints ([#7](https://github.com/mahkassem/fairlead/issues/7)): `fairlead init --blueprint NAME` writes a starting point once, and the project owns it from then on.
+  - What it writes: config on top of what `init` detects, starter files such as a routed SKILL.md, and the staged CI workflow.
+  - Built in: `laravel-api` (the laravel pack, migrations and size rules) and `vite-react` (size rules).
+  - A team's own blueprint is a TOML file or a folder holding `blueprint.toml`.
+  - Without `--blueprint`, `init` names the blueprint the repository looks like and writes nothing more.
+  - See [Blueprints](https://mahkassem.github.io/fairlead/docs/blueprints.html).
+- `fairlead doctor --score`: readiness out of 100 on a fixed, versioned rubric ([#7](https://github.com/mahkassem/fairlead/issues/7)). Ten items, each earned by evidence rather than config alone: a project file with no problems, a runner for every test file, hooks installed for each agent the repository shows, a `done` that passed in the last 30 days, `fairlead ci` in a workflow (with stages), a replay report from the last 30 days that met its gate, recall of 95% or more beside a median plan that selects less than everything, a write the hook checked in the last 7 days, every SKILL.md routed, and lessons with none overdue. It lists the three fixes worth the most; `--json` prints the items, `--min N` exits 1 below N, and `--replay FILE` names the report, else `.fairlead/replay.json`. See [Readiness score](https://mahkassem.github.io/fairlead/docs/score.html).
+- `fairlead mcp`, an MCP server over stdio ([#6](https://github.com/mahkassem/fairlead/issues/6)). It serves nine read-only tools: `plan`, `explain`, `brief`, `context`, `find`, `receipt`, `next`, `lessons` and `skills_report`. Each runs the command it names as a child process, so nothing a command prints reaches the protocol stream, and a call is killed after 60 seconds. JSON results come back as text and as `structuredContent`, with results over 256 KB cut and marked. Paths must stay inside the repository and option values can't start with `-`; a refused call is a tool error the agent can read, not a protocol error. Each call adds an `mcp` event naming the tool, never its arguments. Every tool takes an optional `session`. `done` isn't served: it runs the tests, and a call over MCP can't be cancelled midway. See [MCP server](https://mahkassem.github.io/fairlead/docs/mcp.html).
+- Trackers: `[tracker]` links a change to its task, and the brief shows the task the branch names ([#6](https://github.com/mahkassem/fairlead/issues/6)).
+  - Kinds: `command` (the team's own command, JSON out, no shell, killed at `timeout`), `github` (issues of `origin`), and `agent`, which calls nothing and tells the agent to use its own tracker tool.
+  - `id` and `branch` are regexes: the id the branch names must match `id` whole and can't start with `-`.
+  - Tracker text is cleaned before the brief shows it. Control, escape, text-direction and zero-width characters are removed, the length is capped, and only `https://` links are kept.
+  - The task is read once per brief. A tracker that fails or hangs leaves a warning, not a broken brief.
+  - See [Trackers](https://mahkassem.github.io/fairlead/docs/trackers.html).
+- `ci.escapes = "file"` opens a GitHub issue for each escape `ci run --judge` finds ([#6](https://github.com/mahkassem/fairlead/issues/6)). Each is labelled `fairlead-escape` and keyed on its runner and test. A repeat while the issue is open is a note, at most one a day; after it's closed, a new issue names the old one. A run opens at most five new issues, and filing never changes the run's outcome. The job needs `issues: write`. See [Escapes](https://mahkassem.github.io/fairlead/docs/ci.html#escapes---judge-path).
+- Framework packs, and rules that read names from the code ([#50](https://github.com/mahkassem/fairlead/issues/50), [#51](https://github.com/mahkassem/fairlead/issues/51)). `extends = ["laravel"]` layers a pack of graph rules under the project's config; a pack sets only `graph.edges`, `graph.barrier` and `plan.run_all`, is built in or a file in the project, and the project's own config comes after it. A `[[graph.edges]]` rule may have `find`, a regex searched in each `from` file's text: it links only the files it matches in, and its capture fills `{1}` (or `{1|path}`, dots as slashes) in `to`. `graph stats` names each rule whose captures matched no file. The `laravel` pack links feature tests to the HTTP layer, the code that names a view, config key or factory to its file, and the tests that migrate to every migration, and stops the walk at the boot path, which runs everything when it changes. See [Framework packs](https://mahkassem.github.io/fairlead/docs/graph.html#framework-packs).
+
+- Workspaces: a folder of several repositories ([#52](https://github.com/mahkassem/fairlead/issues/52), first phase). A `fairlead.toml` with `[workspace]` in the folder lists the repositories (`[[workspace.repos]]` with a `path`, an optional `name` and `base`) or, listing none, takes every git repository one level down. `fairlead plan` there plans each repository against its own base and merge base, leaves out the ones with nothing changed, and prints one plan per repository; `--json` gives `{"repos": [{"name", "path", "plan"}], "unchanged": [...]}`. `--repo` narrows it to one repository, `--files` sends each path to the repository holding it, and `test --explain` explains a file in its repository. Inside a repository, the workspace file is a layer under the repository's own, outside CI. Other commands in the folder stop and name the repositories to run them in. Edges across repositories are the second phase. See [Workspaces](https://mahkassem.github.io/fairlead/docs/workspace.html).
+
+### Fixed
+
+- `fairlead init` checks the config it made before writing `fairlead.toml`, so a config that doesn't load no longer replaces the file.
+- `fairlead context` no longer drops a commit from its history because the commit's hash looks like a secret. It ran the secret check over the whole `hash date subject` line, so an all-digit short hash run into the date could pass for a card number, and the commit was left out. Only the subject, the author's words, is checked now.
+- Replay's `phpunit` extractor reads Collision's format too, which PHPUnit prints under the printer Laravel installs, and both PHP extractors read a `FAILED` line cut to the terminal's width: its class comes from the `FAIL` header the test was listed under. Such failures used to be unattributed. See [Replay](https://mahkassem.github.io/fairlead/docs/replay.html).
+- Replay sets recurring failures aside ([#184](https://github.com/mahkassem/fairlead/issues/184)). A test failing in one job across three or more unrelated pull requests on different bases, none touching it, gets the outcome `recurring`: kept out of adjusted recall and counted in raw recall, hits and misses alike, and listed with a `[[replay.quarantine]]` entry to confirm. On okhttp, flaky network tests counted as misses against changes that couldn't reach them. A miss's suggested owner rule now covers the first changed file that isn't a test or a document, and none is suggested when only tests or documents changed. Each miss names its job, so the same test missed in two jobs no longer reads as a duplicate, and `--json` gains `job` on each miss. `XTest`, `XTests`, `test_x` and `x_test` files count as tests when deciding whether a change touched a test, as `.test.` and `.spec.` files did. See [Recurring failures](https://mahkassem.github.io/fairlead/docs/replay.html#recurring-failures).
+
 ## 0.9.0 (2026-10-06)
 
 ### New
