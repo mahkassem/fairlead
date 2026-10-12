@@ -389,15 +389,22 @@ fn hooks_install_status_and_uninstall_include_and_remove_session_start() {
     assert!(!left.contains("SessionStart"), "{left}");
     assert!(!left.contains("fairlead"), "{left}");
 
-    // Codex and Gemini CLI get no SessionStart hook.
+    // Codex and Gemini CLI take the same hook and read the same answer;
+    // Gemini CLI counts its timeout in milliseconds.
     for flag in ["--codex", "--gemini"] {
         let (code, out) = fairlead(&dir, &["hooks", "install", flag]);
         assert_eq!(code, 0, "{out}");
-        assert!(!out.contains("fairlead resume"), "{out}");
+        assert!(out.contains("fairlead resume"), "{out}");
     }
-    for file in [".codex/hooks.json", ".gemini/settings.json"] {
+    for (file, timeout) in [(".codex/hooks.json", 30), (".gemini/settings.json", 30_000)] {
         let text = std::fs::read_to_string(dir.join(file)).unwrap();
-        assert!(!text.contains("SessionStart"), "{file}: {text}");
+        let hooks: serde_json::Value = serde_json::from_str(&text).unwrap();
+        let hook = &hooks["hooks"]["SessionStart"][0]["hooks"][0];
+        assert!(
+            hook["command"].as_str().unwrap().ends_with("resume --hook"),
+            "{file}: {text}"
+        );
+        assert_eq!(hook["timeout"], timeout, "{file}: {text}");
     }
 }
 
