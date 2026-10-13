@@ -63,11 +63,14 @@ The first makes a controller that calls `view('users.index')` depend on `resourc
 extends = ["laravel"]
 ```
 
+*Since 0.11.0:* `fairlead init` names the pack a project's manifests point to (`artisan` and `laravel/framework` for `laravel`, `next` in `package.json` for `next`), and `init --pack NAME` writes it. `graph stats` counts a pack's rules that linked no file in one line rather than listing them, since a pack covers layouts a project needn't use.
+
 A pack is a layer under the project's own config files, so a project's rules and barriers come after its, and `{ replace = [...] }` drops one of them (`graph.barrier = { replace = [] }` keeps none). A pack sets only `graph.edges`, `graph.barrier` and `plan.run_all`. A built-in pack ships in the binary, so it changes with the release, and the plan id changes with it. Any other name is a pack file's path from the project root, such as `extends = ["packs/ours.toml"]`, which is how a team writes its own.
 
 | Pack | What it adds |
 |---|---|
 | `laravel` | `tests/Feature/**` depend on `app/Http/**`, `routes/**` and `resources/views/**`, since HTTP tests reach controllers through routes no import shows. Views named in `view()`, `View::make()` and Blade's `@include`, `@extends`, `@each` and `@component`; Blade components (`<x-forms.input>`); `config('mail.from')` to `config/mail.php`; `Song::factory()` to `database/factories/SongFactory.php`; tests using `RefreshDatabase`, `LazilyRefreshDatabase` or `DatabaseMigrations` to every migration. A barrier on `bootstrap/app.php` and `bootstrap/providers.php`, so the boot path, which names every route file and service provider, doesn't tie each test to the whole app; a change under `bootstrap/` or `app/Providers/` runs everything instead. |
+| `next` | *Since 0.11.0.* App Router routes (`page`, `route`, `default`) depend on the `layout`, `template`, `loading`, `error` and `not-found` files of every folder above them, five deep, and the root's `global-error`; Pages Router pages depend on `_app` and `_document`; an end-to-end spec that calls `page.goto(` depends on every route and on `middleware`. `app/` and `src/app/` alike. A change to `next.config.*` runs everything. |
 
 ## PHP
 

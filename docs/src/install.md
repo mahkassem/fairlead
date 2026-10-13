@@ -39,6 +39,7 @@ fixes worth the most ([Readiness score](score.md)).
 fairlead init             # write fairlead.toml from what the repository shows
 fairlead init --dry-run   # print it instead
 fairlead init --force     # replace a fairlead.toml that's already there
+fairlead init --pack next # also extend a framework pack (since 0.11.0)
 ```
 
 `init` reads the repository's manifests, lockfiles and test files, and writes
@@ -60,4 +61,6 @@ Python project, say) stays out of the plan instead of stopping it.
 It then loads and validates what it wrote, and prints the test files each
 runner matched. What it can't tell, such as a runner's options in
 `scripts.test` or a Go module below the root, it prints as a note. It never
-replaces a config without `--force`.
+replaces a config without `--force`. When the manifests show a framework
+with a [pack](graph.md#framework-packs), Laravel or Next.js, it names the pack
+and writes it only with `--pack`.
