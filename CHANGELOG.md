@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Changed
+
+- The `next` pack's end-to-end rule is its own pack, `next-e2e` ([#212](https://github.com/mahkassem/fairlead/issues/212)). Tying every spec that calls `page.goto(` to every route and the middleware made any route change select nearly every spec, which undid a project's own owner rules for its specs: planning 40 recent pull requests of a Next.js site, its end-to-end plans went from about 7 specs to about 17 of 26 with no change to its unit plans. `extends = ["next", "next-e2e"]` keeps the rule, and `fairlead migrate` says so for a project that extends `next`. See [Framework packs](https://mahkassem.github.io/fairlead/docs/graph.html#framework-packs).
+
 ### Fixed
 
 - Two first runs of the npm package at once no longer fail with `ETXTBSY` ([#211](https://github.com/mahkassem/fairlead/issues/211)). Where the install script didn't run, as under Bun without `trustedDependencies`, the first command downloads the binary, and the installer emptied its folder and extracted into it in place, so a second run, such as a parallel git hook job, could start a half-written binary. The installer now extracts beside the folder and renames it into place, and a run that loses the race uses the winner's copy. In a local test of 30 such runs, 21 failed before and none after. See [Install](https://mahkassem.github.io/fairlead/docs/install.html).
