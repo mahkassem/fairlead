@@ -129,9 +129,10 @@ pub struct EventLog {
 
 impl EventLog {
     /// The log for the repository holding `root`, which may be a
-    /// subdirectory or a worktree, or none outside a repository.
+    /// subdirectory or a worktree, or none outside a repository. Every
+    /// worktree shares it, so removing a worktree keeps its events.
     pub fn open(root: &Path) -> Option<EventLog> {
-        crate::git::git_dir(root).map(|dir| EventLog::at(dir.join("fairlead")))
+        crate::git::common_dir(root).map(|dir| EventLog::at(dir.join("fairlead")))
     }
 
     pub fn at(dir: PathBuf) -> EventLog {
@@ -143,9 +144,29 @@ impl EventLog {
     }
 
     /// The log's text, the kept old file first, so lines run oldest to newest.
+    /// Logs a linked worktree kept before the log was shared are read too,
+    /// merged by time.
     pub fn read(&self) -> String {
-        let old = std::fs::read_to_string(self.dir.join(OLD_FILE)).unwrap_or_default();
-        old + &std::fs::read_to_string(self.path()).unwrap_or_default()
+        let mut text = read_pair(&self.dir);
+        let leftovers: Vec<String> = self
+            .dir
+            .parent()
+            .and_then(|common| std::fs::read_dir(common.join("worktrees")).ok())
+            .into_iter()
+            .flatten()
+            .filter_map(Result::ok)
+            .map(|w| read_pair(&w.path().join("fairlead")))
+            .filter(|t| !t.is_empty())
+            .collect();
+        if leftovers.is_empty() {
+            return text;
+        }
+        for more in leftovers {
+            text.push_str(&more);
+        }
+        let mut lines: Vec<&str> = text.lines().collect();
+        lines.sort_by_key(|l| at_of(l));
+        lines.iter().map(|l| format!("{l}\n")).collect()
     }
 
     /// Appends one event, first moving a full log aside so one old file is
@@ -163,6 +184,18 @@ impl EventLog {
             .open(&path)?;
         file.write_all(event.line().as_bytes())
     }
+}
+
+fn read_pair(dir: &Path) -> String {
+    let old = std::fs::read_to_string(dir.join(OLD_FILE)).unwrap_or_default();
+    old + &std::fs::read_to_string(dir.join(FILE)).unwrap_or_default()
+}
+
+/// A line's `at`, which `line` writes first; a line without one sorts first.
+fn at_of(line: &str) -> &str {
+    line.strip_prefix("{\"at\":\"")
+        .and_then(|rest| rest.split('"').next())
+        .unwrap_or("")
 }
 
 /// RFC 3339 in UTC with milliseconds.
@@ -259,5 +292,29 @@ mod tests {
             std::fs::metadata(dir.join(OLD_FILE)).unwrap().len(),
             MAX_BYTES
         );
+    }
+
+    #[test]
+    fn a_log_a_linked_worktree_kept_is_merged_in_by_time() {
+        let common = scratch("leftover");
+        let log = EventLog::at(common.join("fairlead"));
+        let mut early = Event::new("write", "allow", Duration::ZERO);
+        early.at = "2026-10-01T00:00:00.000Z".into();
+        let mut late = early.clone();
+        late.at = "2026-10-03T00:00:00.000Z".into();
+        log.append(&early).unwrap();
+        log.append(&late).unwrap();
+        let kept = EventLog::at(common.join("worktrees/w/fairlead"));
+        let mut middle = early.clone();
+        middle.at = "2026-10-02T00:00:00.000Z".into();
+        middle.stage = "done";
+        kept.append(&middle).unwrap();
+        let stages: Vec<String> = log
+            .read()
+            .lines()
+            .map(|l| serde_json::from_str::<serde_json::Value>(l).unwrap()["stage"].to_string())
+            .collect();
+        assert_eq!(stages, ["\"write\"", "\"done\"", "\"write\""]);
+        let _ = std::fs::remove_dir_all(&common);
     }
 }

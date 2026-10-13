@@ -12,6 +12,7 @@
 
 ### Fixed
 
+- Sessions in a linked worktree (`git worktree add`, as agent apps use) count ([#203](https://github.com/mahkassem/fairlead/issues/203)). Their events went to the worktree's own git directory, so `doctor --score`, `insights` and `tokens report` run from the main checkout never saw them, and removing the worktree deleted them. Every worktree now writes to the main checkout's `.git/fairlead/events.jsonl`, and a log a worktree kept before is read too while the worktree exists. `hooks install` and `hooks status` also look for lefthook in the shared hooks directory, where git runs it, so they no longer report it missing from a worktree.
 - The weekly workflow `ci workflow --insights` writes grants `pull-requests: read` and `checks: read` as well, which `replay fetch` needs for a run's pull request and its annotations; with only `contents` and `actions` it stopped at the first pull request run ([#201](https://github.com/mahkassem/fairlead/issues/201)). `replay fetch --help` and the replay docs name the scopes, and a token that can't read annotations now gets one warning and a fetch without them instead of a stop. Run `ci workflow --insights --write` again to update the file.
 
 ## 0.10.0 (2026-10-12)

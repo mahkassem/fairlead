@@ -204,3 +204,36 @@ fn require_keeps_sending_it_back_and_off_or_no_change_never_does() {
     let (code, err) = stop(&dir, false);
     assert_eq!(code, 0, "nothing changed from the base: {err}");
 }
+
+#[test]
+fn a_pass_in_a_linked_worktree_is_in_the_shared_log_and_outlives_the_worktree() {
+    let dir = repo("worktree");
+    git(&dir, &["commit", "-q", "-am", "change"]);
+    let wt = dir.with_file_name(format!("fairlead-done-wt-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&wt);
+    git(
+        &dir,
+        &[
+            "worktree",
+            "add",
+            "-q",
+            "-b",
+            "side",
+            wt.to_str().unwrap(),
+            "change",
+        ],
+    );
+    std::fs::write(wt.join("a.ts"), "export const a = 4;\n").unwrap();
+    let (code, out) = done(&wt, &[]);
+    assert_eq!(code, 0, "{out}");
+    git(
+        &dir,
+        &["worktree", "remove", "--force", wt.to_str().unwrap()],
+    );
+    let log = std::fs::read_to_string(dir.join(".git/fairlead/events.jsonl")).unwrap();
+    assert!(
+        log.lines().any(|l| l.contains("\"stage\":\"done\"")),
+        "the worktree's pass is in the main checkout's log: {log}"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}

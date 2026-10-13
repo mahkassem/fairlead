@@ -318,8 +318,11 @@ pub fn run(cwd: &Path, since: &str, limit: usize, p95_under: Option<f64>) -> Exi
 
 /// One call through the hook binary, as Claude Code makes it.
 fn hook(exe: &Path, dir: &Path, call: &Value) -> Result<Option<Value>, String> {
+    // The worktree shares the repository's event log, and a replayed edit
+    // isn't an agent's: it would count in `doctor --score` and `insights`.
     let mut child = Command::new(exe)
         .args(["guard", "hook"])
+        .env("FAIRLEAD_GUARD__EVENTS", "off")
         .current_dir(dir)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
