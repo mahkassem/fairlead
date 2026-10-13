@@ -22,6 +22,7 @@ fairlead-lang = { version = "0.10.0", path = "../fairlead-lang" }
 fairlead-tests = { version = "0.10.0", path = "../fairlead-tests" }
 fairlead-replay = { version = "0.10.0", path = "../fairlead-replay" }
 fairlead-guard = { version = "0.10.0", path = "../fairlead-guard" }
+globset = "0.4"
 rayon = "1"
 regex = "1"
 serde = { version = "1", features = ["derive"] }

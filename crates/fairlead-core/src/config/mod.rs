@@ -4,7 +4,7 @@
 mod agents;
 mod knowledge;
 mod load;
-mod packs;
+pub mod packs;
 mod quarantine;
 mod stages;
 mod tracker;
@@ -126,6 +126,18 @@ pub struct Workspace {
     /// The repositories, by path from the workspace folder. Empty means
     /// every git repository one level down.
     pub repos: Vec<WorkspaceRepo>,
+    /// Dependencies between repositories that no import shows, such as a
+    /// contract one repository owns and another consumes.
+    pub edges: Vec<WorkspaceEdge>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct WorkspaceEdge {
+    /// Files, from the workspace folder, that depend on what `to` names.
+    pub from: String,
+    /// Files in another repository, from the workspace folder.
+    pub to: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]

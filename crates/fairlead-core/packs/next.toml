@@ -1,0 +1,48 @@
+# Next.js: what its file conventions tie together that no import shows.
+# The App Router wraps each route in the layouts, templates, loading and
+# error boundaries of every folder above it; the Pages Router wraps each page
+# in _app and _document; and an end-to-end spec reaches the app over HTTP,
+# middleware included. `app/` and `src/app/` are both read.
+
+[plan]
+# The config changes how every file builds.
+run_all = ["next.config.{js,mjs,cjs,ts}"]
+
+# A route under the root layout and the boundaries beside it.
+[[graph.edges]]
+from = "{src/,}app/**/{page,route,default}.{js,jsx,ts,tsx}"
+to = ["{src/,}app/{layout,template,loading,error,not-found}.{js,jsx,ts,tsx}", "{src/,}app/global-error.{js,jsx,ts,tsx}"]
+
+# The same for each folder above a route, one rule per depth, since a name
+# in a rule stands for one folder.
+[[graph.edges]]
+from = "{src/,}app/{a}/**/{page,route,default}.{js,jsx,ts,tsx}"
+to = ["{src/,}app/{a}/{layout,template,loading,error,not-found}.{js,jsx,ts,tsx}"]
+
+[[graph.edges]]
+from = "{src/,}app/{a}/{b}/**/{page,route,default}.{js,jsx,ts,tsx}"
+to = ["{src/,}app/{a}/{b}/{layout,template,loading,error,not-found}.{js,jsx,ts,tsx}"]
+
+[[graph.edges]]
+from = "{src/,}app/{a}/{b}/{c}/**/{page,route,default}.{js,jsx,ts,tsx}"
+to = ["{src/,}app/{a}/{b}/{c}/{layout,template,loading,error,not-found}.{js,jsx,ts,tsx}"]
+
+[[graph.edges]]
+from = "{src/,}app/{a}/{b}/{c}/{d}/**/{page,route,default}.{js,jsx,ts,tsx}"
+to = ["{src/,}app/{a}/{b}/{c}/{d}/{layout,template,loading,error,not-found}.{js,jsx,ts,tsx}"]
+
+[[graph.edges]]
+from = "{src/,}app/{a}/{b}/{c}/{d}/{e}/**/{page,route,default}.{js,jsx,ts,tsx}"
+to = ["{src/,}app/{a}/{b}/{c}/{d}/{e}/{layout,template,loading,error,not-found}.{js,jsx,ts,tsx}"]
+
+# The Pages Router wraps every page in _app and _document.
+[[graph.edges]]
+from = "{src/,}pages/**/*.{js,jsx,ts,tsx}"
+to = ["{src/,}pages/_app.{js,jsx,ts,tsx}", "{src/,}pages/_document.{js,jsx,ts,tsx}"]
+
+# An end-to-end spec drives the app in a browser, so it reaches every route
+# and the middleware in front of them.
+[[graph.edges]]
+from = "**/*.{spec,test,e2e}.{ts,js,mjs}"
+find = '''\bpage\.goto\('''
+to = ["{src/,}app/**", "{src/,}pages/**", "{src/,}middleware.{js,ts}"]

@@ -381,3 +381,96 @@ fn a_blueprint_whose_config_doesnt_load_leaves_no_config_behind() {
         "{out}"
     );
 }
+
+#[test]
+fn a_framework_the_manifests_show_gets_its_pack_named_and_pack_writes_it() {
+    let dir = repo(
+        "pack-next",
+        &[
+            (
+                "package.json",
+                r#"{"dependencies": {"next": "^15"}, "devDependencies": {"vitest": "^3"}}"#,
+            ),
+            ("app/layout.tsx", "export default function L() {}\n"),
+            ("app/shop/page.tsx", "export default function P() {}\n"),
+            ("app/shop/page.test.tsx", "import P from './page';\n"),
+        ],
+    );
+    let (code, out) = fairlead(&dir, &["init"]);
+    assert_eq!(code, 0, "{out}");
+    assert!(
+        out.contains("this is a Next.js app: `extends = [\"next\"]` adds its pack"),
+        "{out}"
+    );
+    let toml = std::fs::read_to_string(dir.join("fairlead.toml")).unwrap();
+    assert!(
+        !toml.contains("extends"),
+        "a suggestion writes nothing: {toml}"
+    );
+    let (code, out) = fairlead(&dir, &["init", "--pack", "next", "--force"]);
+    assert_eq!(code, 0, "{out}");
+    assert!(!out.contains("adds its pack"), "{out}");
+    let toml = std::fs::read_to_string(dir.join("fairlead.toml")).unwrap();
+    assert!(toml.contains("\nextends = [\"next\"]\n"), "{toml}");
+    std::fs::write(
+        dir.join("app/layout.tsx"),
+        "export default function L2() {}\n",
+    )
+    .unwrap();
+    let (code, out) = fairlead(&dir, &["plan", "--base", "main"]);
+    assert_eq!(code, 0, "{out}");
+    assert!(
+        out.contains("app/shop/page.test.tsx"),
+        "a layout reaches the pages under it: {out}"
+    );
+    let (code, out) = fairlead(&dir, &["graph", "stats"]);
+    assert_eq!(code, 0, "{out}");
+    assert!(
+        out.contains("pack next: ") && !out.contains("rule from {src/,}app"),
+        "a pack's idle rules are counted, not listed: {out}"
+    );
+    let (code, out) = fairlead(&dir, &["init", "--pack", "nope", "--force"]);
+    assert_eq!(code, 2, "{out}");
+    assert!(
+        out.contains("neither a built-in pack (laravel, next)"),
+        "{out}"
+    );
+}
+
+#[test]
+fn a_pack_joins_the_extends_a_blueprint_wrote() {
+    let dir = repo(
+        "pack-merge",
+        &[
+            ("artisan", "#!/usr/bin/env php\n"),
+            (
+                "composer.json",
+                r#"{"require": {"laravel/framework": "^12"}, "require-dev": {"phpunit/phpunit": "^11"}}"#,
+            ),
+            ("phpunit.xml", "<phpunit><testsuites><testsuite name=\"u\"><directory>tests</directory></testsuite></testsuites></phpunit>\n"),
+            ("app/User.php", "<?php\nnamespace App;\nclass User {}\n"),
+            ("tests/UserTest.php", "<?php\nuse App\\User;\nclass UserTest {}\n"),
+        ],
+    );
+    let (code, out) = fairlead(
+        &dir,
+        &[
+            "init",
+            "--blueprint",
+            "laravel-api",
+            "--pack",
+            "laravel",
+            "--pack",
+            "next",
+            "--dry-run",
+        ],
+    );
+    assert_eq!(code, 0, "{out}");
+    assert_eq!(
+        out.lines()
+            .filter(|l| l.starts_with("extends = ["))
+            .collect::<Vec<_>>(),
+        ["extends = [\"laravel\", \"next\"]"],
+        "{out}"
+    );
+}

@@ -72,6 +72,7 @@ workflow's pin, then from the config's floor.
 | The `fairlead = "X.Y"` floor in the project config | The floor is older than a table or key the config uses, such as `[done]` (0.6) or `[guard]` (0.4) | The floor is raised to that release, so a teammate on an older binary is told which version to install |
 | `package.json` | `dependencies`, `devDependencies` or `optionalDependencies` pins an older release, as `0.4.2`, `^0.4.2`, `~0.4.2` or `>=0.4.2` | The version moves to this release and keeps its `^` or `~` |
 | Workflows under `.github/workflows/` | A step uses `mahkassem/fairlead@vX.Y.Z`, or passes `version: vX.Y.Z`, for an older release | Both move to this release |
+| *Since 0.11.0:* `.github/workflows/fairlead-insights.yml` | `ci workflow --insights` wrote it (it starts with the generated-file marker) and this release writes it differently, as 0.11.0 does with the scopes `replay fetch` needs | It's rewritten as `ci workflow --insights --write` would. A file without the marker is the team's own and is left alone. |
 
 What migrate never does:
 

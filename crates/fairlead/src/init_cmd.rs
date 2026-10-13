@@ -21,6 +21,10 @@ pub struct InitArgs {
     /// blueprint file or folder of the team's own.
     #[arg(long, value_name = "NAME_OR_PATH")]
     blueprint: Option<String>,
+    /// Also extend a framework pack (laravel, next), as `extends` does;
+    /// repeatable. Without it, init names the packs the manifests point to.
+    #[arg(long, value_name = "NAME")]
+    pack: Vec<String>,
 }
 
 /// A test runner the repository shows, with the test files its `match` finds.
@@ -81,6 +85,9 @@ pub fn run(args: InitArgs, cwd: &Path) -> ExitCode {
     if let Some(bp) = &blueprint {
         text = with_blueprint(&text, bp);
     }
+    if !args.pack.is_empty() {
+        text = with_packs(&text, &args.pack);
+    }
     if args.dry_run {
         print!("{text}");
         for f in blueprint.iter().flat_map(|bp| &bp.files) {
@@ -126,6 +133,13 @@ pub fn run(args: InitArgs, cwd: &Path) -> ExitCode {
             bp.name, bp.name, bp.description
         );
     }
+    for (pack, why) in packs_for(&root, &files) {
+        if !extended(&text).iter().any(|p| p == pack) {
+            println!(
+                "  {why}: `extends = [\"{pack}\"]` adds its pack (`fairlead init --pack {pack} --force`)"
+            );
+        }
+    }
     summary(&found);
     ExitCode::SUCCESS
 }
@@ -158,6 +172,64 @@ fn with_blueprint(text: &str, bp: &crate::blueprint::Blueprint) -> String {
         ));
     }
     out
+}
+
+/// The framework packs the manifests point to, with what showed it.
+fn packs_for(root: &Path, files: &[String]) -> Vec<(&'static str, &'static str)> {
+    let has = |name: &str| files.iter().any(|f| f == name);
+    let read = |name: &str| std::fs::read_to_string(root.join(name)).unwrap_or_default();
+    let mut out = Vec::new();
+    if has("artisan") && read("composer.json").contains("\"laravel/framework\"") {
+        out.push(("laravel", "this is a Laravel app"));
+    }
+    let manifest: Value = serde_json::from_str(&read("package.json")).unwrap_or(Value::Null);
+    if ["dependencies", "devDependencies"]
+        .iter()
+        .any(|k| manifest[k].get("next").is_some())
+    {
+        out.push(("next", "this is a Next.js app"));
+    }
+    out
+}
+
+/// The names in the config's top-level `extends`.
+fn extended(text: &str) -> Vec<String> {
+    let Some(line) = text.lines().find(|l| l.starts_with("extends = [")) else {
+        return Vec::new();
+    };
+    line.split('"')
+        .skip(1)
+        .step_by(2)
+        .map(str::to_string)
+        .collect()
+}
+
+/// The config with `packs` in its top-level `extends`, added to the list a
+/// blueprint wrote or as a new key before the first table.
+fn with_packs(text: &str, packs: &[String]) -> String {
+    let mut names = extended(text);
+    for p in packs {
+        if !names.contains(p) {
+            names.push(p.clone());
+        }
+    }
+    let line = format!(
+        "extends = [{}]",
+        names
+            .iter()
+            .map(|n| format!("\"{n}\""))
+            .collect::<Vec<_>>()
+            .join(", ")
+    );
+    if let Some(old) = text.lines().find(|l| l.starts_with("extends = [")) {
+        return text.replacen(old, &line, 1);
+    }
+    let at = text.find("\n[").map_or(text.len(), |i| i + 1);
+    format!(
+        "{}# Framework packs, from `fairlead init --pack`.\n{line}\n\n{}",
+        &text[..at],
+        &text[at..]
+    )
 }
 
 /// A blueprint's starter files, never over one that's there unless forced,

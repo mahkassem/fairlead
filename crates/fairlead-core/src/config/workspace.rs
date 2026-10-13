@@ -15,6 +15,15 @@ pub struct Found {
     pub file: PathBuf,
     pub root: PathBuf,
     pub repos: Vec<Member>,
+    pub edges: Vec<Edge>,
+}
+
+/// `from` files depend on `to` files, each a glob from the workspace folder
+/// that starts with its repository's folder.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Edge {
+    pub from: String,
+    pub to: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -130,11 +139,70 @@ pub fn read(file: &Path) -> Result<Option<Found>, ConfigError> {
             ));
         }
     }
+    let edges = edges(table, &repos, &label)?;
     Ok(Some(Found {
         file: file.to_path_buf(),
         root,
         repos,
+        edges,
     }))
+}
+
+/// `[[workspace.edges]]`, each glob checked to start with a repository's folder.
+fn edges(table: &Value, repos: &[Member], label: &str) -> Result<Vec<Edge>, ConfigError> {
+    let mut out = Vec::new();
+    for entry in table
+        .get("edges")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+    {
+        let from = entry
+            .get("from")
+            .and_then(Value::as_str)
+            .unwrap_or("")
+            .to_string();
+        let to: Vec<String> = entry
+            .get("to")
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten()
+            .filter_map(Value::as_str)
+            .map(str::to_string)
+            .collect();
+        for glob in std::iter::once(&from).chain(&to) {
+            if !repos
+                .iter()
+                .any(|m| glob.starts_with(&format!("{}/", m.path)))
+            {
+                return Err(error(
+                    label,
+                    Some("workspace.edges".into()),
+                    format!(
+                        "`{glob}` must start with a repository's folder: {}",
+                        folders(repos)
+                    ),
+                ));
+            }
+        }
+        if to.is_empty() {
+            return Err(error(
+                label,
+                Some("workspace.edges".into()),
+                format!("`{from}` names no `to`"),
+            ));
+        }
+        out.push(Edge { from, to });
+    }
+    Ok(out)
+}
+
+fn folders(repos: &[Member]) -> String {
+    repos
+        .iter()
+        .map(|m| format!("{}/", m.path))
+        .collect::<Vec<_>>()
+        .join(", ")
 }
 
 fn last_segment(path: &str) -> String {

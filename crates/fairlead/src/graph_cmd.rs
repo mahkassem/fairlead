@@ -68,7 +68,13 @@ pub fn run(action: GraphAction, sets: Vec<String>, cwd: &Path) -> ExitCode {
             } else {
                 "off (graph.cache = false)"
             };
-            stats(&scan, elapsed.as_secs_f64(), json, cache_off)
+            stats(
+                &scan,
+                elapsed.as_secs_f64(),
+                json,
+                cache_off,
+                (&loaded.config.extends, &root),
+            )
         }
         GraphAction::Why { from, to } => why(
             &scan,
@@ -79,7 +85,13 @@ pub fn run(action: GraphAction, sets: Vec<String>, cwd: &Path) -> ExitCode {
     }
 }
 
-fn stats(scan: &Scan, seconds: f64, json: bool, cache_off: &str) -> ExitCode {
+fn stats(
+    scan: &Scan,
+    seconds: f64,
+    json: bool,
+    cache_off: &str,
+    packs: (&[String], &Path),
+) -> ExitCode {
     let s = scan.graph.stats();
     let sources = scan.tree.sources().count();
     if json {
@@ -178,9 +190,10 @@ fn stats(scan: &Scan, seconds: f64, json: bool, cache_off: &str) -> ExitCode {
                 scan.graph.barrier.len()
             );
         }
-        for from in &scan.rules.unmatched {
-            println!("rule from {from} linked no file");
-        }
+        print!(
+            "{}",
+            unmatched_lines(&scan.rules.unmatched, packs.0, packs.1)
+        );
         for (from, n, example) in &scan.rules.unresolved {
             println!("rule from {from} found {n} name(s) that match no file, such as `{example}`");
         }
@@ -268,4 +281,32 @@ fn importers(scan: &Scan, file: &str) -> ExitCode {
         println!("{}  ({kind})", scan.graph.files[importer as usize]);
     }
     ExitCode::SUCCESS
+}
+
+/// The rules that linked no file: the project's own one by one, since each
+/// is a likely mistake, and a pack's counted, since a pack covers layouts a
+/// project needn't use.
+fn unmatched_lines(unmatched: &[String], extends: &[String], root: &Path) -> String {
+    let mut out = String::new();
+    let mut theirs: Vec<(&str, usize, usize)> = Vec::new();
+    for pack in extends {
+        let froms = fairlead_core::config::packs::rule_froms(pack, root);
+        let idle = unmatched.iter().filter(|u| froms.contains(u)).count();
+        if idle > 0 {
+            theirs.push((pack, idle, froms.len()));
+        }
+    }
+    let packed: Vec<String> = extends
+        .iter()
+        .flat_map(|p| fairlead_core::config::packs::rule_froms(p, root))
+        .collect();
+    for from in unmatched.iter().filter(|u| !packed.contains(u)) {
+        out.push_str(&format!("rule from {from} linked no file\n"));
+    }
+    for (pack, idle, all) in theirs {
+        out.push_str(&format!(
+            "pack {pack}: {idle} of {all} rules linked no file, for layouts this project doesn't use\n"
+        ));
+    }
+    out
 }

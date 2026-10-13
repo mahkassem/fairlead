@@ -10,7 +10,10 @@ use serde_json::Value;
 use super::load::{error, read_layer, ConfigError};
 
 /// The built-in packs, by name.
-pub const BUILTIN: &[(&str, &str)] = &[("laravel", include_str!("../../packs/laravel.toml"))];
+pub const BUILTIN: &[(&str, &str)] = &[
+    ("laravel", include_str!("../../packs/laravel.toml")),
+    ("next", include_str!("../../packs/next.toml")),
+];
 
 const ALLOWED: [(&str, &[&str]); 2] = [("graph", &["edges", "barrier"]), ("plan", &["run_all"])];
 
@@ -35,6 +38,18 @@ pub fn layers(files: &[(String, Value)], root: &Path) -> Result<Vec<(String, Val
             allowed(&label, &value)?;
             Ok((label, value))
         })
+        .collect()
+}
+
+/// The `from` of each edge rule a pack adds, so a report can tell a pack's
+/// rules from the project's own; none for a pack that doesn't load.
+pub fn rule_froms(name: &str, root: &Path) -> Vec<String> {
+    pack(name, "extends", root)
+        .ok()
+        .and_then(|v| v.pointer("/graph/edges").and_then(Value::as_array).cloned())
+        .into_iter()
+        .flatten()
+        .filter_map(|e| e.get("from").and_then(Value::as_str).map(str::to_string))
         .collect()
 }
 
