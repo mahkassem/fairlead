@@ -4,7 +4,10 @@
 //! after it otherwise, else a `_test.go` frame of a panic, else a compile
 //! error in a `_test.go` file. gotestsum's `=== FAIL: <package> <test>` is
 //! read too. The file is printed as `/<import path>/<file>`, which
-//! attribution matches by its tail like a path on the runner.
+//! attribution matches by its tail like a path on the runner. A package
+//! whose tests didn't build (`[build failed]`) and named no test file is
+//! printed as `/<import path>/*_test.go`: any of its test files, since
+//! `go test` runs a package whole.
 
 use std::collections::HashMap;
 use std::sync::OnceLock;
@@ -31,7 +34,7 @@ struct Block {
 }
 
 impl Block {
-    fn emit(self, package: &str, out: &mut Vec<Printed>) {
+    fn emit(self, package: &str, build_failed: bool, out: &mut Vec<Printed>) {
         let under = |file: &str| {
             if file.starts_with('/') || file.contains(':') {
                 file.replace('\\', "/")
@@ -49,6 +52,12 @@ impl Block {
             if let Some(file) = &fallback {
                 push(Printed {
                     path: under(file),
+                    project: None,
+                    title: None,
+                });
+            } else if build_failed {
+                push(Printed {
+                    path: format!("/{package}/*_test.go"),
                     project: None,
                     title: None,
                 });
@@ -86,7 +95,7 @@ pub fn gotest(lines: &[String]) -> Vec<Printed> {
     let compile = re(&COMPILE, r"^(?P<file>\S+_test\.go):\d+:\d+: ");
     let package = re(
         &PACKAGE,
-        r"^FAIL\s+(?P<pkg>\S+)(?:\s+\[[\w ]+\]|\s+[\d.]+s)\s*$",
+        r"^FAIL\s+(?P<pkg>\S+)(?:\s+\[(?P<why>[\w ]+)\]|\s+[\d.]+s)\s*$",
     );
     let gotestsum = re(&GOTESTSUM, r"^=== FAIL: (?P<pkg>\S+) (?P<name>\S+)");
     let mut out = Vec::new();
@@ -118,7 +127,8 @@ pub fn gotest(lines: &[String]) -> Vec<Printed> {
             }
         }
         if let Some(c) = package.captures(line) {
-            std::mem::take(&mut block).emit(&c["pkg"], &mut out);
+            let build_failed = c.name("why").is_some_and(|w| w.as_str() == "build failed");
+            std::mem::take(&mut block).emit(&c["pkg"], build_failed, &mut out);
             continue;
         }
         if line.starts_with("ok  ") || line.starts_with("?   ") {
@@ -153,7 +163,7 @@ pub fn gotest(lines: &[String]) -> Vec<Printed> {
         if let Some(file) = file {
             b.logged.insert(name, file);
         }
-        b.emit(&pkg, &mut out);
+        b.emit(&pkg, false, &mut out);
     }
     out
 }
@@ -209,6 +219,21 @@ mod tests {
                 project: None,
                 title: Some("TestParallelCallbacksShutdownStopsWorkers".into()),
             }]
+        );
+    }
+
+    #[test]
+    fn a_package_whose_tests_did_not_build_is_printed_as_any_of_its_test_files() {
+        let out = gotest(&lines(concat!(
+            "FAIL\tgo.example/app/bridge [build failed]\n",
+            "ok  \tgo.example/app/bridge/internal\t1.0s\n",
+            "FAIL\tgo.example/app/net [setup failed]\n",
+            "FAIL\n",
+        )));
+        assert_eq!(
+            out.iter().map(|p| p.path.as_str()).collect::<Vec<_>>(),
+            ["/go.example/app/bridge/*_test.go"],
+            "a setup failure is the environment's, so it names nothing"
         );
     }
 }
