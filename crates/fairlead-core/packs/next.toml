@@ -1,8 +1,9 @@
 # Next.js: what its file conventions tie together that no import shows.
 # The App Router wraps each route in the layouts, templates, loading and
-# error boundaries of every folder above it; the Pages Router wraps each page
-# in _app and _document; and an end-to-end spec reaches the app over HTTP,
-# middleware included. `app/` and `src/app/` are both read.
+# error boundaries of every folder above it, and the Pages Router wraps each
+# page in _app and _document. `app/` and `src/app/` are both read. What an
+# end-to-end spec reaches over HTTP is the `next-e2e` pack's, since it ties
+# every spec to every route and would undo end-to-end owner rules.
 
 [plan]
 # The config changes how every file builds.
@@ -39,10 +40,3 @@ to = ["{src/,}app/{a}/{b}/{c}/{d}/{e}/{layout,template,loading,error,not-found}.
 [[graph.edges]]
 from = "{src/,}pages/**/*.{js,jsx,ts,tsx}"
 to = ["{src/,}pages/_app.{js,jsx,ts,tsx}", "{src/,}pages/_document.{js,jsx,ts,tsx}"]
-
-# An end-to-end spec drives the app in a browser, so it reaches every route
-# and the middleware in front of them.
-[[graph.edges]]
-from = "**/*.{spec,test,e2e}.{ts,js,mjs}"
-find = '''\bpage\.goto\('''
-to = ["{src/,}app/**", "{src/,}pages/**", "{src/,}middleware.{js,ts}"]

@@ -432,7 +432,7 @@ fn a_framework_the_manifests_show_gets_its_pack_named_and_pack_writes_it() {
     let (code, out) = fairlead(&dir, &["init", "--pack", "nope", "--force"]);
     assert_eq!(code, 2, "{out}");
     assert!(
-        out.contains("neither a built-in pack (laravel, next)"),
+        out.contains("neither a built-in pack (laravel, next, next-e2e)"),
         "{out}"
     );
 }

@@ -1,0 +1,10 @@
+# Next.js end-to-end specs: a spec that drives the app in a browser reaches
+# every route and the middleware in front of them, which no import shows. It
+# is coarse, every spec reaching every route, so it fits a project with no
+# owner rules of its own for its specs; one that maps pages to specs keeps
+# its map and leaves this pack out. Use it with `next`.
+
+[[graph.edges]]
+from = "**/*.{spec,test,e2e}.{ts,js,mjs}"
+find = '''\bpage\.goto\('''
+to = ["{src/,}app/**", "{src/,}pages/**", "{src/,}middleware.{js,ts}"]
