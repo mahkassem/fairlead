@@ -95,6 +95,15 @@ jobs:
             tr -d '~' < out/report.txt
             echo '~~~'
           } >> "$GITHUB_STEP_SUMMARY"
+      # The report as an annotation too, which the API serves where logs and
+      # artifacts need a download. Escaped, so no line of it is a command.
+      - name: The report as an annotation
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: |
+          [ -s out/report.txt ] || exit 0
+          head -c 60000 out/report.txt | sed -e 's/%/%25/g' -e 's/\r/%0D/g' | awk 'BEGIN{ORS="%0A"} {print}' > out/report.esc
+          echo "::notice title=replay report::$(cat out/report.esc)"
       # A failure the extractor attributes to no file shows up only as a
       # count; the lines the dataset kept for it say why.
       - name: What the failed jobs printed
