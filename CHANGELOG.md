@@ -6,6 +6,10 @@
 
 - The `next` pack's end-to-end rule is its own pack, `next-e2e` ([#212](https://github.com/mahkassem/fairlead/issues/212)). Tying every spec that calls `page.goto(` to every route and the middleware made any route change select nearly every spec, which undid a project's own owner rules for its specs: planning 40 recent pull requests of a Next.js site, its end-to-end plans went from about 7 specs to about 17 of 26 with no change to its unit plans. `extends = ["next", "next-e2e"]` keeps the rule, and `fairlead migrate` says so for a project that extends `next`. See [Framework packs](https://mahkassem.github.io/fairlead/docs/graph.html#framework-packs).
 
+### Fixed
+
+- A runner asked to run everything no longer loads another runner's tests ([#210](https://github.com/mahkassem/fairlead/issues/210)). It ran with no files, as `bun test` from the root, and the tool found every test file under it, Playwright specs another runner owns included, which failed `done` although every real test passed. When another runner's tests sit under a runner's working directory, that runner now names its own tests instead; a runner alone keeps letting the tool find them, and `all_command` still overrides both. See [Planning](https://mahkassem.github.io/fairlead/docs/plan.html).
+
 ## 0.11.0 (2026-10-13)
 
 ### New

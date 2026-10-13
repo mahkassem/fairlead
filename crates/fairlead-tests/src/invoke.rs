@@ -219,6 +219,29 @@ fn check_files(
         .collect()
 }
 
+/// Whether a runner left to find its own tests, as it is when everything
+/// runs, would load another runner's: their files sit under its working
+/// directory and nothing but `match` tells them apart. Such a runner names
+/// its own tests instead, unless its `all_command` already scopes the run.
+fn finds_others(cx: &Context, runner: &Runner) -> bool {
+    if runner.all_command.is_some()
+        || runner.invoke != Invoke::Once
+        || !runner.command.iter().any(|a| a == "{files}")
+    {
+        return false;
+    }
+    let cwd = runner
+        .cwd
+        .as_deref()
+        .filter(|c| !c.contains('{'))
+        .unwrap_or(".");
+    let runners = cx.config.tests.runners.items();
+    cx.tests.iter().any(|t| {
+        t.runner.is_some_and(|r| runners[r].id != runner.id)
+            && (cwd == "." || t.path.starts_with(&format!("{cwd}/")))
+    })
+}
+
 /// Every invocation, in order. A test or check `held` names runs alone, so
 /// its failure can be judged by itself. In a plan that runs everything, the
 /// rest of its runner still runs whole when the runner has `exclude_arg` to
@@ -235,6 +258,7 @@ pub fn invocations(
     };
     let mut out = Vec::new();
     for runner in cx.config.tests.runners.items() {
+        let all = all && !finds_others(cx, runner);
         let (alone, mine): (Vec<&TestSelection>, Vec<&TestSelection>) = tests
             .iter()
             .filter(|t| t.runner.as_deref() == Some(runner.id.as_str()))
