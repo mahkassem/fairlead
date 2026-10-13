@@ -60,6 +60,16 @@ fn uses_replay(cx: &Context) -> bool {
     set(cx, "replay")
 }
 
+fn has_next(cx: &Context) -> bool {
+    let manifest: serde_json::Value = std::fs::read_to_string(cx.root.join("package.json"))
+        .ok()
+        .and_then(|t| serde_json::from_str(&t).ok())
+        .unwrap_or_default();
+    ["dependencies", "devDependencies"]
+        .iter()
+        .any(|k| manifest[k].get("next").is_some())
+}
+
 fn has_go(cx: &Context) -> bool {
     cx.root.join("go.mod").is_file() || cx.root.join("go.work").is_file()
 }
@@ -186,6 +196,23 @@ pub const RELEASES: &[(&str, &[Note])] = &[
             },
             Note {
                 text: "`fairlead doctor --score` rates the setup out of 100, and `fairlead ci workflow --insights --write` adds a weekly summary of how it works (see Readiness score, Insights).",
+                applies: always,
+            },
+        ],
+    ),
+    (
+        "0.11.0",
+        &[
+            Note {
+                text: "Sessions in a linked worktree count now: every worktree writes to the main checkout's `.git/fairlead/events.jsonl`, so `doctor --score`, `insights` and `tokens report` may show more than before (see Guard).",
+                applies: always,
+            },
+            Note {
+                text: "This is a Next.js app: `extends = [\"next\"]` makes layouts, `_app` and middleware reach the tests under them (see Framework packs).",
+                applies: has_next,
+            },
+            Note {
+                text: "Building Fairlead from source needs Rust 1.95; the release binaries and the npm package are unaffected.",
                 applies: always,
             },
         ],

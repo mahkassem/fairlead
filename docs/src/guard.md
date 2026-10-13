@@ -267,7 +267,7 @@ manifest, it removes the entries by their command.
 ### Codex
 
 *Since 0.7.0:* `fairlead hooks install --codex` writes the same hooks to
-`.codex/hooks.json`, which Codex reads in the same shape (*Unreleased:*
+`.codex/hooks.json`, which Codex reads in the same shape (*since 0.11.0:*
 `SessionStart` included); `status` and
 `uninstall` take `--codex` too. Codex edits files with one tool,
 `apply_patch`, whose patch can add, change, move or delete several files at
@@ -286,7 +286,7 @@ lists them.
 ### Gemini CLI
 
 *Since 0.7.0:* `fairlead hooks install --gemini` merges the same hooks
-(*Unreleased:* `SessionStart` included) into `.gemini/settings.json`, under Gemini CLI's names for the moments:
+(*since 0.11.0:* `SessionStart` included) into `.gemini/settings.json`, under Gemini CLI's names for the moments:
 `BeforeTool` for the write stage, `AfterTool` for the brief nudge and
 `AfterAgent` for the Stop hook, which sends the agent back with its reason
 as a new prompt. Its timeouts are in milliseconds, and the edit matcher is

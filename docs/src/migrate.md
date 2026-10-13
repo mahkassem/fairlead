@@ -221,6 +221,25 @@ For you to decide:
   as a use until `fairlead hooks uninstall --gemini` and
   `hooks install --gemini` write this release's.
 
+### To 0.11.0
+
+Migrate updates:
+
+- `.github/workflows/fairlead-insights.yml`, when `ci workflow --insights`
+  wrote it: it's rewritten with the `pull-requests` and `checks` read scopes
+  `replay fetch` needs ([#201](https://github.com/mahkassem/fairlead/issues/201)).
+
+For you to decide:
+
+- Sessions in a linked worktree count now: every worktree writes to the
+  main checkout's event log, so `doctor --score`, `insights` and
+  `tokens report` may show more than before.
+- A Next.js app can add `extends = ["next"]`, which `fairlead init` now
+  names ([Framework packs](graph.md#framework-packs)).
+- A workspace can declare `[[workspace.edges]]` between its repositories
+  ([Edges across repositories](workspace.md#edges-across-repositories)).
+- Building from source needs Rust 1.95.
+
 ### To 0.10.0
 
 Migrate updates nothing in your files: every new table is optional.
