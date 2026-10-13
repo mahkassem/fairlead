@@ -174,8 +174,9 @@ The [quick start](#quick-start) shows the first few, and the
 Pre-alpha. The latest release, v0.11.0, adds a Next.js pack with `init`
 naming the pack a project needs, edges across the repositories of a
 workspace, and the SessionStart hook for Codex and Gemini CLI, and fixes
-sessions in a linked worktree going uncounted and the weekly insights
-workflow lacking the scopes replay needs. v0.10.0 connected Fairlead to the
+sessions in a linked worktree going uncounted, the weekly insights
+workflow lacking the scopes replay needs, and replay leaving a Go package
+whose tests didn't build unattributed. v0.10.0 connected Fairlead to the
 rest of the work and measured the setup: an MCP server (`fairlead mcp`),
 trackers that put a branch's task in the brief, escapes filed as issues
 from CI, tokens and cost per session, a readiness score (`doctor --score`),
