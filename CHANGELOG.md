@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- A runner asked to run everything no longer loads another runner's tests ([#210](https://github.com/mahkassem/fairlead/issues/210)). It ran with no files, as `bun test` from the root, and the tool found every test file under it, Playwright specs another runner owns included, which failed `done` although every real test passed. When another runner's tests sit under a runner's working directory, that runner now names its own tests instead; a runner alone keeps letting the tool find them, and `all_command` still overrides both. See [Planning](https://mahkassem.github.io/fairlead/docs/plan.html).
+
 ## 0.11.0 (2026-10-13)
 
 ### New
