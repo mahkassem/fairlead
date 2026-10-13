@@ -128,7 +128,7 @@ repositories are on the way
 
 ## What it does
 
-This README documents Fairlead 0.10.0. Each command, by what it's for:
+This README documents Fairlead 0.11.0. Each command, by what it's for:
 
 - **The test plan:** `plan`, `test --explain`, the import graph (`graph`) and
   coverage maps (`coverage import`).
@@ -171,10 +171,15 @@ The [quick start](#quick-start) shows the first few, and the
 
 ## Status
 
-Pre-alpha. The latest release, v0.10.0, connects Fairlead to the rest of
-the work and measures the setup: an MCP server (`fairlead mcp`), trackers
-that put a branch's task in the brief, escapes filed as issues from CI,
-tokens and cost per session, a readiness score (`doctor --score`),
+Pre-alpha. The latest release, v0.11.0, adds a Next.js pack with `init`
+naming the pack a project needs, edges across the repositories of a
+workspace, and the SessionStart hook for Codex and Gemini CLI, and fixes
+sessions in a linked worktree going uncounted, the weekly insights
+workflow lacking the scopes replay needs, and replay leaving a Go package
+whose tests didn't build unattributed. v0.10.0 connected Fairlead to the
+rest of the work and measured the setup: an MCP server (`fairlead mcp`),
+trackers that put a branch's task in the brief, escapes filed as issues
+from CI, tokens and cost per session, a readiness score (`doctor --score`),
 `fairlead insights` with a weekly summary job, blueprints for `init`,
 framework packs, workspaces of several repositories, and replay setting
 recurring failures aside. v0.9.0 let replay measure a project whose
