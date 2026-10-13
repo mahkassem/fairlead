@@ -100,8 +100,17 @@ fn under_run_all_each_runner_runs_whole_and_per_module_runners_once_per_module()
     files.push(("pnpm-lock.yaml", "x\n"));
     let dir = repo("inv-all", &files);
     let plan = run(&dir, &config(RUNNERS), vec![modified("pnpm-lock.yaml")]);
+    // jest's tests sit under vitest's folder, so vitest names its own (#210).
     let vitest = plan.invocations.iter().find(|i| i.id == "vitest").unwrap();
-    assert_eq!(vitest.argv, ["vitest", "run"]);
+    assert_eq!(
+        vitest.argv,
+        [
+            "vitest",
+            "run",
+            "packages/a/test/x.test.ts",
+            "packages/b/test/y.test.ts"
+        ]
+    );
     let jest: Vec<_> = plan.invocations.iter().filter(|i| i.id == "jest").collect();
     assert_eq!(jest.len(), 1);
     assert_eq!(jest[0].argv, ["jest", "--selectProjects", "gen"]);
@@ -110,6 +119,69 @@ fn under_run_all_each_runner_runs_whole_and_per_module_runners_once_per_module()
         lint.argv.len() > 1,
         "files = changed expands as matched under run_all"
     );
+}
+
+const OVERLAP: &[(&str, &str)] = &[
+    ("package.json", r#"{ "name": "app" }"#),
+    ("bun.lock", "x\n"),
+    ("packages/core/src/a.ts", "export const a = 1;\n"),
+    ("packages/core/src/a.test.ts", "import './a';\n"),
+    ("apps/web/src/b.test.ts", "export {};\n"),
+    ("apps/web/e2e/home.spec.ts", "export {};\n"),
+];
+
+const OVERLAP_RUNNERS: &str = r#"
+[tests]
+match = ["**/*.test.ts", "**/*.spec.ts"]
+
+[[tests.runners]]
+id = "unit"
+match = ["packages/**/*.test.ts", "apps/web/**/*.test.ts"]
+command = ["bun", "test", "{files}"]
+
+[[tests.runners]]
+id = "e2e"
+match = ["apps/web/e2e/**/*.spec.ts"]
+command = ["bun", "run", "test:e2e"]
+"#;
+
+#[test]
+fn under_run_all_a_runner_whose_folder_holds_another_runners_tests_names_its_own() {
+    let dir = repo("inv-overlap", OVERLAP);
+    let plan = run(&dir, &config(OVERLAP_RUNNERS), vec![modified("bun.lock")]);
+    let unit = plan.invocations.iter().find(|i| i.id == "unit").unwrap();
+    assert_eq!(
+        unit.argv,
+        [
+            "bun",
+            "test",
+            "apps/web/src/b.test.ts",
+            "packages/core/src/a.test.ts"
+        ]
+    );
+    let e2e = plan.invocations.iter().find(|i| i.id == "e2e").unwrap();
+    assert_eq!(e2e.argv, ["bun", "run", "test:e2e"]);
+
+    let alone = OVERLAP_RUNNERS
+        .split("[[tests.runners]]\nid = \"e2e\"")
+        .next()
+        .unwrap()
+        .replace(", \"**/*.spec.ts\"]", "]");
+    let plan = run(&dir, &config(&alone), vec![modified("bun.lock")]);
+    let unit = plan.invocations.iter().find(|i| i.id == "unit").unwrap();
+    assert_eq!(
+        unit.argv,
+        ["bun", "test"],
+        "a runner alone still finds its own"
+    );
+
+    let scoped = OVERLAP_RUNNERS.replace(
+        "command = [\"bun\", \"test\", \"{files}\"]",
+        "command = [\"bun\", \"test\", \"{files}\"]\nall_command = [\"bun\", \"test\", \"packages\", \"apps/web/src\"]",
+    );
+    let plan = run(&dir, &config(&scoped), vec![modified("bun.lock")]);
+    let unit = plan.invocations.iter().find(|i| i.id == "unit").unwrap();
+    assert_eq!(unit.argv, ["bun", "test", "packages", "apps/web/src"]);
 }
 
 #[test]
