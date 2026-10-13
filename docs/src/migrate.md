@@ -221,6 +221,24 @@ For you to decide:
   as a use until `fairlead hooks uninstall --gemini` and
   `hooks install --gemini` write this release's.
 
+### To 0.12.0
+
+Migrate updates nothing in your files.
+
+For you to decide:
+
+- The `next` pack's end-to-end rule, every spec that calls `page.goto(`
+  reaching every route and `middleware`, is its own pack now. Add
+  `"next-e2e"` to `extends` to keep it, or leave it out when your owner
+  rules already map pages to specs
+  ([Framework packs](graph.md#framework-packs), [#212](https://github.com/mahkassem/fairlead/issues/212)).
+- With more than one runner, a runner whose folder holds another runner's
+  tests names its own when everything runs, so its command line lists
+  them; `all_command` keeps the tool's own discovery
+  ([Planning](plan.md), [#210](https://github.com/mahkassem/fairlead/issues/210)).
+- Under Bun, `"trustedDependencies": ["fairlead"]` has `bun install`
+  download the binary instead of the first command ([Install](install.md)).
+
 ### To 0.11.0
 
 Migrate updates:

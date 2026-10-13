@@ -24,7 +24,7 @@ runs the same Fairlead.
 The package downloads its binary when it installs. Bun runs no install
 script it doesn't trust, so there the first `fairlead` command downloads it
 instead; add `"trustedDependencies": ["fairlead"]` to `package.json` to have
-`bun install` do it. *Unreleased:* two first runs at once, such as parallel
+`bun install` do it. *Since 0.12.0:* two first runs at once, such as parallel
 git hook jobs, no longer race on that download: each extracts on its own
 and the first to finish is used ([#211](https://github.com/mahkassem/fairlead/issues/211)).
 

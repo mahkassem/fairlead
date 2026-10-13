@@ -70,8 +70,15 @@ fn has_next(cx: &Context) -> bool {
         .any(|k| manifest[k].get("next").is_some())
 }
 
+fn several_runners(cx: &Context) -> bool {
+    cx.loaded.config.tests.runners.items().len() > 1
+}
+
 fn extends_next(cx: &Context) -> bool {
-    cx.loaded.origins.values().any(|layer| layer == "pack next")
+    cx.loaded
+        .origins
+        .values()
+        .any(|layer| layer.ends_with("pack next"))
 }
 
 fn has_go(cx: &Context) -> bool {
@@ -223,10 +230,16 @@ pub const RELEASES: &[(&str, &[Note])] = &[
     ),
     (
         "0.12.0",
-        &[Note {
-            text: "The `next` pack no longer ties every end-to-end spec that calls `page.goto(` to every route and the middleware: that rule is the `next-e2e` pack now. Add `\"next-e2e\"` to `extends` to keep it, or leave it out when owner rules already map pages to specs (see Framework packs).",
-            applies: extends_next,
-        }],
+        &[
+            Note {
+                text: "The `next` pack no longer ties every end-to-end spec that calls `page.goto(` to every route and the middleware: that rule is the `next-e2e` pack now. Add `\"next-e2e\"` to `extends` to keep it, or leave it out when owner rules already map pages to specs (see Framework packs).",
+                applies: extends_next,
+            },
+            Note {
+                text: "When everything runs, a runner whose folder holds another runner's tests names its own tests instead of leaving the tool to find them, so its command line lists them; give it `all_command` to keep the tool's own discovery (see Planning).",
+                applies: several_runners,
+            },
+        ],
     ),
 ];
 

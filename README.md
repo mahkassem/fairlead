@@ -128,7 +128,7 @@ repositories are on the way
 
 ## What it does
 
-This README documents Fairlead 0.11.0. Each command, by what it's for:
+This README documents Fairlead 0.12.0. Each command, by what it's for:
 
 - **The test plan:** `plan`, `test --explain`, the import graph (`graph`) and
   coverage maps (`coverage import`).
@@ -171,12 +171,16 @@ The [quick start](#quick-start) shows the first few, and the
 
 ## Status
 
-Pre-alpha. The latest release, v0.11.0, adds a Next.js pack with `init`
-naming the pack a project needs, edges across the repositories of a
-workspace, and the SessionStart hook for Codex and Gemini CLI, and fixes
-sessions in a linked worktree going uncounted, the weekly insights
-workflow lacking the scopes replay needs, and replay leaving a Go package
-whose tests didn't build unattributed. v0.10.0 connected Fairlead to the
+Pre-alpha. The latest release, v0.12.0, fixes a runner asked to run
+everything loading another runner's tests, two first runs of the npm
+package racing on the binary's download, and the Next.js pack's
+end-to-end rule overriding a project's own spec owners, which is now its
+own pack, `next-e2e`. v0.11.0 added a Next.js pack with `init` naming the
+pack a project needs, edges across the repositories of a workspace, and
+the SessionStart hook for Codex and Gemini CLI, and fixed sessions in a
+linked worktree going uncounted, the weekly insights workflow lacking the
+scopes replay needs, and replay leaving a Go package whose tests didn't
+build unattributed. v0.10.0 connected Fairlead to the
 rest of the work and measured the setup: an MCP server (`fairlead mcp`),
 trackers that put a branch's task in the brief, escapes filed as issues
 from CI, tokens and cost per session, a readiness score (`doctor --score`),
