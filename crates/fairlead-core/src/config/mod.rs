@@ -4,7 +4,7 @@
 mod agents;
 mod knowledge;
 mod load;
-mod packs;
+pub mod packs;
 mod quarantine;
 mod stages;
 mod tracker;
