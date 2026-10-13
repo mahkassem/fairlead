@@ -207,3 +207,73 @@ fn listing_no_repositories_discovers_those_one_level_down_and_explain_finds_the_
     );
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn a_workspace_edge_carries_a_change_in_one_repository_to_the_tests_of_another() {
+    let dir = workspace("edges");
+    // Only the contract changes; web and shared are clean.
+    write(&dir, "web/src/a.ts", "export const a = 1;\n");
+    write(&dir, "api/src/a.ts", "export const a = 1;\n");
+    for repo in ["api", "web"] {
+        let r = dir.join(repo);
+        write(&r, "openapi.yaml", "openapi: 3.1.0\n");
+        write(&r, "src/client.ts", "export const client = {};\n");
+        write(
+            &r,
+            "test/client.test.ts",
+            "import { client } from '../src/client';\n",
+        );
+        git(&r, &["add", "-A"]);
+        git(&r, &["commit", "-q", "-m", "client"]);
+    }
+    write(
+        &dir,
+        "fairlead.toml",
+        &format!(
+            "{WORKSPACE}\n[[workspace.edges]]\nfrom = \"web/src/client.ts\"\nto = [\"api/openapi.yaml\"]\n"
+        ),
+    );
+    write(&dir, "api/openapi.yaml", "openapi: 3.1.1\n");
+    let plan = json(&fairlead_in(&dir, &["plan", "--json"], false));
+    let repos = plan["repos"].as_array().unwrap();
+    let web = repos
+        .iter()
+        .find(|r| r["name"] == "web")
+        .expect("web is reached");
+    assert_eq!(web["reached"][0]["file"], "src/client.ts");
+    assert_eq!(web["reached"][0]["by"], "api/openapi.yaml");
+    let tests: Vec<&str> = web["plan"]["tests"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|t| t["path"].as_str().unwrap_or(""))
+        .collect();
+    assert!(tests.contains(&"test/client.test.ts"), "{web}");
+    assert!(
+        !tests.contains(&"test/a.test.ts"),
+        "only what the edge reaches: {web}"
+    );
+    assert!(
+        plan["unchanged"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|n| n == "shared"),
+        "{plan}"
+    );
+    let text = fairlead_in(&dir, &["plan"], false);
+    assert!(String::from_utf8_lossy(&text.stdout)
+        .contains("reached across the workspace: src/client.ts from api/openapi.yaml"));
+    write(
+        &dir,
+        "fairlead.toml",
+        &format!(
+            "{WORKSPACE}\n[[workspace.edges]]\nfrom = \"site/x\"\nto = [\"api/openapi.yaml\"]\n"
+        ),
+    );
+    let refused = fairlead_in(&dir, &["plan"], false);
+    assert!(!refused.status.success());
+    assert!(
+        String::from_utf8_lossy(&refused.stderr).contains("must start with a repository's folder")
+    );
+}

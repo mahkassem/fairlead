@@ -68,6 +68,18 @@ struct RepoPlan<'a> {
     /// From the workspace folder.
     path: &'a str,
     plan: fairlead_core::plan::Plan,
+    /// Files a `[[workspace.edges]]` rule counted as changed here, each with
+    /// the changed file in another repository that reached it.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    reached: Vec<Reached>,
+}
+
+#[derive(Serialize, Clone)]
+struct Reached {
+    /// From the repository's root.
+    file: String,
+    /// From the workspace folder.
+    by: String,
 }
 
 #[derive(Serialize)]
@@ -125,36 +137,134 @@ fn plan<'a>(ws: &'a Found, cwd: &Path, changes: &Changes) -> Result<WorkspacePla
         repos: Vec::new(),
         unchanged: Vec::new(),
     };
-    for member in chosen {
+    let mut first: Vec<(&Member, fairlead_core::plan::Plan)> = Vec::new();
+    for member in &chosen {
         let own = match &files {
             None => Vec::new(),
             Some(by) => match by.iter().find(|(n, _)| *n == member.name) {
                 Some((_, list)) => list.clone(),
-                None => {
-                    planned.unchanged.push(&member.name);
-                    continue;
-                }
+                None => continue,
             },
         };
         let made = make(&member.dir, &changes_for(member, changes, own))
             .map_err(|e| format!("{}: {e}", member.name))?;
-        if made.plan.changed.is_empty() && made.plan.ignored.is_empty() && !made.plan.all {
+        first.push((member, made.plan));
+    }
+    let changed: Vec<String> = first
+        .iter()
+        .flat_map(|(m, p)| {
+            p.changed
+                .iter()
+                .map(move |c| format!("{}/{}", m.path, c.path))
+        })
+        .collect();
+    let reached = across(ws, &chosen, &changed)?;
+    for member in chosen {
+        let mine: Vec<Reached> = reached
+            .iter()
+            .filter(|(name, _)| *name == member.name)
+            .map(|(_, r)| r.clone())
+            .collect();
+        let own = first.iter().position(|(m, _)| m.name == member.name);
+        let plan = match (own, mine.is_empty()) {
+            (Some(i), true) => first.swap_remove(i).1,
+            (own, false) => {
+                let mut list: Vec<String> = own
+                    .map(|i| &first[i].1)
+                    .into_iter()
+                    .flat_map(|p| p.changed.iter().map(|c| member.dir.join(&c.path)))
+                    .chain(mine.iter().map(|r| member.dir.join(&r.file)))
+                    .map(|p| p.to_string_lossy().into_owned())
+                    .collect();
+                list.dedup();
+                make(&member.dir, &changes_for(member, changes, list))
+                    .map_err(|e| format!("{}: {e}", member.name))?
+                    .plan
+            }
+            (None, true) => {
+                planned.unchanged.push(&member.name);
+                continue;
+            }
+        };
+        if plan.changed.is_empty() && plan.ignored.is_empty() && !plan.all {
             planned.unchanged.push(&member.name);
         } else {
             planned.repos.push(RepoPlan {
                 name: &member.name,
                 path: &member.path,
-                plan: made.plan,
+                plan,
+                reached: mine,
             });
         }
     }
     Ok(planned)
 }
 
+/// The files `[[workspace.edges]]` reach from `changed` (paths from the
+/// workspace folder), by repository name; one hop, never inside one
+/// repository, where its own graph and rules decide.
+fn across(
+    ws: &Found,
+    members: &[&Member],
+    changed: &[String],
+) -> Result<Vec<(String, Reached)>, String> {
+    let mut out: Vec<(String, Reached)> = Vec::new();
+    for edge in &ws.edges {
+        let Some(owner) = members
+            .iter()
+            .find(|m| edge.from.starts_with(&format!("{}/", m.path)))
+        else {
+            continue;
+        };
+        let to = glob_set(&edge.to)?;
+        let Some(by) = changed
+            .iter()
+            .find(|c| to.is_match(c.as_str()) && !c.starts_with(&format!("{}/", owner.path)))
+        else {
+            continue;
+        };
+        let from = glob_set(std::slice::from_ref(&edge.from))?;
+        for file in fairlead_guard::git::paths_at(&owner.dir, "HEAD") {
+            if from.is_match(format!("{}/{file}", owner.path).as_str())
+                && !out.iter().any(|(n, r)| *n == owner.name && r.file == file)
+            {
+                out.push((
+                    owner.name.clone(),
+                    Reached {
+                        file,
+                        by: by.clone(),
+                    },
+                ));
+            }
+        }
+    }
+    out.sort_by(|a, b| (&a.0, &a.1.file).cmp(&(&b.0, &b.1.file)));
+    Ok(out)
+}
+
+fn glob_set(globs: &[String]) -> Result<globset::GlobSet, String> {
+    let mut set = globset::GlobSetBuilder::new();
+    for g in globs {
+        set.add(
+            globset::GlobBuilder::new(g)
+                .literal_separator(true)
+                .build()
+                .map_err(|e| format!("workspace.edges: `{g}`: {e}"))?,
+        );
+    }
+    set.build().map_err(|e| e.to_string())
+}
+
 fn render_text(planned: &WorkspacePlan) -> String {
     let mut out = String::new();
     for repo in &planned.repos {
         out.push_str(&format!("{} ({})\n", repo.name, repo.path));
+        for r in &repo.reached {
+            out.push_str(&format!(
+                "  reached across the workspace: {} from {}\n",
+                r.file, r.by
+            ));
+        }
         for line in render::text(&repo.plan).lines() {
             out.push_str(&format!("  {line}\n"));
         }
