@@ -114,6 +114,21 @@ pub fn git_dir(root: &Path) -> Option<std::path::PathBuf> {
     repo(root).map(|(_, dir)| plain(dir))
 }
 
+/// The git directory every worktree of the repository shares: the main
+/// `.git` itself, or the one a linked worktree's `commondir` file names.
+/// Hooks run from there, and records that outlive a worktree belong there.
+pub fn common_dir(root: &Path) -> Option<std::path::PathBuf> {
+    git_dir(root).map(|dir| common_of(&dir))
+}
+
+/// `common_dir` for a git directory already found.
+pub fn common_of(git_dir: &Path) -> std::path::PathBuf {
+    std::fs::read_to_string(git_dir.join("commondir"))
+        .ok()
+        .and_then(|text| std::fs::canonicalize(git_dir.join(text.trim())).ok())
+        .map_or_else(|| git_dir.to_path_buf(), plain)
+}
+
 /// The worktree's top, canonical, and its git directory.
 pub(crate) fn repo(root: &Path) -> Option<(std::path::PathBuf, std::path::PathBuf)> {
     let root = std::fs::canonicalize(root).ok()?;
@@ -210,6 +225,14 @@ mod tests {
             git_dir(&base.join("wt/src")),
             Some(real("repo/.git/worktrees/w"))
         );
+        assert_eq!(
+            common_dir(&base.join("wt/src")),
+            Some(real("repo/.git/worktrees/w")),
+            "without a commondir file the worktree's own dir is all there is"
+        );
+        std::fs::write(base.join("repo/.git/worktrees/w/commondir"), "../..\n").unwrap();
+        assert_eq!(common_dir(&base.join("wt/src")), Some(real("repo/.git")));
+        assert_eq!(common_dir(&base.join("repo/src")), Some(real("repo/.git")));
         let _ = std::fs::remove_dir_all(&base);
     }
 }

@@ -292,8 +292,8 @@ pub fn lefthook_file(root: &Path) -> std::path::PathBuf {
 
 /// Whether lefthook has put its runner in the git hooks, so the entry runs.
 pub fn lefthook_active(git_dir: &Path) -> bool {
-    std::fs::read_to_string(git_dir.join("hooks").join("pre-commit"))
-        .is_ok_and(|t| t.contains("lefthook"))
+    let hooks = fairlead_guard::git::common_of(git_dir).join("hooks");
+    std::fs::read_to_string(hooks.join("pre-commit")).is_ok_and(|t| t.contains("lefthook"))
 }
 
 fn write(path: &Path, text: &str) -> Result<(), String> {

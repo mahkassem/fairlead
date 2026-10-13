@@ -396,7 +396,11 @@ stopping it. The check stage still fails on them in CI.
 
 Each write-stage and commit-stage run appends one line to
 `.git/fairlead/events.jsonl`, inside the git directory so it's never
-committed:
+committed. Every worktree of the repository writes to that one log, the
+main checkout's, so a session in a linked worktree counts in
+`doctor --score` and `insights` and its events outlive the worktree. A log a
+worktree kept before 0.11 is still read, merged in by time, until the
+worktree is removed:
 
 ```json
 {"at":"2026-09-26T19:04:11.221Z","stage":"commit","files":3,"decision":"deny","rules":["file-length"],"added":1,"ms":7.4,"fairlead":"0.4.0"}
