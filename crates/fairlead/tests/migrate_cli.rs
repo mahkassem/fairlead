@@ -266,3 +266,34 @@ fn codex_and_gemini_hooks_from_an_older_release_are_brought_along() {
         assert!(!dir.join(file).exists(), "{file} outlived uninstall");
     }
 }
+
+#[test]
+fn a_generated_insights_workflow_is_rewritten_and_a_hand_written_one_kept() {
+    let dir = scratch("insights");
+    put(
+        &dir,
+        "fairlead.toml",
+        "fairlead = \"0.6\"\n\n[done]\nalways = []\n",
+    );
+    let (code, out) = fairlead(&dir, &["ci", "workflow", "--insights", "--write"]);
+    assert_eq!(code, 0, "{out}");
+    let path = ".github/workflows/fairlead-insights.yml";
+    let current = read(&dir, path);
+    put(
+        &dir,
+        path,
+        &current.replace(
+            "  pull-requests: read   # the pull request each run belongs to\n",
+            "",
+        ),
+    );
+    let (code, out) = fairlead(&dir, &["migrate", "--check"]);
+    assert_eq!(code, 1, "an older generated file is out of date: {out}");
+    assert!(out.contains("the weekly insights workflow"), "{out}");
+    let (code, out) = fairlead(&dir, &["migrate", "--write"]);
+    assert_eq!(code, 0, "{out}");
+    assert_eq!(read(&dir, path), current);
+    put(&dir, path, "name: ours\non: workflow_dispatch\n");
+    let (code, out) = fairlead(&dir, &["migrate", "--check"]);
+    assert_eq!(code, 0, "a workflow the team wrote is theirs: {out}");
+}
