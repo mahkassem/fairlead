@@ -4,6 +4,7 @@
 
 ### New
 
+- A Next.js pack, and `init` names the pack a project needs ([#50](https://github.com/mahkassem/fairlead/issues/50)). `extends = ["next"]` makes each App Router route depend on the layouts and boundaries of every folder above it, each Pages Router page on `_app` and `_document`, and each end-to-end spec that calls `page.goto(` on every route and `middleware`; `next.config.*` runs everything. `fairlead init` names `laravel` or `next` when the manifests show the framework, and `init --pack NAME` writes it. `graph stats` counts a pack's rules that linked no file in one line instead of listing each. See [Framework packs](https://mahkassem.github.io/fairlead/docs/graph.html#framework-packs).
 - `fairlead hooks install --codex` and `--gemini` add the `SessionStart` hook that runs `fairlead resume --hook`, as Claude Code's install does ([#162](https://github.com/mahkassem/fairlead/issues/162)). Both CLIs now have a `SessionStart` event that sends the session's `cwd` and reads `hookSpecificOutput.additionalContext` back, the same shape Claude Code uses, so a new Codex or Gemini CLI session starts with where the last one on the branch stopped. `brief.resume = false` leaves it out, and `fairlead migrate --write` adds it to hooks installed before. See [The SessionStart hook](https://mahkassem.github.io/fairlead/docs/context.html#the-sessionstart-hook).
 
 ### Changed
