@@ -273,6 +273,19 @@ fn workflows(root: &Path) -> Vec<Update> {
         .collect()
 }
 
+/// The weekly workflow `ci workflow --insights` wrote, as this release
+/// writes it, when that differs; a file without its marker is the team's.
+fn insights_workflow(root: &Path) -> Option<Update> {
+    let file = root.join(crate::ci_workflow::INSIGHTS_PATH);
+    let text = std::fs::read_to_string(&file).ok()?;
+    let fresh = crate::ci_workflow::render_insights();
+    (text.starts_with(crate::ci_workflow::MARKER) && text != fresh).then(|| Update {
+        file,
+        what: "the weekly insights workflow becomes this release's".into(),
+        change: Change::Text(fresh),
+    })
+}
+
 /// Where the repository's version came from, for the release notes.
 fn from_version(
     args_from: &Option<String>,
@@ -331,7 +344,14 @@ fn updates(root: &Path, loaded: &Loaded) -> Result<(Vec<Update>, Option<String>,
     out.extend(floor(loaded)?);
     let (package, spec) = package_pin(root)?;
     out.extend(package);
-    out.extend(workflows(root));
+    let insights = insights_workflow(root);
+    let regenerated: Vec<PathBuf> = insights.iter().map(|u| u.file.clone()).collect();
+    out.extend(insights);
+    out.extend(
+        workflows(root)
+            .into_iter()
+            .filter(|u| !regenerated.contains(&u.file)),
+    );
     Ok((out, spec, claude))
 }
 
