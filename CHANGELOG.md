@@ -4,6 +4,7 @@
 
 ### Fixed
 
+- Two first runs of the npm package at once no longer fail with `ETXTBSY` ([#211](https://github.com/mahkassem/fairlead/issues/211)). Where the install script didn't run, as under Bun without `trustedDependencies`, the first command downloads the binary, and the installer emptied its folder and extracted into it in place, so a second run, such as a parallel git hook job, could start a half-written binary. The installer now extracts beside the folder and renames it into place, and a run that loses the race uses the winner's copy. In a local test of 30 such runs, 21 failed before and none after. See [Install](https://mahkassem.github.io/fairlead/docs/install.html).
 - A runner asked to run everything no longer loads another runner's tests ([#210](https://github.com/mahkassem/fairlead/issues/210)). It ran with no files, as `bun test` from the root, and the tool found every test file under it, Playwright specs another runner owns included, which failed `done` although every real test passed. When another runner's tests sit under a runner's working directory, that runner now names its own tests instead; a runner alone keeps letting the tool find them, and `all_command` still overrides both. See [Planning](https://mahkassem.github.io/fairlead/docs/plan.html).
 
 ## 0.11.0 (2026-10-13)
