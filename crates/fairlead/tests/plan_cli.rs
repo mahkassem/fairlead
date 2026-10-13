@@ -518,3 +518,73 @@ fn the_laravel_pack_links_feature_tests_to_the_http_layer_and_stops_at_the_boot_
         "a provider runs everything"
     );
 }
+
+#[test]
+fn the_next_pack_links_routes_to_their_layouts_and_next_e2e_adds_the_specs() {
+    let dir = std::env::temp_dir().join(format!("fairlead-plan-cli-next-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    git(&dir, &["init", "-q", "-b", "main"]);
+    write(
+        &dir,
+        "package.json",
+        "{\"dependencies\": {\"next\": \"^15\"}}\n",
+    );
+    write(
+        &dir,
+        "app/layout.tsx",
+        "export default function Root() { return null }\n",
+    );
+    write(
+        &dir,
+        "app/shop/layout.tsx",
+        "export default function Shop() { return null }\n",
+    );
+    write(
+        &dir,
+        "app/shop/page.tsx",
+        "export default function Page() { return null }\n",
+    );
+    write(
+        &dir,
+        "app/shop/page.test.tsx",
+        "import Page from './page'\n",
+    );
+    write(
+        &dir,
+        "e2e/shop.spec.ts",
+        "test('shop', async ({ page }) => { await page.goto('/shop') })\n",
+    );
+    let config = |packs: &str| {
+        format!("extends = [{packs}]\n\n[tests]\nmatch = {{ replace = [\"app/**/*.test.tsx\", \"e2e/*.spec.ts\"] }}\n\n[[tests.runners]]\nid = \"vitest\"\nmatch = [\"app/**\"]\ncommand = [\"vitest\", \"run\", \"{{files}}\"]\n\n[[tests.runners]]\nid = \"playwright\"\nmatch = [\"e2e/**\"]\ncommand = [\"playwright\", \"test\", \"{{files}}\"]\n")
+    };
+    let plan = |packs: &str| -> Vec<String> {
+        write(&dir, "fairlead.toml", &config(packs));
+        git(&dir, &["add", "-A"]);
+        git(&dir, &["commit", "-q", "--allow-empty", "-m", packs]);
+        let out = fairlead_in(&dir, &["plan", "--files", "app/shop/layout.tsx", "--json"]);
+        assert!(
+            out.status.success(),
+            "{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        let plan: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+        let mut tests: Vec<String> = plan["tests"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|t| t["path"].as_str().unwrap().to_string())
+            .collect();
+        tests.sort();
+        tests
+    };
+    assert_eq!(
+        plan("\"next\""),
+        ["app/shop/page.test.tsx"],
+        "a layout reaches its routes' tests, not every spec"
+    );
+    assert_eq!(
+        plan("\"next\", \"next-e2e\""),
+        ["app/shop/page.test.tsx", "e2e/shop.spec.ts"]
+    );
+}

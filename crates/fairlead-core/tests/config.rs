@@ -739,7 +739,7 @@ fn a_built_in_pack_layers_under_the_project_whose_replace_drops_its_barrier() {
 
 #[test]
 fn every_built_in_pack_loads_and_validates() {
-    for name in ["laravel", "next"] {
+    for name in ["laravel", "next", "next-e2e"] {
         let dir = repo_with(
             &format!("pack-all-{name}"),
             &[("fairlead.toml", &format!("extends = [\"{name}\"]\n"))],
@@ -773,7 +773,7 @@ fn a_pack_is_built_in_or_a_file_and_sets_only_rules_barriers_and_run_all() {
     )
     .unwrap();
     assert!(
-        unknown.contains("neither a built-in pack (laravel, next)"),
+        unknown.contains("neither a built-in pack (laravel, next, next-e2e)"),
         "{unknown}"
     );
     let wide = error(

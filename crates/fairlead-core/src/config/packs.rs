@@ -13,6 +13,7 @@ use super::load::{error, read_layer, ConfigError};
 pub const BUILTIN: &[(&str, &str)] = &[
     ("laravel", include_str!("../../packs/laravel.toml")),
     ("next", include_str!("../../packs/next.toml")),
+    ("next-e2e", include_str!("../../packs/next-e2e.toml")),
 ];
 
 const ALLOWED: [(&str, &[&str]); 2] = [("graph", &["edges", "barrier"]), ("plan", &["run_all"])];

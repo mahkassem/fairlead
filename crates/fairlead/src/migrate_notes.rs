@@ -70,6 +70,10 @@ fn has_next(cx: &Context) -> bool {
         .any(|k| manifest[k].get("next").is_some())
 }
 
+fn extends_next(cx: &Context) -> bool {
+    cx.loaded.origins.values().any(|layer| layer == "pack next")
+}
+
 fn has_go(cx: &Context) -> bool {
     cx.root.join("go.mod").is_file() || cx.root.join("go.work").is_file()
 }
@@ -208,7 +212,7 @@ pub const RELEASES: &[(&str, &[Note])] = &[
                 applies: always,
             },
             Note {
-                text: "This is a Next.js app: `extends = [\"next\"]` makes layouts, `_app` and middleware reach the tests under them (see Framework packs).",
+                text: "This is a Next.js app: `extends = [\"next\"]` makes the layouts and `_app` above a route reach the tests under it (see Framework packs).",
                 applies: has_next,
             },
             Note {
@@ -216,6 +220,13 @@ pub const RELEASES: &[(&str, &[Note])] = &[
                 applies: always,
             },
         ],
+    ),
+    (
+        "0.12.0",
+        &[Note {
+            text: "The `next` pack no longer ties every end-to-end spec that calls `page.goto(` to every route and the middleware: that rule is the `next-e2e` pack now. Add `\"next-e2e\"` to `extends` to keep it, or leave it out when owner rules already map pages to specs (see Framework packs).",
+            applies: extends_next,
+        }],
     ),
 ];
 

@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- The `next` pack's end-to-end rule is its own pack, `next-e2e` ([#212](https://github.com/mahkassem/fairlead/issues/212)). Tying every spec that calls `page.goto(` to every route and the middleware made any route change select nearly every spec, which undid a project's own owner rules for its specs: planning 40 recent pull requests of a Next.js site, its end-to-end plans went from about 7 specs to about 17 of 26 with no change to its unit plans. `extends = ["next", "next-e2e"]` keeps the rule, and `fairlead migrate` says so for a project that extends `next`. See [Framework packs](https://mahkassem.github.io/fairlead/docs/graph.html#framework-packs).
+
 ## 0.11.0 (2026-10-13)
 
 ### New
