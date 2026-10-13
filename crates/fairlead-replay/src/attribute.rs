@@ -63,6 +63,48 @@ fn absolute(path: &str, files: &[String], has: impl Fn(&str) -> bool) -> Attribu
     Attribution::Unattributed(Vec::new())
 }
 
+/// A Go package printed by import path, `/<import path>/*_test.go`: the
+/// first test file of the one folder its longest matching tail names. A
+/// tail several folders end with is ambiguous, so unattributed.
+fn go_package(dir: &str, files: &[String]) -> Attribution {
+    let tests_in = |folder: &str| -> Vec<&String> {
+        files
+            .iter()
+            .filter(|f| {
+                f.strip_prefix(folder)
+                    .and_then(|rest| rest.strip_prefix('/'))
+                    .is_some_and(|name| !name.contains('/') && name.ends_with("_test.go"))
+            })
+            .collect()
+    };
+    let tails: Vec<&str> = dir
+        .char_indices()
+        .filter(|&(_, c)| c == '/')
+        .map(|(i, _)| &dir[i + 1..])
+        .filter(|t| !t.is_empty())
+        .collect();
+    for tail in &tails {
+        let folders: Vec<&str> = files
+            .iter()
+            .filter_map(|f| f.rsplit_once('/').map(|(d, _)| d))
+            .filter(|d| *d == *tail || d.ends_with(&format!("/{tail}")))
+            .collect::<std::collections::BTreeSet<_>>()
+            .into_iter()
+            .filter(|d| !tests_in(d).is_empty())
+            .collect();
+        match folders.as_slice() {
+            [one] => {
+                let mut tests = tests_in(one);
+                tests.sort();
+                return Attribution::File(tests[0].clone());
+            }
+            [] => continue,
+            many => return Attribution::Unattributed(many.iter().map(|d| d.to_string()).collect()),
+        }
+    }
+    Attribution::Unattributed(Vec::new())
+}
+
 pub fn attribute(
     printed: &Printed,
     repo: &Repo,
@@ -74,6 +116,9 @@ pub fn attribute(
     let has = |p: &str| repo.files.iter().any(|f| f == p);
     if has(path) {
         return Attribution::File(path.to_string());
+    }
+    if let Some(dir) = path.strip_suffix("/*_test.go") {
+        return go_package(dir, repo.files);
     }
     if is_absolute(path) {
         return absolute(path, repo.files, has);
@@ -316,5 +361,47 @@ mod tests {
             want,
             "and by suffix"
         );
+    }
+
+    #[test]
+    fn a_go_package_is_its_folders_first_test_file_by_the_longest_tail() {
+        let files: Vec<String> = [
+            "bridge/opencensus/b_test.go",
+            "bridge/opencensus/a_test.go",
+            "bridge/opencensus/bridge.go",
+            "bridge/opencensus/internal/x_test.go",
+            "metric/m_test.go",
+            "sdk/metric/m_test.go",
+        ]
+        .map(String::from)
+        .to_vec();
+        let repo = Repo {
+            files: &files,
+            packages: &[],
+        };
+        let at = |path: &str| {
+            attribute(
+                &Printed {
+                    path: path.into(),
+                    project: None,
+                    title: None,
+                },
+                &repo,
+                |_| None,
+            )
+        };
+        assert_eq!(
+            at("/go.example/otel/bridge/opencensus/*_test.go"),
+            Attribution::File("bridge/opencensus/a_test.go".into())
+        );
+        assert_eq!(
+            at("/go.example/otel/sdk/metric/*_test.go"),
+            Attribution::File("sdk/metric/m_test.go".into()),
+            "the longest tail wins over `metric` alone"
+        );
+        assert!(matches!(
+            at("/elsewhere/metric/*_test.go"),
+            Attribution::Unattributed(_)
+        ));
     }
 }
