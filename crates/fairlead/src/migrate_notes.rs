@@ -221,6 +221,7 @@ pub const SINCE: &[(&str, &str)] = &[
     ("graph.edges.find", "0.10"),
     ("workspace", "0.10"),
     ("tracker", "0.10"),
+    ("workspace.edges", "0.11"),
 ];
 
 /// Top-level tables every released config format has had.

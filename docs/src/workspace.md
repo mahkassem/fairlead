@@ -29,6 +29,7 @@ command = ["vitest", "run", "{files}"]
 | `workspace.repos` | `[]` | The repositories, each a `path` from the workspace folder to a git repository inside it. Empty means every git repository one level down, in name order. |
 | `workspace.repos.name` | the folder's name | What `--repo` and the plan call it. Two repositories with one name is an error. |
 | `workspace.repos.base` | the repository's remote default branch | The branch or commit its changes are measured from, through its merge base, as `--base` would be. |
+| `workspace.edges` | `[]` | *Since 0.11.0.* `{ from, to }` rules: the files `from` matches depend on the files `to` matches in another repository. Both are globs from the workspace folder that start with a repository's folder. See [Edges across repositories](#edges-across-repositories). |
 
 ## Planning from the folder
 
@@ -37,7 +38,7 @@ command = ["vitest", "run", "{files}"]
 - Each repository's changes are measured against its own base and merge base, so a repository with nothing new is left out of the plan and named under `unchanged`.
 - `--base` overrides every repository's base for one run, and `--repo NAME` plans only that one.
 - `--files` takes paths from where the command runs; each goes to the repository holding it, and a repository given none is unchanged.
-- `--json` prints `{"repos": [{"name", "path", "plan"}], "unchanged": [...]}`, where each `plan` is a repository's plan exactly as `fairlead plan --json` prints it inside the repository, and `path` is from the workspace folder.
+- `--json` prints `{"repos": [{"name", "path", "plan", "reached"}], "unchanged": [...]}`, where each `plan` is a repository's plan exactly as `fairlead plan --json` prints it inside the repository, and `path` is from the workspace folder.
 
 `fairlead test --explain FILE` in the folder explains `FILE` in the repository that holds it; for a check, which has no path, name the repository with `--repo`. From inside a repository, `--repo` plans another repository of the same workspace.
 
@@ -49,6 +50,20 @@ Commands inside a repository find its config as always, walking up no further th
 
 A repository's own file can't declare `[workspace]`. In CI, where the checkout is one repository, the workspace file is never read, so each repository's CI plans itself exactly as it did.
 
+## Edges across repositories
+
+*Since 0.11.0:* a dependency between repositories that no import shows, such as a contract one repository owns and another consumes, is a rule in the workspace file:
+
+```toml
+[[workspace.edges]]
+from = "web/src/api/**"
+to = ["api/openapi.yaml"]
+```
+
+When a planned change in one repository matches a `to` glob, the files in the other repository that `from` matches count as changed there, and that repository's plan follows them through its own graph to its tests. The plan names each such file under `reached`, with the change that reached it, and the text prints `reached across the workspace: src/api/client.ts from api/openapi.yaml`. A repository with nothing changed of its own is planned for what the edge reached.
+
+A rule takes one hop: what it reaches doesn't reach further through another workspace edge, and inside one repository its own graph and `[[graph.edges]]` decide. The same rule writes a path dependency by hand, `from = "web/src/**"` and `to = ["libs/shared/src/**"]`, when one repository builds another's source.
+
 ## What's next
 
-Edges across repositories are the second phase of [#52](https://github.com/mahkassem/fairlead/issues/52): a path dependency resolving into a sibling repository, a contract one repository owns and another consumes, and owner rules in the workspace file that select one repository's tests for another's changes. Until then, each repository's plan sees only its own changes.
+The rest of [#52](https://github.com/mahkassem/fairlead/issues/52)'s second phase: path dependencies found on their own (`file:../x` in npm, composer path repositories, a `go.mod` replace) rather than written as an edge, and owner rules in the workspace file.

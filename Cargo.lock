@@ -352,6 +352,7 @@ dependencies = [
  "fairlead-lang",
  "fairlead-replay",
  "fairlead-tests",
+ "globset",
  "rayon",
  "regex",
  "serde",
