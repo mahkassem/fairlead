@@ -132,7 +132,7 @@ fn bench_replays_each_commits_files_through_the_hook_with_todays_config() {
     assert!(out.contains("p95"), "{out}");
     assert!(
         !dir.join(".git/fairlead/events.jsonl").exists(),
-        "the bench logs to its own worktree"
+        "the bench's replayed edits stay out of the shared event log"
     );
     let worktrees = git(&dir, &["worktree", "list"]);
     assert_eq!(

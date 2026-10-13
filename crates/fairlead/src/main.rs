@@ -268,9 +268,9 @@ fn on_path() -> Option<PathBuf> {
 /// Hooks, the binary on the PATH, and what the event log recorded.
 fn doctor_hooks(dir: &Path, loaded: Option<&Loaded>) -> String {
     let root = graph_cmd::repo_root(dir);
-    let Some(git_dir) = fairlead_guard::git::git_dir(&root) else {
+    if fairlead_guard::git::git_dir(&root).is_none() {
         return "hooks: not a git repository\n".to_string();
-    };
+    }
     let config = loaded.map(|l| l.config.clone()).unwrap_or_default();
     let mut out: String = hooks_cmd::describe(&root, &config)
         .into_iter()
@@ -285,8 +285,9 @@ fn doctor_hooks(dir: &Path, loaded: Option<&Loaded>) -> String {
             "on PATH: no; the hooks do nothing until `fairlead` is installed\n".to_string()
         }
     });
-    let log =
-        std::fs::read_to_string(git_dir.join("fairlead").join("events.jsonl")).unwrap_or_default();
+    let log = fairlead_guard::events::EventLog::open(&root)
+        .map(|l| l.read())
+        .unwrap_or_default();
     out.push_str(&fairlead_guard::summary::render(
         &fairlead_guard::summary::summarize(&log),
     ));
