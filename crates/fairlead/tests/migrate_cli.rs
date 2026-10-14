@@ -297,3 +297,20 @@ fn a_generated_insights_workflow_is_rewritten_and_a_hand_written_one_kept() {
     let (code, out) = fairlead(&dir, &["migrate", "--check"]);
     assert_eq!(code, 0, "a workflow the team wrote is theirs: {out}");
 }
+
+#[test]
+fn a_project_that_extends_next_is_told_the_end_to_end_rule_moved() {
+    let dir = scratch("next-e2e");
+    put(&dir, "fairlead.toml", "extends = [\"next\"]\n");
+    let (code, out) = fairlead(&dir, &["migrate", "--from", "0.11.0"]);
+    assert_eq!(code, 0, "{out}");
+    assert!(
+        out.contains("that rule is the `next-e2e` pack now"),
+        "{out}"
+    );
+
+    put(&dir, "fairlead.toml", "fairlead = \"0.11\"\n");
+    let (code, out) = fairlead(&dir, &["migrate", "--from", "0.11.0"]);
+    assert_eq!(code, 0, "{out}");
+    assert!(!out.contains("next-e2e"), "{out}");
+}

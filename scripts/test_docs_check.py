@@ -104,6 +104,12 @@ class DocsCheck(unittest.TestCase):
         [p] = self.problems(tag)
         self.assertIn('an "unreleased" label is left', p)
 
+    def test_an_unreleased_label_in_parentheses_fails_a_release_too(self):
+        tag = self.released()
+        self.edit("README.md", "*Since 0.4.0:*", "*(Unreleased)*")
+        [p] = self.problems(tag)
+        self.assertIn('an "unreleased" label is left', p)
+
     def test_releasing_a_tag_the_version_doesnt_match_fails(self):
         self.released()
         [p] = self.problems("v9.9.9")

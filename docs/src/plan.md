@@ -114,7 +114,7 @@ The plan lists what to run as `invocations`, each an argv and a working director
 
 - A runner with `invoke = "once"` gets one invocation with every selected test.
 - A runner with `invoke = "per-module"` gets one per module holding selected tests, in `cwd` with `{module}` (the module's root) and `{module.id}` (its name) filled in, with files relative to that directory.
-- Under `run_all` or a widening to everything, `{files}` expands to nothing, so each runner runs its whole suite, per module for per-module runners. *Since 0.7.1:* a runner with `all_command` runs that instead of `command`, for a tool that, given no files, finds more tests than the runner's `match` claims ([Configuration](config.md)). *Unreleased:* a runner whose working directory holds another runner's tests names its own instead, since the tool would load the others too, as `bun test` loads Playwright specs; a runner with `all_command` still runs that ([#210](https://github.com/mahkassem/fairlead/issues/210)).
+- Under `run_all` or a widening to everything, `{files}` expands to nothing, so each runner runs its whole suite, per module for per-module runners. *Since 0.7.1:* a runner with `all_command` runs that instead of `command`, for a tool that, given no files, finds more tests than the runner's `match` claims ([Configuration](config.md)). *Since 0.12.0:* a runner whose working directory holds another runner's tests names its own instead, since the tool would load the others too, as `bun test` loads Playwright specs; a runner with `all_command` still runs that ([#210](https://github.com/mahkassem/fairlead/issues/210)).
 - Each selected check follows the runners.
 - A test or check a `[[quarantine]]` entry holds on this machine runs alone, after the rest (below).
 

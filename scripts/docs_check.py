@@ -160,7 +160,7 @@ def check_release(root: Path, tag: str, version: str, first: str | None) -> list
         for n, m in lines_matching(text, rf"mahkassem/fairlead@v({VERSION})"):
             if m.group(1) != version:
                 problems.append(f"{rel}:{n}: the action is pinned at v{m.group(1)}, not v{version}")
-        for n, _ in lines_matching(text, r"\bunreleased:", re.I):
+        for n, _ in lines_matching(text, r"\bunreleased\b", re.I):
             problems.append(f"{rel}:{n}: an \"unreleased\" label is left")
     return problems
 
