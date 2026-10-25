@@ -134,7 +134,10 @@ repositories are on the way
 This README documents Fairlead 0.12.0. Each command, by what it's for:
 
 - **The test plan:** `plan`, `test --explain`, the import graph (`graph`) and
-  coverage maps (`coverage import`).
+  coverage maps (`coverage import`). *Unreleased:* `graph hubs` lists the
+  files that link the most changes to the most tests and the barrier that
+  would cut the top one, and a changed barrier file selects its importers'
+  tests.
 - **Plans in CI:** `ci plan` (by stage, with `--since-green`), `ci run` (with
   `--results`, `--judge`, `--only` and `--except`), `ci report`, `ci workflow`,
   which writes a staged workflow, and the GitHub Action.
@@ -149,7 +152,7 @@ This README documents Fairlead 0.12.0. Each command, by what it's for:
   lists, reviews and checks them. The brief offers the ones a change reaches.
 - **Skills:** `[[skills.routes]]` scopes each SKILL.md, and the brief lists the
   skills a change reaches. `import rules` turns path-scoped rule files into
-  skills and routes, and `skills sync` writes each skill where Claude Code,
+  skills and routes, and refreshes a skill when its rule changes, and `skills sync` writes each skill where Claude Code,
   Codex and Cursor load it.
 - **Finding things:** `find` searches lessons, skills, docs headings and
   declared names, nearest the brief first.
