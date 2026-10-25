@@ -149,6 +149,7 @@ mod tests {
             target: Target::Test("t.test.ts".into()),
             outcome,
             hit_by: None,
+            why: String::new(),
             judged: None,
             detail: String::new(),
             changed: Vec::new(),

@@ -3,6 +3,7 @@
 //! attribution and the report are plain functions over recorded data.
 
 pub mod attribute;
+pub mod compare;
 pub mod dataset;
 pub mod extract;
 pub mod fetch;
