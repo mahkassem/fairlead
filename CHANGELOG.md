@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### New
+
+- Sharding a plan ([#221](https://github.com/mahkassem/fairlead/issues/221), ask 4). `fairlead ci plan --shards N` splits each runner's selected test files into N lists, longest first, by `--durations FILE`: a JSON object of path to seconds, or a JUnit XML report, whose test case times are summed per file. A file with no duration weighs the median of the known ones, and without durations the lists balance by file count; the same plan and durations always give the same shards. `ci run --shard K/N` runs one list, and shard 1 also runs everything that isn't split (checks, whole-runner invocations, tests held to run alone), so a matrix runs each invocation once. A shard the plan doesn't have is refused. `ci report` takes `--results` once per job and reports them as one run, naming any shard that sent none. A plan made without `--shards` is unchanged. See [Sharding a plan](https://mahkassem.github.io/fairlead/docs/ci.html#sharding-a-plan).
+
 ## 0.12.0 (2026-10-14)
 
 ### Changed

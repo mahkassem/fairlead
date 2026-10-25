@@ -47,6 +47,15 @@ pub enum CiAction {
         /// for several jobs. When that commit can't be trusted, plan everything.
         #[arg(long, value_name = "JOB")]
         since_green: Vec<String>,
+        /// Split each runner's selected test files into N lists, one per
+        /// job of a matrix that runs `ci run --shard K/N`.
+        #[arg(long, value_name = "N")]
+        shards: Option<u32>,
+        /// Seconds per test file that balance the shards: a JSON object of
+        /// path to seconds, or a JUnit XML report. Repeatable; times add up.
+        /// Without it the shards balance by file count.
+        #[arg(long, value_name = "FILE", requires = "shards")]
+        durations: Vec<PathBuf>,
     },
     /// Run a plan's invocations in order; exits non-zero if any fails.
     Run {
@@ -69,6 +78,10 @@ pub enum CiAction {
         /// Run everything but these runners and checks, by id.
         #[arg(long, value_name = "ID")]
         except: Vec<String>,
+        /// Run only shard K of a plan made with `ci plan --shards N`; shard 1
+        /// also runs everything the plan doesn't split.
+        #[arg(long, value_name = "K/N")]
+        shard: Option<String>,
     },
     /// Write the run's summary: what the plan selected and why, what ran and
     /// failed, and the change's receipt when one is given. To
@@ -76,9 +89,10 @@ pub enum CiAction {
     Report {
         #[arg(long, value_name = "PATH")]
         plan: PathBuf,
-        /// The file `ci run --results` wrote.
+        /// The file `ci run --results` wrote. Repeat it for the files a
+        /// matrix's jobs wrote, such as one per shard, to report them as one.
         #[arg(long, value_name = "PATH")]
-        results: Option<PathBuf>,
+        results: Vec<PathBuf>,
         /// A receipt the branch carries, as `fairlead receipt --out` wrote it.
         #[arg(long, value_name = "PATH")]
         receipt: Option<PathBuf>,
@@ -108,10 +122,19 @@ pub fn run(action: CiAction, cwd: &Path) -> ExitCode {
             out,
             stage,
             since_green,
+            shards,
+            durations,
         } => {
-            let out = out.unwrap_or_else(default_out);
-            let green = since_green.as_slice();
-            plan(cwd, changes, head.as_deref(), format, &out, stage, green)
+            let opts = PlanOpts {
+                head,
+                format,
+                out: out.unwrap_or_else(default_out),
+                stage,
+                since_green,
+                shards,
+                durations,
+            };
+            plan(cwd, changes, &opts)
         }
         CiAction::Run {
             plan,
@@ -120,8 +143,13 @@ pub fn run(action: CiAction, cwd: &Path) -> ExitCode {
             judge,
             only,
             except,
+            shard,
         } => {
-            let pick = Pick { only, except };
+            let pick = Pick {
+                only,
+                except,
+                shard,
+            };
             execute(
                 cwd,
                 &plan,
@@ -136,7 +164,7 @@ pub fn run(action: CiAction, cwd: &Path) -> ExitCode {
             results,
             receipt,
             comment,
-        } => crate::ci_report::run(cwd, &plan, results.as_deref(), receipt.as_deref(), comment),
+        } => crate::ci_report::run(cwd, &plan, &results, receipt.as_deref(), comment),
         CiAction::Workflow { write, insights } => crate::ci_workflow::run(cwd, write, insights),
     };
     result.unwrap_or_else(|e| {
@@ -176,21 +204,24 @@ fn head_matches(cwd: &Path, expected: &str) -> Result<(), String> {
     ))
 }
 
-fn plan(
-    cwd: &Path,
-    mut changes: Changes,
-    head: Option<&str>,
+struct PlanOpts {
+    head: Option<String>,
     format: Format,
-    out: &Path,
-    stage_arg: Option<StageArg>,
-    since_green: &[String],
-) -> Result<ExitCode, String> {
-    if let Some(head) = head {
+    out: PathBuf,
+    stage: Option<StageArg>,
+    since_green: Vec<String>,
+    shards: Option<u32>,
+    durations: Vec<PathBuf>,
+}
+
+fn plan(cwd: &Path, mut changes: Changes, opts: &PlanOpts) -> Result<ExitCode, String> {
+    let (format, out, since_green) = (opts.format, &opts.out, &opts.since_green);
+    if let Some(head) = &opts.head {
         head_matches(cwd, head)?;
     }
     let config = crate::plan_cmd::config_for(cwd, &changes)?;
     let event = stage::Event::from_env();
-    let resolved = stage::resolve(stage_arg, &config, event.as_ref());
+    let resolved = stage::resolve(opts.stage, &config, event.as_ref());
     if let Some(s) = resolved.stage {
         println!("stage: {s} ({})", resolved.why);
         if s == fairlead_core::config::CiStage::Full {
@@ -205,6 +236,12 @@ fn plan(
     }
     if let Some(line) = crate::reuse::apply(&mut planned.plan, &planned.config, event.as_ref()) {
         println!("{line}");
+    }
+    if let Some(count) = opts.shards {
+        println!(
+            "{}",
+            crate::ci_shard::plan(cwd, &mut planned, count, &opts.durations)?
+        );
     }
     let runs = stage::run_outputs(&planned.plan, &planned.config)?;
     let json = serde_json::to_string_pretty(&planned.plan).expect("plan prints");
@@ -242,6 +279,7 @@ fn plan(
 struct Pick {
     only: Vec<String>,
     except: Vec<String>,
+    shard: Option<String>,
 }
 
 impl Pick {
@@ -357,10 +395,15 @@ fn execute(
     pick: &Pick,
 ) -> Result<ExitCode, String> {
     let mut plan = read_plan(cwd, plan_path)?;
+    if let Some(arg) = &pick.shard {
+        println!("{}", crate::ci_shard::pick(&mut plan, arg)?);
+    }
     pick.check(cwd, &plan)?;
     let planned = plan.invocations.len();
     plan.invocations.retain(|i| pick.wants(&i.id));
-    let ran_all = plan.invocations.len() == planned;
+    // One shard of several is only part of the plan, as `--only` is.
+    let one_of_several = pick.shard.is_some() && plan.shards.as_ref().is_some_and(|s| s.count > 1);
+    let ran_all = plan.invocations.len() == planned && !one_of_several;
     let root = crate::graph_cmd::repo_root(cwd);
     let merge = judge.map(|p| read_plan(cwd, p)).transpose()?;
     let config = match &merge {
@@ -420,7 +463,8 @@ fn execute(
         }
     }
     if let Some(path) = results {
-        crate::ci_report::write_results(&cwd.join(path), &plan, ran, &judged, started)?;
+        let shard = pick.shard.as_deref();
+        crate::ci_report::write_results(&cwd.join(path), &plan, ran, &judged, started, shard)?;
     }
     if failed.is_empty() && held == 0 {
         let config = fairlead_core::config::load(cwd, &LoadOptions::from_process(Vec::new()));

@@ -42,6 +42,8 @@ Pin the action and `actions/checkout` to a commit SHA in your own workflows.
 | `--set KEY=VALUE` | | Override a config value for this run. |
 | `--stage auto\|none\|draft\|ready\|merge\|full` | `auto` for a config that uses [stages](#stages), else none | *Since 0.8.0:* the stage to plan for. `none` plans as before stages existed. |
 | `--since-green JOB` | none | *Since 0.8.0:* at the merge stage, plan from the last commit where the job JOB passed, so one run covers the batch merged since ([batching](#batching-after-merge---since-green)). Repeatable. Ignored at other stages. |
+| `--shards N` | none | *Unreleased:* split the plan across N jobs ([sharding](#sharding-a-plan)). |
+| `--durations FILE` | none | *Unreleased:* seconds per test file that balance the shards: a JSON object of path to seconds, or a JUnit XML report. Repeatable. Needs `--shards`. |
 
 A missing merge base fails with exit code 2, never an empty plan: fetch more history or pass `--files`.
 
@@ -168,6 +170,69 @@ An invocation a [`[[quarantine]]` entry](plan.md#tests-that-lie-on-one-platform)
 
 `--results PATH` also writes each invocation's id, working directory, argv, outcome and seconds, for `fairlead ci report`, with `"quarantined": true` on one that failed as its entry expects.
 
+### Sharding a plan
+
+*Unreleased:* `ci plan --shards N` splits the plan so a matrix of N jobs runs it, each job with `ci run --shard K/N`, K from 1 to N.
+
+- **What is split:** each runner that names its tests, by `{files}`, `{class}`, `{classes}` or `{packages}`, has its selected test files divided into N lists. A `{packages}` runner divides whole directories, so no package runs in two jobs. A per-module runner keeps one invocation per module in each shard, from the module's directory.
+- **Balance:** longest first. The heaviest file goes to the shard with the least so far, a tie to the lower shard, and files of the same weight go in path order, so the same plan and durations always give the same shards. All runners share the balance, since one job runs each of its runners in turn.
+- **Weights:** with `--durations`, a file weighs its seconds. A file the durations don't name weighs the median of the selected files they do name, or 1 when they name none. Without `--durations`, every file weighs 1, so the shards balance by file count.
+- **The rest runs in shard 1, once:** checks, runners that name no files, tests a `[[quarantine]]` entry runs alone, and runners with no selected files run in the first shard only. So a matrix that runs every K once runs each invocation once, and the test files of every split runner once between them.
+- **A plan that runs everything** still splits a runner by its own test files, as the plan lists them, instead of letting the tool find them. A runner with an `all_command` isn't split then: its command finds tests the runner's `match` may not claim, so it runs whole in shard 1.
+- **In the plan JSON,** `shards` holds the count, `by` (`durations` or `files`), the ids of the runners `split`, and one list per shard with its `files`, their `weight` and the `invocations` it runs. A plan made without `--shards` has no `shards` key and is unchanged. `invocations` stays the whole plan, so `ci run` without `--shard` still runs it all in one job.
+
+`ci run --shard K/N` exits with code 2, running nothing, when the plan has no shards or a count other than N, or when K isn't from 1 to N. `--only` and `--except` narrow a shard as they narrow a plan. A shard records nothing for [reuse at merge](#reuse-at-merge), since it ran only part of the plan.
+
+**Durations.** A JSON file maps each test file's path to seconds: `{"test/cart.test.ts": 12.4}`. A JUnit XML report sums the `time` of each `testcase` per file. The file comes from the test case's `file` attribute, else its `testsuite`'s, else a `classname` that holds a `/`. A suite with a file whose test cases carry no time counts its own `time`. A path is matched from the repository root or from the directory the runner runs in. An absolute path inside the repository works too. Several `--durations` files add up, so the reports of the last run's shards can be passed together.
+
+**Results from N jobs.** Each shard's `--results` file records the shard. Pass them all to `ci report`, repeating `--results`, and the report reads as one run: every invocation, the time of the longest job, and passed only when every shard passed. A shard with no results file makes the report say "incomplete" and name it; one passed twice is refused with exit code 2.
+
+`fairlead ci workflow` doesn't write a matrix. Add one by hand, with the same N in the plan and the matrix:
+
+```yaml
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - run: bunx fairlead ci plan --base "origin/${{ github.base_ref }}" --shards 4 --durations ci/durations.json --out "$RUNNER_TEMP/plan.json"
+      - uses: actions/upload-artifact@v7
+        with: { name: plan, path: "${{ runner.temp }}/plan.json" }
+  test:
+    needs: plan
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@v8
+        with: { name: plan, path: "${{ runner.temp }}" }
+      - run: bunx fairlead ci run --plan "$RUNNER_TEMP/plan.json" --shard ${{ matrix.shard }}/4 --results "$RUNNER_TEMP/results-${{ matrix.shard }}.json"
+      - if: always()
+        uses: actions/upload-artifact@v7
+        with: { name: "results-${{ matrix.shard }}", path: "${{ runner.temp }}/results-${{ matrix.shard }}.json" }
+  report:
+    needs: [plan, test]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@v8
+        with: { path: "${{ runner.temp }}", merge-multiple: true }
+      - run: bunx fairlead ci report --plan "$RUNNER_TEMP/plan.json" $(for f in "$RUNNER_TEMP"/results-*.json; do echo --results "$f"; done)
+```
+
+The loop passes only the results files that exist, since `ci report` stops at a file it can't read: a job that never wrote one shows as a missing shard, and the report says the run is incomplete.
+
 ### Escapes: `--judge PATH`
 
 Once pull requests run only the plan, the default branch's push run, which still runs everything, is where a missed test shows. `--judge` takes the plan the merged change got, made again against the push's first parent, and judges each failing test file against it:
@@ -210,7 +275,7 @@ Writes one Markdown summary of the run. It goes to `$GITHUB_STEP_SUMMARY` when G
 - the plan: how many changed files and what it selected, with a count of each reason a test was picked;
 - changed files no test reaches, and what the plan did about each;
 - the tests and checks not provable where the plan was made, each with its evidence and where it is proved instead;
-- with `--results`, a line per invocation with its outcome and time, and a block with the command to run each failed one again;
+- with `--results`, a line per invocation with its outcome and time, and a block with the command to run each failed one again. *Unreleased:* repeat `--results` for the files several jobs wrote, such as [one per shard](#sharding-a-plan), to report them as one run;
 - with `--receipt FILE`, the [receipt](receipt.md) a branch carries, as `fairlead receipt --out` wrote it, folded away.
 
 Results from another plan are refused with exit code 2.

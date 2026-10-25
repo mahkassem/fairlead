@@ -72,6 +72,42 @@ pub struct Plan {
     /// this exact tree, and the steps skipped for it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reused: Option<Reused>,
+    /// `ci plan --shards N`: the same invocations split across N jobs.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub shards: Option<Shards>,
+}
+
+/// The plan's invocations split across `count` jobs, each running one list
+/// by `ci run --shard K/N`. The runners in `split` have their test files
+/// divided between the lists; every other invocation is in the first list
+/// only, so a matrix runs each exactly once.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct Shards {
+    pub count: u32,
+    /// What balanced the lists.
+    pub by: ShardWeight,
+    /// The runners whose test files were divided, by id.
+    pub split: Vec<String>,
+    /// One per shard, in order: `ci run --shard 1/N` runs the first.
+    pub lists: Vec<Shard>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "kebab-case")]
+pub enum ShardWeight {
+    /// Seconds per test file from `--durations`.
+    Durations,
+    /// One per test file.
+    Files,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct Shard {
+    /// The divided runners' test files this shard runs.
+    pub files: Vec<String>,
+    /// Their summed weight: seconds by durations, or the file count.
+    pub weight: f64,
+    pub invocations: Vec<Invocation>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]

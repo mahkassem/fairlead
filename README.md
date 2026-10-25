@@ -134,7 +134,9 @@ This README documents Fairlead 0.12.0. Each command, by what it's for:
   coverage maps (`coverage import`).
 - **Plans in CI:** `ci plan` (by stage, with `--since-green`), `ci run` (with
   `--results`, `--judge`, `--only` and `--except`), `ci report`, `ci workflow`,
-  which writes a staged workflow, and the GitHub Action.
+  which writes a staged workflow, and the GitHub Action. *Unreleased:*
+  `ci plan --shards N` splits a plan across a matrix of N jobs, balanced by
+  past durations, and `ci run --shard K/N` runs one job's share.
 - **Rules as the agent works:** `guard check`, the hooks `hooks install` adds,
   and `doctor`.
 - **The change loop:** `brief` before an edit, or `context` for the brief with

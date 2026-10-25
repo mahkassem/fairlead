@@ -15,6 +15,7 @@ use std::collections::BTreeMap;
 use fairlead_core::config::{CheckFiles, Invoke, Runner};
 use fairlead_core::plan::{CheckSelection, Invocation, InvocationKind, Quarantined, TestSelection};
 
+use crate::modules::Modules;
 use crate::pattern::Pattern;
 use crate::planner::Context;
 
@@ -114,6 +115,117 @@ fn runner_argv(
     argv
 }
 
+fn runner_invocation(runner: &Runner, cwd: String, argv: Vec<String>) -> Invocation {
+    Invocation {
+        id: runner.id.clone(),
+        kind: InvocationKind::Runner,
+        cwd,
+        argv,
+        quarantined: None,
+    }
+}
+
+/// Where a runner that runs once runs: its `cwd` unless that names a module.
+fn once_cwd(runner: &Runner) -> String {
+    runner
+        .cwd
+        .clone()
+        .filter(|c| !c.contains('{'))
+        .unwrap_or_else(|| ".".into())
+}
+
+/// A module's root and id, by name; `.` and an empty id for no module.
+fn module_of(modules: &Modules, module: Option<&String>) -> (String, String) {
+    let root = module
+        .and_then(|name| modules.all().iter().find(|m| &m.name == name))
+        .map_or(".".to_string(), |m| m.root.clone());
+    (root, module.cloned().unwrap_or_default())
+}
+
+fn module_cwd(runner: &Runner, root: &str, id: &str) -> String {
+    runner.cwd.as_deref().map_or(".".to_string(), |c| {
+        c.replace("{module.id}", id).replace("{module}", root)
+    })
+}
+
+/// The directory a runner's invocation holding `test` runs in.
+pub fn working_dir(modules: &Modules, runner: &Runner, test: &TestSelection) -> String {
+    match runner.invoke {
+        Invoke::Once => once_cwd(runner),
+        Invoke::PerModule => {
+            let (root, id) = module_of(modules, test.module.as_ref());
+            module_cwd(runner, &root, &id)
+        }
+    }
+}
+
+/// One invocation per module group, each naming its tests unless `all`.
+fn grouped(
+    modules: &Modules,
+    runner: &Runner,
+    groups: BTreeMap<Option<String>, Vec<&TestSelection>>,
+    all: bool,
+    excluded: &[&TestSelection],
+) -> Vec<Invocation> {
+    groups
+        .into_iter()
+        .map(|(module, tests)| {
+            let (root, id) = module_of(modules, module.as_ref());
+            let cwd = module_cwd(runner, &root, &id);
+            let files: Vec<String> = if all {
+                Vec::new()
+            } else {
+                tests.iter().map(|t| relative_to(&cwd, &t.path)).collect()
+            };
+            let excluded: Vec<String> = excluded
+                .iter()
+                .filter(|t| t.module == module)
+                .map(|t| relative_to(&cwd, &t.path))
+                .collect();
+            let argv = runner_argv(runner, &files, all, Some((&root, &id)), &excluded);
+            runner_invocation(runner, cwd, argv)
+        })
+        .collect()
+}
+
+fn once(
+    runner: &Runner,
+    tests: &[&TestSelection],
+    all: bool,
+    excluded: &[&TestSelection],
+) -> Invocation {
+    let cwd = once_cwd(runner);
+    let files: Vec<String> = if all {
+        Vec::new()
+    } else {
+        tests.iter().map(|t| relative_to(&cwd, &t.path)).collect()
+    };
+    let excluded: Vec<String> = excluded
+        .iter()
+        .map(|t| relative_to(&cwd, &t.path))
+        .collect();
+    let argv = runner_argv(runner, &files, all, None, &excluded);
+    runner_invocation(runner, cwd, argv)
+}
+
+/// A runner's invocations naming just `tests`, as a plan that doesn't run
+/// everything builds them: none when `tests` is empty.
+pub fn naming(modules: &Modules, runner: &Runner, tests: &[&TestSelection]) -> Vec<Invocation> {
+    if tests.is_empty() {
+        return Vec::new();
+    }
+    match runner.invoke {
+        Invoke::Once => vec![once(runner, tests, false, &[])],
+        Invoke::PerModule => {
+            let mut groups: BTreeMap<Option<String>, Vec<&TestSelection>> = BTreeMap::new();
+            for test in tests {
+                groups.entry(test.module.clone()).or_default().push(test);
+            }
+            grouped(modules, runner, groups, false, &[])
+        }
+    }
+}
+
 /// A runner's invocations. `excluded` are held tests a run of everything
 /// leaves out, by the runner's `exclude_arg`, because they run alone.
 fn runner_invocations(
@@ -123,34 +235,12 @@ fn runner_invocations(
     all: bool,
     excluded: &[&TestSelection],
 ) -> Vec<Invocation> {
-    let invocation = |cwd: String, argv: Vec<String>| Invocation {
-        id: runner.id.clone(),
-        kind: InvocationKind::Runner,
-        cwd,
-        argv,
-        quarantined: None,
-    };
     match runner.invoke {
         Invoke::Once => {
             if tests.is_empty() && !all {
                 return Vec::new();
             }
-            let cwd = runner
-                .cwd
-                .clone()
-                .filter(|c| !c.contains('{'))
-                .unwrap_or_else(|| ".".into());
-            let files: Vec<String> = if all {
-                Vec::new()
-            } else {
-                tests.iter().map(|t| relative_to(&cwd, &t.path)).collect()
-            };
-            let excluded: Vec<String> = excluded
-                .iter()
-                .map(|t| relative_to(&cwd, &t.path))
-                .collect();
-            let argv = runner_argv(runner, &files, all, None, &excluded);
-            vec![invocation(cwd, argv)]
+            vec![once(runner, tests, all, excluded)]
         }
         Invoke::PerModule => {
             let mut groups: BTreeMap<Option<String>, Vec<&TestSelection>> = BTreeMap::new();
@@ -166,31 +256,7 @@ fn runner_invocations(
             for test in tests {
                 groups.entry(test.module.clone()).or_default().push(test);
             }
-            groups
-                .into_iter()
-                .map(|(module, tests)| {
-                    let root = module
-                        .as_ref()
-                        .and_then(|name| cx.modules.all().iter().find(|m| &m.name == name))
-                        .map_or(".".to_string(), |m| m.root.clone());
-                    let id = module.clone().unwrap_or_default();
-                    let cwd = runner.cwd.as_deref().map_or(".".to_string(), |c| {
-                        c.replace("{module.id}", &id).replace("{module}", &root)
-                    });
-                    let files: Vec<String> = if all {
-                        Vec::new()
-                    } else {
-                        tests.iter().map(|t| relative_to(&cwd, &t.path)).collect()
-                    };
-                    let excluded: Vec<String> = excluded
-                        .iter()
-                        .filter(|t| t.module == module)
-                        .map(|t| relative_to(&cwd, &t.path))
-                        .collect();
-                    let argv = runner_argv(runner, &files, all, Some((&root, &id)), &excluded);
-                    invocation(cwd, argv)
-                })
-                .collect()
+            grouped(&cx.modules, runner, groups, all, excluded)
         }
     }
 }

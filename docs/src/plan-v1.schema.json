@@ -360,6 +360,83 @@
       ],
       "type": "object"
     },
+    "Shard": {
+      "properties": {
+        "files": {
+          "description": "The divided runners' test files this shard runs.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "invocations": {
+          "items": {
+            "$ref": "#/$defs/Invocation"
+          },
+          "type": "array"
+        },
+        "weight": {
+          "description": "Their summed weight: seconds by durations, or the file count.",
+          "format": "double",
+          "type": "number"
+        }
+      },
+      "required": [
+        "files",
+        "weight",
+        "invocations"
+      ],
+      "type": "object"
+    },
+    "ShardWeight": {
+      "oneOf": [
+        {
+          "const": "durations",
+          "description": "Seconds per test file from `--durations`.",
+          "type": "string"
+        },
+        {
+          "const": "files",
+          "description": "One per test file.",
+          "type": "string"
+        }
+      ]
+    },
+    "Shards": {
+      "description": "The plan's invocations split across `count` jobs, each running one list\nby `ci run --shard K/N`. The runners in `split` have their test files\ndivided between the lists; every other invocation is in the first list\nonly, so a matrix runs each exactly once.",
+      "properties": {
+        "by": {
+          "$ref": "#/$defs/ShardWeight",
+          "description": "What balanced the lists."
+        },
+        "count": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "lists": {
+          "description": "One per shard, in order: `ci run --shard 1/N` runs the first.",
+          "items": {
+            "$ref": "#/$defs/Shard"
+          },
+          "type": "array"
+        },
+        "split": {
+          "description": "The runners whose test files were divided, by id.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "count",
+        "by",
+        "split",
+        "lists"
+      ],
+      "type": "object"
+    },
     "Status": {
       "enum": [
         "added",
@@ -531,6 +608,17 @@
         }
       ],
       "description": "At merge, the pull request that passed the ready stage's steps on\nthis exact tree, and the steps skipped for it."
+    },
+    "shards": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Shards"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "`ci plan --shards N`: the same invocations split across N jobs."
     },
     "stage": {
       "anyOf": [

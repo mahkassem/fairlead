@@ -5,6 +5,7 @@
 pub mod bump;
 pub mod checks;
 pub mod digest;
+pub mod durations;
 pub mod explain;
 pub mod git;
 pub mod invoke;
@@ -16,6 +17,7 @@ pub mod planner;
 pub mod quarantine;
 pub mod render;
 pub mod select;
+pub mod shard;
 pub mod testfiles;
 pub mod trims;
 pub mod walk;
