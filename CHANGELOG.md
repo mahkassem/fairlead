@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- `doctor` names the binary it runs and the versions the repository names: `package.json`'s spec, the package under `node_modules` and the config's floor. It warns when `package.json` asks for a later version than the binary, as when a new worktree's `node_modules` is a copy of an older one, and when the installed package isn't the binary that runs, as when a global install comes first on the PATH. Before, the first sign was a config check failing on the floor. See [Install](https://mahkassem.github.io/fairlead/docs/install.html).
+
 ## 0.12.0 (2026-10-14)
 
 ### Changed
