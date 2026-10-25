@@ -14,6 +14,7 @@
 
 ### Fixed
 
+- The weekly workflow `ci workflow --insights` writes passes `--config` to `replay run`. It left the flag out, so its replay step failed on every run with a missing-argument error and the summary had no replay figures. The job now names the config the planner finds at the repository root. `fairlead migrate` rewrites a generated file, so an existing one picks this up. See [Insights](https://mahkassem.github.io/fairlead/docs/insights.html).
 - `import rules --write` refreshes a routed skill whose rule changed ([#217](https://github.com/mahkassem/fairlead/issues/217)). It left an already routed skill alone even when its rule file's body had changed, so `skills sync` kept copying the stale body and a repository that keeps its rule files as the source had to hand-copy each edit. Now a dry run lists such a skill as `lags its rule`, `--write` rewrites its body and says `refreshed`, keeping the skill's front matter (a description edited by hand stays) and its route, and `--check` exits 1 without writing, for a hook or CI step. See [Skills](https://mahkassem.github.io/fairlead/docs/skills.html#starting-from-rule-files-import-rules).
 
 ### Fixed
