@@ -140,3 +140,60 @@ fn a_different_skill_in_the_way_stops_the_write_before_anything_is_written() {
     assert!(!dir.join(".claude/skills/house").exists());
     assert_eq!(read(&dir, "fairlead.toml"), CONFIG);
 }
+
+#[test]
+fn an_edited_rule_refreshes_its_skill_body_and_keeps_the_front_matter() {
+    let dir = repo("refresh");
+    let (code, out) = fairlead(&dir, &["import", "rules", ".claude/rules", "--write"]);
+    assert_eq!(code, 0, "{out}");
+    let skill = ".claude/skills/api/SKILL.md";
+    let hand = read(&dir, skill).replace("How API handlers validate", "Edited by hand");
+    write(&dir, skill, &hand);
+    let (code, out) = fairlead(&dir, &["import", "rules", ".claude/rules", "--check"]);
+    assert_eq!(code, 0, "an unchanged rule passes the check:\n{out}");
+    let rule = read(&dir, ".claude/rules/api.md");
+    write(
+        &dir,
+        ".claude/rules/api.md",
+        &format!("{rule}Then authorize.\n"),
+    );
+    let config = read(&dir, "fairlead.toml");
+
+    let (code, out) = fairlead(&dir, &["import", "rules", ".claude/rules", "--check"]);
+    assert_eq!(code, 1, "{out}");
+    assert!(
+        out.contains("lags its rule: .claude/skills/api/SKILL.md"),
+        "{out}"
+    );
+    let (code, out) = fairlead(&dir, &["import", "rules", ".claude/rules"]);
+    assert_eq!(code, 0, "{out}");
+    assert!(
+        out.contains("dry run: --write refreshes 1 skill(s)"),
+        "{out}"
+    );
+    assert_eq!(read(&dir, skill), hand, "a dry run writes nothing");
+
+    let (code, out) = fairlead(&dir, &["import", "rules", ".claude/rules", "--write"]);
+    assert_eq!(code, 0, "{out}");
+    assert!(
+        out.contains("refreshed .claude/skills/api/SKILL.md"),
+        "{out}"
+    );
+    let refreshed = read(&dir, skill);
+    assert!(
+        refreshed.contains("description: \"Edited by hand\""),
+        "{refreshed}"
+    );
+    assert!(
+        refreshed.ends_with("Validate first.\nThen authorize.\n"),
+        "{refreshed}"
+    );
+    assert_eq!(
+        read(&dir, "fairlead.toml"),
+        config,
+        "the routes stay as they are"
+    );
+    let (code, out) = fairlead(&dir, &["import", "rules", ".claude/rules", "--write"]);
+    assert_eq!(code, 0, "{out}");
+    assert!(out.contains("nothing to import"), "{out}");
+}

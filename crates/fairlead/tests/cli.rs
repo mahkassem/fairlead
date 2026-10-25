@@ -357,3 +357,33 @@ fn a_reader_that_stops_early_ends_the_run_quietly_with_the_sigpipe_status() {
     assert!(!err.contains("panicked"), "{err}");
     assert_eq!(out.status.code(), Some(141), "{err}");
 }
+
+#[test]
+fn doctor_names_the_binary_and_warns_when_the_installed_package_differs() {
+    let dir = scratch("doctor-versions");
+    std::fs::create_dir_all(dir.join(".git")).unwrap();
+    std::fs::create_dir_all(dir.join("node_modules/fairlead")).unwrap();
+    std::fs::write(
+        dir.join("package.json"),
+        r#"{"devDependencies": {"fairlead": "^99.0.0"}}"#,
+    )
+    .unwrap();
+    std::fs::write(
+        dir.join("node_modules/fairlead/package.json"),
+        r#"{"version": "0.1.0"}"#,
+    )
+    .unwrap();
+    let out = fairlead_in(&dir, &["doctor"]);
+    let text = String::from_utf8_lossy(&out.stdout);
+    assert!(out.status.success(), "{text}");
+    assert!(text.contains("binary: "), "{text}");
+    assert!(
+        text.contains("versions: package.json ^99.0.0, node_modules 0.1.0"),
+        "{text}"
+    );
+    assert!(
+        text.contains("warning: package.json asks for ^99.0.0"),
+        "{text}"
+    );
+    assert!(text.contains("warning: node_modules has 0.1.0"), "{text}");
+}

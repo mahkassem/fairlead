@@ -149,7 +149,7 @@ This README documents Fairlead 0.12.0. Each command, by what it's for:
   lists, reviews and checks them. The brief offers the ones a change reaches.
 - **Skills:** `[[skills.routes]]` scopes each SKILL.md, and the brief lists the
   skills a change reaches. `import rules` turns path-scoped rule files into
-  skills and routes, and `skills sync` writes each skill where Claude Code,
+  skills and routes, and refreshes a skill when its rule changes, and `skills sync` writes each skill where Claude Code,
   Codex and Cursor load it.
 - **Finding things:** `find` searches lessons, skills, docs headings and
   declared names, nearest the brief first.
