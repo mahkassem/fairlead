@@ -93,6 +93,7 @@ pub fn validate(config: &Config) -> Vec<Problem> {
     skills(config, &mut problems);
     super::stages::validate(config, &mut problems);
     super::tracker::validate(config, &mut problems);
+    super::planning::validate(config, &mut problems);
     agents(config, &mut problems);
     problems
 }
@@ -128,7 +129,11 @@ pub fn plan_globs(config: &Config) -> Vec<Problem> {
             problems,
         );
     }
-    globs("plan.run_all", config.plan.run_all.items(), problems);
+    for (key, glob) in super::planning::keyed_globs(config) {
+        if let Err(e) = crate::pattern::Pattern::new(glob) {
+            problems.push(problem(key, e));
+        }
+    }
     globs("plan.ignore", config.plan.ignore.items(), problems);
     std::mem::take(problems)
 }

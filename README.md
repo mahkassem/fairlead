@@ -99,6 +99,9 @@ of trying things like a stranger.
   change runs only the packages whose dependencies actually changed.
   *Since 0.8.0:* in a bun project, a dependency's version bump runs only the
   tests of the files that import it, and nothing when nothing does.
+  *Unreleased:* a `plan.run_all` entry can name the kinds of change that run
+  everything, so a new migration goes through the graph and an edited one
+  runs everything.
 - **No install needed to read your code.** The import graph comes from source
   alone, with tsconfig paths, `go.mod` and composer's autoload resolved and
   parsed files cached, so a plan takes a fraction of a second.
@@ -108,8 +111,8 @@ of trying things like a stranger.
   pnpm and vitest every week, and published.
 - **Private by default.** The CLI sends nothing you didn't ask for: no
   telemetry, and it never phones home.
-- **One binary, everywhere.** Linux, macOS and Windows, installed with a shell
-  script, PowerShell or npm.
+- **One binary, everywhere.** Linux (glibc or musl, as on Alpine), macOS and
+  Windows, installed with a shell script, PowerShell or npm.
 
 **What it reads, and what replay has proven.** A language counts as proven
 when replaying a public project's CI history judges at least 10 failures, at
@@ -233,6 +236,11 @@ bun add -d fairlead   # or: npm i -D fairlead
 ```
 
 Then `fairlead doctor` says which binary, platform and config it would use.
+
+*Unreleased:* static musl builds for x86_64 and aarch64 Linux, which the
+installers pick on a musl system such as an Alpine container image. On a
+platform with no build, the npm package still installs, and `fairlead` says
+how to build it from source ([Install](https://mahkassem.github.io/fairlead/docs/install.html#platforms)).
 
 ## Quick start
 

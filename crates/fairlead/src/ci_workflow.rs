@@ -43,7 +43,7 @@ pub fn run(cwd: &Path, write: bool, insights: bool) -> Result<ExitCode, String> 
         ));
     }
     if insights {
-        let text = render_insights();
+        let text = render_insights(&insights_config(&crate::graph_cmd::repo_root(cwd)));
         if !write {
             print!("{text}");
             return Ok(ExitCode::SUCCESS);
@@ -345,16 +345,30 @@ pub fn render(config: &Config) -> Result<String, String> {
 /// a schedule never starts a full test run.
 pub const INSIGHTS_PATH: &str = ".github/workflows/fairlead-insights.yml";
 
+/// The config the weekly job replays with, from the repository root: the
+/// file the planner finds there, or `fairlead.toml`.
+pub fn insights_config(root: &Path) -> String {
+    config::find_config(root)
+        .ok()
+        .flatten()
+        .and_then(|p| {
+            p.strip_prefix(root)
+                .ok()
+                .map(|r| r.to_string_lossy().replace('\\', "/"))
+        })
+        .unwrap_or_else(|| "fairlead.toml".into())
+}
+
 /// A weekly job that replays the test workflow's history and puts
 /// `fairlead insights` in the run's summary. It runs no tests.
-pub fn render_insights() -> String {
+pub fn render_insights(config: &str) -> String {
     let mut out = format!(
         "{MARKER} --insights from the Fairlead config.\n# Run `fairlead ci workflow --insights --write` again rather than editing it.\nname: fairlead insights\n\non:\n  schedule:\n    - cron: \"17 5 * * 1\"   # Mondays, 05:17 UTC\n  workflow_dispatch:\n\npermissions:\n  contents: read\n  actions: read         # the test workflow's runs and logs, for replay\n  pull-requests: read   # the pull request each run belongs to\n  checks: read          # the annotations that name a failing test\n\njobs:\n  insights:\n    name: insights\n    runs-on: ubuntu-latest\n    steps:\n      - uses: {CHECKOUT}\n        with:\n          fetch-depth: 0\n"
     );
     install(&mut out);
-    out.push_str(
-        "      - name: Replay the last 30 days\n        env:\n          GITHUB_TOKEN: ${{ github.token }}\n        run: |\n          since=$(date -u -d '30 days ago' +%F)\n          fairlead replay fetch --repo \"$GITHUB_REPOSITORY\" --workflow fairlead.yml --data \"$RUNNER_TEMP/runs.jsonl\" --clone . --since \"$since\"\n          fairlead replay run --data \"$RUNNER_TEMP/runs.jsonl\" --clone . --json-out \"$RUNNER_TEMP/replay.json\" --quiet > /dev/null\n      - name: Insights\n        run: |\n          {\n            echo '## Fairlead insights'\n            echo '```'\n            fairlead insights --since \"$(date -u -d '7 days ago' +%F)\" --replay \"$RUNNER_TEMP/replay.json\" --suggest\n            echo '```'\n          } >> \"$GITHUB_STEP_SUMMARY\"\n",
-    );
+    out.push_str(&format!(
+        "      - name: Replay the last 30 days\n        env:\n          GITHUB_TOKEN: ${{{{ github.token }}}}\n        run: |\n          since=$(date -u -d '30 days ago' +%F)\n          fairlead replay fetch --repo \"$GITHUB_REPOSITORY\" --workflow fairlead.yml --data \"$RUNNER_TEMP/runs.jsonl\" --clone . --since \"$since\"\n          fairlead replay run --data \"$RUNNER_TEMP/runs.jsonl\" --clone . --config {config} --json-out \"$RUNNER_TEMP/replay.json\" --quiet > /dev/null\n      - name: Insights\n        run: |\n          {{\n            echo '## Fairlead insights'\n            echo '```'\n            fairlead insights --since \"$(date -u -d '7 days ago' +%F)\" --replay \"$RUNNER_TEMP/replay.json\" --suggest\n            echo '```'\n          }} >> \"$GITHUB_STEP_SUMMARY\"\n"
+    ));
     out
 }
 

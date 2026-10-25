@@ -73,13 +73,10 @@ fn project_lists_append_to_defaults_and_replace_replaces() {
         &LoadOptions::default(),
     );
     let run_all = config.plan.run_all.items();
-    assert!(
-        run_all.contains(&"pnpm-lock.yaml".to_string()),
-        "defaults kept"
-    );
+    assert!(run_all.contains(&"pnpm-lock.yaml".into()), "defaults kept");
     assert_eq!(
-        run_all.last().map(String::as_str),
-        Some("ci/**"),
+        run_all.last().map(|e| e.globs()),
+        Some(&["ci/**".to_string()][..]),
         "project appended"
     );
     assert_eq!(
@@ -302,7 +299,7 @@ fn a_set_can_replace_a_list() {
         ..LoadOptions::default()
     };
     let config = load(&dir, &opts).unwrap().config;
-    assert_eq!(config.plan.run_all.items(), ["only/**".to_string()]);
+    assert_eq!(config.plan.run_all.items(), ["only/**".into()]);
 }
 
 #[test]
@@ -732,7 +729,7 @@ fn a_built_in_pack_layers_under_the_project_whose_replace_drops_its_barrier() {
         .plan
         .run_all
         .items()
-        .contains(&"app/Providers/**".to_string()));
+        .contains(&"app/Providers/**".into()));
     assert!(loaded.origins["graph.edges"].ends_with("pack laravel"));
     assert_eq!(validate(config), []);
 }
@@ -847,4 +844,45 @@ fn a_tracker_needs_its_id_and_branch_patterns_and_a_command_its_get() {
     let config: Config =
         toml::from_str("[tracker]\nkind = \"github\"\nbranch = \"issue-([0-9]+)\"\n").unwrap();
     assert_eq!(validate(&config), [], "github ids default to numbers");
+}
+
+#[test]
+fn run_all_mixes_globs_and_kind_limited_entries_across_defaults_packs_and_sets() {
+    let dir = repo_with(
+        "run-all-kinds",
+        &[(
+            "fairlead.toml",
+            "extends = [\"packs/p.toml\"]\n\n[plan]\nrun_all = [\"ci/**\"]\n",
+        )],
+    );
+    fs::create_dir_all(dir.join("packs")).unwrap();
+    fs::write(
+        dir.join("packs/p.toml"),
+        "[plan]\nrun_all = [{ paths = \"db/**\", on = [\"modified\"] }]\n",
+    )
+    .unwrap();
+    let loaded = load(&dir, &LoadOptions::default()).unwrap();
+    let run_all = loaded.config.plan.run_all.items();
+    assert!(run_all.contains(&"pnpm-lock.yaml".into()), "defaults kept");
+    let n = run_all.len();
+    assert_eq!(run_all[n - 2].globs(), ["db/**"]);
+    assert_eq!(
+        run_all[n - 2].kinds(),
+        Ok(Some(vec![fairlead_core::plan::Status::Modified]))
+    );
+    assert_eq!(run_all[n - 1], "ci/**".into(), "project after its pack");
+    assert!(loaded.origins["plan.run_all"].contains("pack"));
+    assert_eq!(validate(&loaded.config), []);
+
+    let opts = LoadOptions {
+        sets: vec!["plan.run_all={ replace = [{ paths = [\"db/**\"], on = [\"added\"] }] }".into()],
+        ..LoadOptions::default()
+    };
+    let config = load(&dir, &opts).unwrap().config;
+    let run_all = config.plan.run_all.items();
+    assert_eq!(run_all.len(), 1);
+    assert_eq!(
+        run_all[0].kinds(),
+        Ok(Some(vec![fairlead_core::plan::Status::Added]))
+    );
 }

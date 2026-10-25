@@ -178,6 +178,17 @@
         {
           "description": "A changed path matched `plan.run_all`.",
           "properties": {
+            "change": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/Status"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The kind of change that triggered it, when the matching entry\nnames kinds with `on`; absent for an entry that matches any."
+            },
             "kind": {
               "const": "run-all",
               "type": "string"

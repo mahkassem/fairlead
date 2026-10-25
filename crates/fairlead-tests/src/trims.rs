@@ -14,7 +14,7 @@ use fairlead_lang::Scan;
 use serde_json::Value;
 
 use crate::bump::{self, BunLock};
-use crate::pattern::Pattern;
+use crate::run_all::RunAll;
 
 pub const BUN_LOCK: &str = "bun.lock";
 
@@ -38,13 +38,13 @@ pub fn trims(
     config: &Config,
     changes: &[Change],
     base_files: &BTreeMap<String, String>,
-    run_all: &[Pattern],
+    run_all: &RunAll,
 ) -> Trims {
     let mut out = Trims::default();
     let head = |path: &str| std::fs::read_to_string(scan.tree.root.join(path)).ok();
     for change in changes {
         let path = change.path.as_str();
-        if is_config(path) && !run_all.iter().any(|g| g.is_match(path)) {
+        if is_config(path) && run_all.hit(path, change.status).is_none() {
             out.quiet.insert(path.to_string());
             out.warnings.push(Warning {
                 code: "fairlead-config".into(),
@@ -146,7 +146,7 @@ fn version_bumps(
     config: &Config,
     changes: &[Change],
     base_files: &BTreeMap<String, String>,
-    run_all: &[Pattern],
+    run_all: &RunAll,
     out: &mut Trims,
 ) {
     let read = |path: &str| std::fs::read_to_string(scan.tree.root.join(path)).ok();
@@ -208,7 +208,7 @@ fn version_bumps(
     for (file, name) in imports(scan, &affected) {
         let path = &scan.graph.files[file as usize];
         let source = &affected[name];
-        if run_all.iter().any(|g| g.is_match(path)) {
+        if run_all.on_edit(path) {
             out.warnings.push(Warning {
                 code: "version-bump-runs-everything".into(),
                 path: Some(source.clone()),
@@ -313,7 +313,7 @@ fn named_by_a_runner(
 fn named_in_text(
     scan: &Scan,
     changes: &[Change],
-    run_all: &[Pattern],
+    run_all: &RunAll,
     locks: &[&BunLock],
     affected: &BTreeMap<String, String>,
 ) -> Option<Warning> {
@@ -328,9 +328,11 @@ fn named_in_text(
         .collect();
     let read = |path: &str| std::fs::read_to_string(scan.tree.root.join(path)).ok();
     // A manifest and a lockfile name every dependency; only scripts count.
-    let configs = scan.tree.files.iter().filter(|f| {
-        !f.ends_with("package.json") && !is_lockfile(f) && run_all.iter().any(|g| g.is_match(f))
-    });
+    let configs = scan
+        .tree
+        .files
+        .iter()
+        .filter(|f| !f.ends_with("package.json") && !is_lockfile(f) && run_all.on_edit(f));
     let manifests = std::iter::once("package.json").chain(
         changes
             .iter()

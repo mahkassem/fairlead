@@ -76,11 +76,11 @@
         <span class="chip k">Vitest</span><span class="chip k">Jest</span><span class="chip k">Playwright</span><span class="chip k">node --test</span><span class="chip k">Bun</span>
         <span class="chip">pnpm</span><span class="chip">npm</span><span class="chip">yarn</span><span class="chip">bun workspaces</span>
         <span class="chip">GitHub Actions</span><span class="chip">any CI via JSON</span>
-        <span class="chip">Linux</span><span class="chip">macOS</span><span class="chip">Windows</span>
+        <span class="chip">Linux</span><span class="chip">Alpine (musl)</span><span class="chip">macOS</span><span class="chip">Windows</span>
       </div>
       <div class="facts">
         <div><h3>Any test runner</h3><p>A runner is one command in your config, so your stack never waits for a plugin.</p></div>
-        <div><h3>Monorepos, precisely</h3><p>A pnpm lockfile change runs only the packages whose dependencies changed, and, with bun, a dependency's version bump only the tests of the files that import it.</p></div>
+        <div><h3>Monorepos, precisely</h3><p>A pnpm lockfile change runs only the packages whose dependencies changed, and, with bun, a dependency's version bump only the tests of the files that import it. <em>unreleased:</em> a <code>plan.run_all</code> entry can name the kinds of change that run everything, so a new migration goes through the graph and an edited one runs everything.</p></div>
         <div><h3>No install to read your code</h3><p>The import graph comes from source alone, cached, in a fraction of a second.</p></div>
         <div><h3>Private by default</h3><p>The CLI sends nothing you didn't ask for: no telemetry, and it never phones home.</p></div>
       </div>
