@@ -73,6 +73,31 @@ step = "^Typecheck$"
 check = "typecheck"
 ```
 
+## Comparing with the base branch's config
+
+*Unreleased:* when the config being replayed differs from the base branch's, `replay run` replays the window under both and reports them side by side, so a config change shows which failures it moves without two runs and a diff by hand.
+
+- **The base branch's config** is the one committed at the clone's default branch head: `origin/HEAD` where the clone has it, else the commit its `HEAD` names. It's found as the planner finds one at the repository's root (`fairlead.toml`, `.yaml` or `.yml`) and loaded as CI loads it: packs and `extends` resolve from that commit's tree, and no local file or `FAIRLEAD_*` variable layers over it. `--compare-with PATH` names another config file instead.
+- **"Differs" means the loaded config, not the bytes.** The two are compared by the digest a plan carries, which leaves out the sections that never change a plan (`guard`, `hooks`, `brief` and the like); pack names and the `fairlead` version floor are left out too, since a pack's rules count through the merge. A reformatted file, or a pack's rule written inline, compares alike, and the report says so in one line instead of replaying again.
+- **With no config committed there,** or one that doesn't load or has problems, there's no comparison, and a line under the report says why. `--no-compare` turns the comparison off, and the report is then exactly what it was before.
+- **What's shared:** the dataset, the window (from the config being replayed, so both sides judge the same failures) and the worktree, whose [parse cache](graph.md) is warm by the second pass. Each failed run is still planned once per config, so a comparison roughly doubles planning time.
+
+The text report ends with a table of recall, strict recall, failures judged, misses and the share of tests selected under each config, then each failure that moved, hit to miss or miss to hit, with its run, pull request, test, commit and the reason each side gave:
+
+```text
+  compared with fairlead.toml at origin/HEAD (8f9fd014a):
+                          base      this
+    recall               91.3%     87.0%
+    ...
+    moved: 2 hit to miss, 1 miss to hit
+
+    hit -> miss  run 412 attempt 1 (PR 88)  test/orders.test.ts  [unit]  at d60806b7b
+        base: selected: 3 hops from src/loader.ts
+        this: not in the plan
+```
+
+A miss that a later run of the same change passed counts as a miss here, as strict recall counts it. In `--json` and `--json-out`, the same is a `comparison` object beside the existing fields: `status` (`compared`, `same`, `no_base` or `unusable`), `note`, `base_config`, `base_commit`, `base` and `this` with each side's numbers, and `moved`.
+
 ## Inherited failures
 
 A pull request can fail a test only because its base branch already did. Replay groups failures by base commit, job and test file, and calls a group inherited when either holds:
@@ -136,7 +161,7 @@ To record them, add `--event schedule` to `replay fetch` (beside `--event push` 
 
 ## The report
 
-Per repository: runs replayed, attributed failures against the gate, recall and strict recall (overall and per event, since merge queue runs usually run everything and are the better evidence), hits by how they were selected (by the plan, because the plan selected everything, or as a check), the other outcomes, unwatched jobs by name, the median and 90th-percentile share of test files selected, the share of plans that selected everything, and the first (cold), median and 90th-percentile planning time. Each miss lists its job (*since 0.10.0*), the changed files and an owner rule that would have caught it, built from the first changed file that isn't a test or a document (*since 0.10.0*). When only tests or documents changed, no rule is suggested: another test or a README can't break the test, so it likelier failed on its own. Push runs have their own line, `push (after merge)`, and scheduled runs theirs, `schedule (full runs)` (*since 0.9.0*), with their misses counted as escapes; for a repository whose pull requests run the plan, that line is the recall that matters, and for one whose pushes run the plan too, the scheduled line is. `--json` prints the same as JSON.
+Per repository: runs replayed, attributed failures against the gate, recall and strict recall (overall and per event, since merge queue runs usually run everything and are the better evidence), hits by how they were selected (by the plan, because the plan selected everything, or as a check), the other outcomes, unwatched jobs by name, the median and 90th-percentile share of test files selected, the share of plans that selected everything, and the first (cold), median and 90th-percentile planning time. Each miss lists its job (*since 0.10.0*), the changed files and an owner rule that would have caught it, built from the first changed file that isn't a test or a document (*since 0.10.0*). When only tests or documents changed, no rule is suggested: another test or a README can't break the test, so it likelier failed on its own. Push runs have their own line, `push (after merge)`, and scheduled runs theirs, `schedule (full runs)` (*since 0.9.0*), with their misses counted as escapes; for a repository whose pull requests run the plan, that line is the recall that matters, and for one whose pushes run the plan too, the scheduled line is. `--json` prints the same as JSON. *Unreleased:* when the config differs from the base branch's, the report ends with both side by side (above).
 
 ## Limits
 

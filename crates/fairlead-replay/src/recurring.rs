@@ -88,6 +88,7 @@ mod tests {
             target: Target::Test("okhttp/src/jvmTest/kotlin/okhttp3/DuplexTest.kt".into()),
             outcome,
             hit_by: None,
+            why: String::new(),
             judged: None,
             detail: String::new(),
             changed: changed.iter().map(|s| s.to_string()).collect(),

@@ -7,11 +7,12 @@ use std::process::ExitCode;
 
 use clap::Subcommand;
 use fairlead_core::config;
+use fairlead_replay::compare::{self, Base, Comparison, Status};
 use fairlead_replay::dataset;
 use fairlead_replay::fetch::Stop;
 use fairlead_replay::git::Worktree;
-use fairlead_replay::report::{report, text};
-use fairlead_replay::run::{replay_with, Progress, Replayer, Sources};
+use fairlead_replay::report::{report, text, Report};
+use fairlead_replay::run::{replay_with, Progress, Replayed, Replayer, Sources};
 use fairlead_replay::window::Window;
 
 #[derive(Subcommand)]
@@ -74,6 +75,12 @@ pub enum ReplayAction {
         /// No progress lines on stderr.
         #[arg(long)]
         quiet: bool,
+        /// Don't replay again under the base branch's config.
+        #[arg(long, conflicts_with = "compare_with")]
+        no_compare: bool,
+        /// Compare with this config instead of the base branch's.
+        #[arg(long, value_name = "PATH")]
+        compare_with: Option<PathBuf>,
     },
 }
 
@@ -88,6 +95,8 @@ pub fn run(action: ReplayAction) -> ExitCode {
             json_out,
             fetch_missing,
             quiet,
+            no_compare,
+            compare_with,
         } => run_replay(
             &data,
             &clone,
@@ -98,6 +107,11 @@ pub fn run(action: ReplayAction) -> ExitCode {
                 json_out,
                 fetch_missing,
                 quiet,
+                compare: match (no_compare, compare_with) {
+                    (true, _) => Compare::Off,
+                    (false, Some(path)) => Compare::With(path),
+                    (false, None) => Compare::BaseBranch,
+                },
             },
         ),
         ReplayAction::Fetch {
@@ -175,6 +189,32 @@ struct Output {
     json_out: Option<PathBuf>,
     fetch_missing: bool,
     quiet: bool,
+    compare: Compare,
+}
+
+/// What the replay is compared with.
+enum Compare {
+    Off,
+    BaseBranch,
+    With(PathBuf),
+}
+
+/// A config that loads with no problems, or the error that says why not.
+fn load_clean(path: &Path) -> Result<config::Loaded, String> {
+    let loaded = config::load_file(path, &[]).map_err(|e| e.to_string())?;
+    if !loaded.problems.is_empty() {
+        let lines: Vec<String> = loaded
+            .problems
+            .iter()
+            .map(|p| format!("  {}: {}", p.key, p.message))
+            .collect();
+        return Err(format!(
+            "{} has problems (see `fairlead config check`):\n{}",
+            path.display(),
+            lines.join("\n")
+        ));
+    }
+    Ok(loaded)
 }
 
 fn run_replay(
@@ -184,18 +224,12 @@ fn run_replay(
     until: Option<&str>,
     output: Output,
 ) -> Result<(), String> {
-    let loaded = config::load_file(config_path, &[]).map_err(|e| e.to_string())?;
-    if !loaded.problems.is_empty() {
-        let lines: Vec<String> = loaded
-            .problems
-            .iter()
-            .map(|p| format!("  {}: {}", p.key, p.message))
-            .collect();
-        return Err(format!(
-            "the config has problems (see `fairlead config check`):\n{}",
-            lines.join("\n")
-        ));
-    }
+    let loaded = load_clean(config_path)?;
+    // Loaded first, so a config named by mistake fails before the long replay.
+    let named = match &output.compare {
+        Compare::With(path) => Some((path.display().to_string(), load_clean(path)?)),
+        _ => None,
+    };
     let rows = dataset::read(data)?;
     let newest = rows
         .iter()
@@ -241,9 +275,35 @@ fn run_replay(
         config: &loaded.config,
         sources: Sources::new(&loaded.config)?,
     };
+    let base = match (&output.compare, named) {
+        (Compare::Off, _) => None,
+        (_, Some((label, other))) => Some(Base::Found {
+            config: Box::new(other.config),
+            label,
+            commit: None,
+        }),
+        (_, None) => Some(compare::base_branch_config(&clone, &replayer.worktree)),
+    };
     let mut lines = ProgressLines::new(output.quiet);
     let replayed = replay_with(&replayer, &rows, &window, &mut |p| lines.after(p));
-    let result = report(&repo, &window, loaded.config.replay.min_failures, &replayed);
+    let mut result = report(&repo, &window, loaded.config.replay.min_failures, &replayed);
+    let pass = Pass {
+        clone: &clone,
+        wt_path: &wt_path,
+        start: &start,
+        rows: &rows,
+        window: &window,
+        quiet: output.quiet,
+    };
+    result.comparison = match base {
+        None => None,
+        Some(Base::None(status, note)) => Some(Comparison::none(status, note)),
+        Some(Base::Found {
+            config,
+            label,
+            commit,
+        }) => Some(pass.compare(&loaded.config, &config, label, commit, (&result, &replayed))?),
+    };
     let pretty = serde_json::to_string_pretty(&result).expect("report prints");
     if let Some(path) = &output.json_out {
         std::fs::write(path, format!("{pretty}\n"))
@@ -255,6 +315,65 @@ fn run_replay(
         print!("{}", text(&result));
     }
     Ok(())
+}
+
+/// What a second replay of the same window shares with the first: the
+/// dataset, the window and the worktree, whose parse cache is warm by then.
+struct Pass<'a> {
+    clone: &'a Path,
+    wt_path: &'a Path,
+    start: &'a str,
+    rows: &'a [dataset::Row],
+    window: &'a Window,
+    quiet: bool,
+}
+
+impl Pass<'_> {
+    /// Replays the window again under `other`, unless it plans alike.
+    fn compare(
+        &self,
+        mine: &config::Config,
+        other: &config::Config,
+        label: String,
+        commit: Option<String>,
+        this: (&Report, &Replayed),
+    ) -> Result<Comparison, String> {
+        if compare::same(mine, other) {
+            return Ok(Comparison::same(label, commit));
+        }
+        let sources = match Sources::new(other) {
+            Ok(s) => s,
+            Err(e) => {
+                return Ok(Comparison::none(
+                    Status::Unusable,
+                    format!("{label} doesn't compile: {e}"),
+                ))
+            }
+        };
+        if !self.quiet {
+            eprintln!("replaying the same window again with {label}");
+        }
+        let replayer = Replayer {
+            clone: self.clone,
+            worktree: Worktree::open(self.clone, self.wt_path, self.start)?,
+            config: other,
+            sources,
+        };
+        let mut lines = ProgressLines::new(self.quiet);
+        let replayed = replay_with(&replayer, self.rows, self.window, &mut |p| lines.after(p));
+        let base = report(
+            &this.0.repo,
+            self.window,
+            other.replay.min_failures,
+            &replayed,
+        );
+        Ok(Comparison::compared(
+            label,
+            commit,
+            (&base, &replayed),
+            this,
+        ))
+    }
 }
 
 /// How often a progress line is printed: every this many runs, and at least
