@@ -12,6 +12,7 @@ mod ci_report;
 mod ci_workflow;
 mod context_cmd;
 mod coverage_cmd;
+mod doctor_version;
 mod done_cmd;
 mod escapes;
 mod find_cmd;
@@ -296,6 +297,11 @@ fn doctor_hooks(dir: &Path, loaded: Option<&Loaded>) -> String {
 
 fn doctor_report(dir: &Path, opts: &LoadOptions) -> String {
     let loaded = config::load(dir, opts);
+    let floor = loaded.as_ref().ok().and_then(|l| l.config.fairlead.clone());
+    let seen = doctor_version::read(&graph_cmd::repo_root(dir), floor.as_deref());
+    let binary =
+        std::env::current_exe().map_or_else(|_| "unknown".into(), |p| p.display().to_string());
+    let versions = doctor_version::lines(&binary, env!("CARGO_PKG_VERSION"), &seen);
     let mut hooks = doctor_hooks(dir, loaded.as_ref().ok());
     let mut agents = String::new();
     if let Ok(l) = &loaded {
@@ -328,7 +334,7 @@ fn doctor_report(dir: &Path, opts: &LoadOptions) -> String {
     let here = fairlead_tests::quarantine::Here::detect(&graph_cmd::repo_root(dir));
     let conditions: Vec<&str> = here.conditions.iter().map(|c| c.name()).collect();
     format!(
-        "fairlead {}\nplatform: {}-{}\nconditions: {}\nconfig: {}\n{agents}{hooks}",
+        "fairlead {}\n{versions}platform: {}-{}\nconditions: {}\nconfig: {}\n{agents}{hooks}",
         env!("CARGO_PKG_VERSION"),
         std::env::consts::OS,
         std::env::consts::ARCH,

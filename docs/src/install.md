@@ -37,6 +37,11 @@ fairlead doctor
 
 `doctor` prints the version, the platform and the config file Fairlead would
 use from the current directory.
+*Unreleased:* it also prints the binary's path and the versions the repository names: the spec in
+`package.json`, the package installed under `node_modules` and the config's `fairlead` floor. It warns
+when `package.json` asks for a later version than the binary, as when a new worktree's
+`node_modules` is a copy of an older one, and when the installed package isn't the binary that
+runs, as when a global install comes first on the PATH.
 `doctor --score` rates how ready the repository is, out of 100, and names the
 fixes worth the most ([Readiness score](score.md)).
 
