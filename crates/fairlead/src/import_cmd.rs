@@ -29,18 +29,21 @@ pub enum ImportAction {
     Rules {
         /// The directory holding the rule files, such as `.claude/rules` or `.cursor/rules`.
         dir: PathBuf,
-        /// Write the SKILL.md files and append the routes to fairlead.toml; without it, only print them.
+        /// Write the SKILL.md files and append the routes to fairlead.toml, refreshing skills whose rule changed; without it, only print them.
         #[arg(long)]
         write: bool,
+        /// Exit 1 when a routed skill's body differs from its rule's, writing nothing.
+        #[arg(long, conflicts_with = "write")]
+        check: bool,
     },
 }
 
 pub fn run(action: ImportAction, cwd: &Path) -> ExitCode {
     let (file, write, json) = match action {
         ImportAction::Lessons { file, write, json } => (file, write, json),
-        ImportAction::Rules { dir, write } => {
+        ImportAction::Rules { dir, write, check } => {
             return crate::import_rules_cmd::run(
-                crate::import_rules_cmd::ImportAction::Rules { dir, write },
+                crate::import_rules_cmd::ImportAction::Rules { dir, write, check },
                 cwd,
             )
         }
