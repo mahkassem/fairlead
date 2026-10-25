@@ -13,6 +13,7 @@
 ### Changed
 
 - A barrier stops a walk passing through it, not one starting at it ([#225](https://github.com/mahkassem/fairlead/issues/225), item 1). A changed `graph.barrier` file reached nothing and was left to `tests.unreached`, so the documented workaround was to list it in `plan.run_all` too, which ran everything for a file that only loads other code. A changed barrier now selects the tests of the files that import it, as any changed file does, and a change below it still stops there; `graph why` and `test --explain` say the same. A `run_all` entry that only covered a barrier's own changes can go, and `fairlead migrate` says so where an entry is a barrier entry or a path a barrier matches. See [Barriers](https://mahkassem.github.io/fairlead/docs/graph.html#barriers).
+- The release binary's size budget in CI is 20 MB, up from 18 MB. With this release's commands the Windows build is about 19.1 MB and the Linux build 16.6 MB. Building the dependencies for size (`opt-level = "s"`) would have saved 0.8 MB on Linux but made the graph build about 60% slower (0.18 s to 0.30 s on 2,041 files) and the edit hook about 50% slower (8.7 ms to 13.2 ms at p50), so the budget moved instead.
 
 ### Fixed
 
