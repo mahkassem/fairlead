@@ -21,6 +21,9 @@ pub enum ImportAction {
         /// Write the SKILL.md files and append the routes to fairlead.toml; without it, only print them.
         #[arg(long)]
         write: bool,
+        /// Exit 1 when a routed skill's body differs from its rule's, writing nothing.
+        #[arg(long, conflicts_with = "write")]
+        check: bool,
     },
 }
 
@@ -51,6 +54,20 @@ impl Rule {
         )
     }
 
+    /// The skill already at its path with the body replaced by the rule's,
+    /// keeping that file's front matter, or `None` when it's already current.
+    /// A missing or unreadable file is written whole.
+    pub fn refreshed(&self, existing: Option<&str>) -> Option<String> {
+        let Some(text) = existing else {
+            return Some(self.skill_text());
+        };
+        let next = match front_matter(text) {
+            Some(front) => format!("{front}{}", self.body),
+            None => self.skill_text(),
+        };
+        (next != text).then_some(next)
+    }
+
     /// The `[[skills.routes]]` block that scopes it.
     pub fn route(&self) -> String {
         let quote = |s: &str| toml::Value::String(s.to_string()).to_string();
@@ -65,6 +82,13 @@ impl Rule {
             quote(&self.skill_path())
         )
     }
+}
+
+/// A file's front matter with both `---` lines, when it opens with one.
+fn front_matter(text: &str) -> Option<&str> {
+    let rest = text.strip_prefix("---\n")?;
+    let end = rest.find("\n---\n")?;
+    Some(&text[..4 + end + 5])
 }
 
 /// A front matter value: one line, or a list.
@@ -325,8 +349,8 @@ pub fn appended(rules: &[Rule], shown: &str) -> String {
 }
 
 pub fn run(action: ImportAction, cwd: &Path) -> ExitCode {
-    let ImportAction::Rules { dir, write } = action;
-    match rules(&dir, write, cwd) {
+    let ImportAction::Rules { dir, write, check } = action;
+    match rules(&dir, write, check, cwd) {
         Ok(code) => code,
         Err(e) => {
             eprintln!("import rules: {e}");
@@ -335,7 +359,7 @@ pub fn run(action: ImportAction, cwd: &Path) -> ExitCode {
     }
 }
 
-fn rules(dir: &Path, write: bool, cwd: &Path) -> Result<ExitCode, String> {
+fn rules(dir: &Path, write: bool, check: bool, cwd: &Path) -> Result<ExitCode, String> {
     let loaded =
         config::load(cwd, &LoadOptions::from_process(Vec::new())).map_err(|e| e.to_string())?;
     let root = if loaded.files.is_empty() {
@@ -366,14 +390,43 @@ fn rules(dir: &Path, write: bool, cwd: &Path) -> Result<ExitCode, String> {
         println!("skill {} from {} ({scope})", rule.skill_path(), rule.source);
         println!("  {}", rule.description);
     }
+    let mut stale = Vec::new();
     for rule in &import.routed {
-        println!("already routed: {} ({})", rule.skill_path(), rule.source);
+        let existing = std::fs::read_to_string(root.join(rule.skill_path())).ok();
+        match rule.refreshed(existing.as_deref()) {
+            Some(text) => {
+                println!("lags its rule: {} ({})", rule.skill_path(), rule.source);
+                stale.push((rule.skill_path(), text));
+            }
+            None => println!("already routed: {} ({})", rule.skill_path(), rule.source),
+        }
     }
     for (source, why) in &import.skipped {
         println!("skipped {source}: {why}");
     }
+    if check {
+        return Ok(if stale.is_empty() {
+            ExitCode::SUCCESS
+        } else {
+            println!(
+                "--write refreshes {} skill(s) from their rules",
+                stale.len()
+            );
+            ExitCode::FAILURE
+        });
+    }
+    if write {
+        refresh(&root, &stale)?;
+    } else if !stale.is_empty() {
+        println!(
+            "dry run: --write refreshes {} skill(s), keeping their front matter and routes",
+            stale.len()
+        );
+    }
     if import.new.is_empty() {
-        println!("nothing to import from {shown}");
+        if stale.is_empty() {
+            println!("nothing to import from {shown}");
+        }
         return Ok(ExitCode::SUCCESS);
     }
     let text = appended(&import.new, &shown);
@@ -386,6 +439,22 @@ fn rules(dir: &Path, write: bool, cwd: &Path) -> Result<ExitCode, String> {
         return Ok(ExitCode::SUCCESS);
     }
     write_all(&root, &import.new, &text)
+}
+
+/// Rewrites each routed skill whose body lags its rule.
+fn refresh(root: &Path, stale: &[(String, String)]) -> Result<(), String> {
+    for (rel, text) in stale {
+        let path = root.join(rel);
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent).map_err(|e| format!("{}: {e}", parent.display()))?;
+        }
+        std::fs::write(&path, text).map_err(|e| format!("{}: {e}", path.display()))?;
+        println!("refreshed {rel}");
+    }
+    if !stale.is_empty() {
+        println!("`fairlead skills sync` copies them to each agent's folder.");
+    }
+    Ok(())
 }
 
 /// Writes every skill and appends the routes, or writes nothing when a
@@ -557,6 +626,36 @@ mod tests {
         assert_eq!(
             r.route(),
             "[[skills.routes]]\nskill = \".claude/skills/api/SKILL.md\"\npaths = [\"src/**\"]\n"
+        );
+    }
+
+    #[test]
+    fn a_refresh_keeps_the_skills_front_matter_and_takes_the_rules_body() {
+        let r = rule(
+            ".claude/rules/api.md",
+            "---\npaths: src/**\n---\nNew body.\n",
+        )
+        .unwrap();
+        let edited = "---\nname: api\ndescription: \"Written by hand\"\n---\nOld body.\n";
+        assert_eq!(
+            r.refreshed(Some(edited)).as_deref(),
+            Some("---\nname: api\ndescription: \"Written by hand\"\n---\nNew body.\n")
+        );
+        let current = r.refreshed(Some(edited)).unwrap();
+        assert_eq!(
+            r.refreshed(Some(&current)),
+            None,
+            "a current skill needs nothing"
+        );
+        assert_eq!(
+            r.refreshed(None),
+            Some(r.skill_text()),
+            "a missing skill is written whole"
+        );
+        assert_eq!(
+            r.refreshed(Some("no front matter\n")),
+            Some(r.skill_text()),
+            "a skill without front matter gets the generated one"
         );
     }
 }

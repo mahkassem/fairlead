@@ -1,6 +1,6 @@
 // Several first runs at once each install the binary and run it (#211):
 // none may spawn a half-written binary or lose the folder to another run.
-// Run with `node --test npm/`; `INSTALLER` points it at another copy.
+// Run with `node --test 'npm/*.test.js'`; `INSTALLER` points it at another copy.
 const { test } = require("node:test");
 const assert = require("node:assert");
 const http = require("node:http");

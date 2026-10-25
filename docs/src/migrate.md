@@ -221,6 +221,18 @@ For you to decide:
   as a use until `fairlead hooks uninstall --gemini` and
   `hooks install --gemini` write this release's.
 
+### To the next release
+
+*Unreleased:* migrate updates nothing in your files.
+
+For you to decide:
+
+- A changed `graph.barrier` file selects the tests of the files that import
+  it; a change below it still stops at it. A `plan.run_all` entry that
+  covered only a barrier's own changes can go, and `fairlead migrate` names
+  the case when an entry is a barrier entry or a path a barrier matches
+  ([Barriers](graph.md#barriers), [#225](https://github.com/mahkassem/fairlead/issues/225)).
+
 ### To 0.12.0
 
 Migrate updates nothing in your files.

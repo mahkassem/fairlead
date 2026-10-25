@@ -203,7 +203,7 @@ pub fn markdown(plan: &Plan, results: Option<&Results>, receipt: Option<&str>) -
         }
         out.push_str("\n\n");
     }
-    let mut why: BTreeMap<&str, usize> = BTreeMap::new();
+    let mut why: BTreeMap<String, usize> = BTreeMap::new();
     for t in &plan.tests {
         *why.entry(reason_class(&t.reason)).or_default() += 1;
     }
@@ -320,8 +320,11 @@ fn dir(cwd: &str) -> &str {
     }
 }
 
-fn reason_class(reason: &Reason) -> &'static str {
-    match reason {
+fn reason_class(reason: &Reason) -> String {
+    let class = match reason {
+        Reason::RunAll {
+            change: Some(kind), ..
+        } => return format!("a `plan.run_all` path changed ({})", kind.name()),
         Reason::RunAll { .. } => "a `plan.run_all` path changed",
         Reason::Changed => "the test itself changed",
         Reason::Import { .. } => "it imports a changed file",
@@ -329,7 +332,8 @@ fn reason_class(reason: &Reason) -> &'static str {
         Reason::Canary => "canary",
         Reason::Unreached { .. } => "a changed file nothing reaches",
         Reason::Paths { .. } | Reason::Modules { .. } | Reason::Always => "check rule",
-    }
+    };
+    class.to_string()
 }
 
 /// Posts the report as the pull request's comment, or updates the one

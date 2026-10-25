@@ -190,6 +190,11 @@ fn graph_why_says_where_a_barrier_stops_the_plan_and_stats_count_rule_edges() {
         text.contains("its walk stops at src/http/server.ts"),
         "{text}"
     );
+    // A changed barrier is where the walk starts, and it goes past it.
+    let why = fairlead_in(&dir, &["graph", "why", "src/a.ts", "src/http/server.ts"]);
+    let text = String::from_utf8_lossy(&why.stdout);
+    assert!(text.contains("src/http/server.ts"), "{text}");
+    assert!(!text.contains("its walk stops"), "{text}");
     let stats = fairlead_in(&dir, &["graph", "stats"]);
     let text = String::from_utf8_lossy(&stats.stdout);
     assert!(text.contains("rule edges: 1, barrier files: 1"), "{text}");
@@ -356,4 +361,34 @@ fn a_reader_that_stops_early_ends_the_run_quietly_with_the_sigpipe_status() {
     let err = String::from_utf8_lossy(&out.stderr);
     assert!(!err.contains("panicked"), "{err}");
     assert_eq!(out.status.code(), Some(141), "{err}");
+}
+
+#[test]
+fn doctor_names_the_binary_and_warns_when_the_installed_package_differs() {
+    let dir = scratch("doctor-versions");
+    std::fs::create_dir_all(dir.join(".git")).unwrap();
+    std::fs::create_dir_all(dir.join("node_modules/fairlead")).unwrap();
+    std::fs::write(
+        dir.join("package.json"),
+        r#"{"devDependencies": {"fairlead": "^99.0.0"}}"#,
+    )
+    .unwrap();
+    std::fs::write(
+        dir.join("node_modules/fairlead/package.json"),
+        r#"{"version": "0.1.0"}"#,
+    )
+    .unwrap();
+    let out = fairlead_in(&dir, &["doctor"]);
+    let text = String::from_utf8_lossy(&out.stdout);
+    assert!(out.status.success(), "{text}");
+    assert!(text.contains("binary: "), "{text}");
+    assert!(
+        text.contains("versions: package.json ^99.0.0, node_modules 0.1.0"),
+        "{text}"
+    );
+    assert!(
+        text.contains("warning: package.json asks for ^99.0.0"),
+        "{text}"
+    );
+    assert!(text.contains("warning: node_modules has 0.1.0"), "{text}");
 }

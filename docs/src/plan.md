@@ -32,13 +32,35 @@ done
 ## How a plan is built
 
 1. **Changed paths.** `git diff --name-status --find-renames` from the base to the working tree, plus untracked files. A rename counts both paths; its old path counts as deleted.
-2. **Run everything.** A changed path matching `plan.run_all` selects every test and check. The defaults are lockfiles, root manifests, tsconfig files, test-runner and task-runner config, and CI workflows. With `plan.lockfile = "scope"` (opt-in for now), a root `pnpm-lock.yaml` is the exception when it can be read: see [Lockfile changes](#lockfile-changes). *Since 0.8.0:* a change that only moves dependency versions, an edit to Fairlead's own config and a workflow that runs only by hand or on a schedule are exceptions too: see [Changes that don't run everything](#changes-that-dont-run-everything).
+2. **Run everything.** A changed path matching `plan.run_all` selects every test and check. *Unreleased:* an entry can name the kinds of change that run everything, so a new file there goes through the graph: see [Run everything by kind of change](#run-everything-by-kind-of-change). The defaults are lockfiles, root manifests, tsconfig files, test-runner and task-runner config, and CI workflows. With `plan.lockfile = "scope"` (opt-in for now), a root `pnpm-lock.yaml` is the exception when it can be read: see [Lockfile changes](#lockfile-changes). *Since 0.8.0:* a change that only moves dependency versions, an edit to Fairlead's own config and a workflow that runs only by hand or on a schedule are exceptions too: see [Changes that don't run everything](#changes-that-dont-run-everything).
 3. **Ignored paths.** A changed path matching `plan.ignore` still selects every test it reaches through the files that depend on it. When it reaches none, it's listed under `ignored` and selects nothing, where it would otherwise fall to `tests.unreached`. That holds for source files too, imported or not: a unit test's fake, or a dev tool's code, reaches no end-to-end spec. A changed test file is never ignored. So a layer that plans a different kind of test (say `--env e2e`) can list the unit tests, their fakes and dev tools here. The defaults are root Markdown, the changesets tool's folder (`.changeset/**`), `docs/**`, READMEs, changelogs and licences.
 4. **Deleted files.** A deleted file goes back into the graph as a phantom, joined to every import that now fails but would resolve to it, every path literal that names it, and its package, so whatever depended on it still counts.
 5. **Package manifests.** A changed `<package>/package.json` counts as every file in that package changing.
 6. **The walk.** From every changed file to everything that depends on it, over [import graph](graph.md) edges. A file with a non-literal dynamic import, a local import that doesn't resolve, or a tsconfig that couldn't be applied depends on every file in its module; at the root, on every file.
 7. **Tests** (below), **unreached files**, then **checks** and the **invocations** that run them.
 
+
+## Run everything by kind of change
+
+*Unreleased:* a `plan.run_all` entry is a glob, which runs everything whatever kind of change reaches a matching path, or a table that names the kinds:
+
+```toml
+[plan]
+run_all = [
+  "ci/**",
+  { paths = "migrations/**", on = ["modified", "deleted", "renamed"] },
+]
+```
+
+`paths` is a glob or a list of globs, and `on` lists some of `added`, `modified`, `deleted` and `renamed`. Only a change of a listed kind runs everything; any other change to a matching path goes through the graph like any other file. Above, editing, deleting or renaming a migration that has already run runs everything, while a new migration selects only the tests that depend on it, through an import or a [`graph.edges`](graph.md#edges-the-imports-dont-show) rule such as `{ from = "test/db/**", to = ["migrations/**"] }`. Without such a rule the new file reaches no test and falls to `tests.unreached`.
+
+- A rename is `renamed`, and it matches on its old path or its new one, so moving a file into or out of `migrations/` both count. It isn't also `added` at the new path or `deleted` at the old one.
+- A copy counts as `added`, as it always has.
+- `fairlead plan --files` doesn't ask git, so each path it is given is `modified`, or `deleted` when it's missing.
+- Entries are tried in order and the first that matches decides, so a plain glob earlier in the list runs everything for every kind.
+- The reason names the kind that triggered the entry: `run_all (modified): migrations/0001_users.sql` in `fairlead plan` and `--explain`, `"change": "modified"` beside `path` in the plan JSON, and ``a `plan.run_all` path changed (modified)`` in the CI report. A plain glob's reason is unchanged.
+- Kind-limited entries merge like any other: they append to the defaults, a pack may set them, and `{ replace = [...] }` takes a mix of both forms.
+- `fairlead config check` rejects a kind it doesn't know, an empty or missing `on`, and an empty `paths`, and `fairlead plan` refuses such a config.
 
 ## Lockfile changes
 

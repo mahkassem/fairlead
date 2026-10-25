@@ -331,7 +331,7 @@ fn widened_by(plan: &Plan, total: usize) -> Option<String> {
         None => path.to_string(),
     };
     plan.tests.iter().find_map(|t| match &t.reason {
-        Reason::RunAll { path } => Some(format!("run-all {}", group(path))),
+        Reason::RunAll { path, .. } => Some(format!("run-all {}", group(path))),
         Reason::Unreached { path, .. } => Some(format!("unreached {}", group(path))),
         _ => None,
     })

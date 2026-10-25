@@ -5,6 +5,7 @@ mod agents;
 mod knowledge;
 mod load;
 pub mod packs;
+mod planning;
 mod quarantine;
 mod stages;
 mod tracker;
@@ -17,6 +18,7 @@ pub use load::{
     find_config, load, load_file, read_layer, ConfigError, LoadOptions, Loaded, ENV_NAME,
     LOCAL_NAMES, PROJECT_NAMES,
 };
+pub use planning::{Globs, LockfileMode, Plan, RunAll, RunAllKinds};
 pub use quarantine::{Condition, Os, PlatformQuarantine};
 pub use stages::{CiStage, Stages};
 pub use tracker::{Tracker, TrackerKind};
@@ -72,8 +74,8 @@ pub fn json_schema() -> serde_json::Value {
     serde_json::to_value(schemars::schema_for!(Config)).expect("schema serializes")
 }
 
-fn strings(items: &[&str]) -> List<String> {
-    List::Items(items.iter().map(|s| s.to_string()).collect())
+fn strings<T: for<'a> From<&'a str>>(items: &[&str]) -> List<T> {
+    List::Items(items.iter().map(|s| T::from(s)).collect())
 }
 
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize, JsonSchema)]
@@ -427,74 +429,6 @@ pub struct Check {
 pub enum CheckFiles {
     Changed,
     Matched,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
-#[serde(deny_unknown_fields, default)]
-pub struct Plan {
-    /// A changed path matching any of these selects everything.
-    pub run_all: List<String>,
-    /// A changed path matching these that reaches no test selects nothing,
-    /// instead of falling to `tests.unreached`; one that reaches tests still
-    /// selects them, and a changed test file always runs.
-    pub ignore: List<String>,
-    /// `all`: a changed lockfile selects everything. `scope`: a changed pnpm
-    /// lockfile selects only the workspace packages whose resolved
-    /// dependencies changed; opt-in while the benchmarks gather evidence.
-    pub lockfile: LockfileMode,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, JsonSchema)]
-#[serde(rename_all = "kebab-case")]
-pub enum LockfileMode {
-    Scope,
-    #[default]
-    All,
-}
-
-impl Default for Plan {
-    fn default() -> Self {
-        Plan {
-            run_all: strings(&[
-                "package.json",
-                "package-lock.json",
-                "pnpm-lock.yaml",
-                "pnpm-workspace.yaml",
-                "yarn.lock",
-                "bun.lock",
-                "bun.lockb",
-                "tsconfig*.json",
-                "turbo.json",
-                "nx.json",
-                "**/project.json",
-                "**/vitest.config.*",
-                "**/vitest.workspace.*",
-                "**/jest.config.*",
-                "**/playwright.config.*",
-                "go.work",
-                "go.work.sum",
-                "composer.json",
-                "composer.lock",
-                "pyproject.toml",
-                "setup.py",
-                "setup.cfg",
-                "requirements*.txt",
-                "poetry.lock",
-                "uv.lock",
-                "Pipfile.lock",
-                ".github/workflows/**",
-            ]),
-            ignore: strings(&[
-                "*.md",
-                ".changeset/**",
-                "docs/**",
-                "**/README.md",
-                "**/CHANGELOG.md",
-                "LICENSE*",
-            ]),
-            lockfile: LockfileMode::default(),
-        }
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
