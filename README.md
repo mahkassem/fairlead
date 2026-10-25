@@ -134,7 +134,10 @@ repositories are on the way
 This README documents Fairlead 0.12.0. Each command, by what it's for:
 
 - **The test plan:** `plan`, `test --explain`, the import graph (`graph`) and
-  coverage maps (`coverage import`).
+  coverage maps (`coverage import`). *Unreleased:* `graph hubs` lists the
+  files that link the most changes to the most tests and the barrier that
+  would cut the top one, and a changed barrier file selects its importers'
+  tests.
 - **Plans in CI:** `ci plan` (by stage, with `--since-green`), `ci run` (with
   `--results`, `--judge`, `--only` and `--except`), `ci report`, `ci workflow`,
   which writes a staged workflow, and the GitHub Action.

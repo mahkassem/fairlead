@@ -104,17 +104,46 @@ fn without_the_barrier_the_server_carries_a_leaf_change_into_every_area_importin
 }
 
 #[test]
-fn a_changed_barrier_file_reaches_nothing_and_is_left_to_the_unreached_rule() {
+fn a_changed_barrier_file_selects_its_importers_but_a_barrier_beyond_it_still_stops() {
     let dir = repo("edges-barrier-change", SERVER);
+    let config = with_edges(true);
+    let plan = run(&dir, &config, vec![modified("app/src/http/auth.ts")]);
+    // The server imports the orders routes too, but it is a barrier reached
+    // from another file, so the people area stays out.
+    assert_eq!(
+        tests(&plan),
+        [
+            "app/test/api/billing-refunds.test.ts",
+            "app/test/api/billing.test.ts",
+            "app/test/api/orders.test.ts",
+        ]
+    );
+    assert!(plan.unreached.is_empty(), "{:?}", plan.unreached);
+    let scan = build(&dir, &config).unwrap();
+    let text = explain(&plan, &scan, &config, "app/test/api/orders.test.ts").unwrap();
+    assert!(
+        text.contains("app/src/http/auth.ts\n  -> app/src/orders/routes.ts"),
+        "{text}"
+    );
+    let text = explain(&plan, &scan, &config, "app/test/api/people.test.ts").unwrap();
+    assert!(
+        text.contains("depends on app/src/http/auth.ts, but only through app/src/http/server.ts"),
+        "{text}"
+    );
+}
+
+#[test]
+fn a_changed_barrier_that_imports_every_area_selects_the_areas_that_import_it() {
+    let dir = repo("edges-barrier-hub-change", SERVER);
     let plan = run(
         &dir,
         &with_edges(true),
-        vec![modified("app/src/http/auth.ts")],
+        vec![modified("app/src/http/server.ts")],
     );
-    assert!(plan
-        .unreached
-        .iter()
-        .any(|u| u.path == "app/src/http/auth.ts"));
+    assert_eq!(
+        tests(&plan),
+        ["app/test/api/orders.test.ts", "app/test/api/people.test.ts"]
+    );
 }
 
 #[test]

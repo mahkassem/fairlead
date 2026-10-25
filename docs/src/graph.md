@@ -6,6 +6,7 @@ Fairlead builds a file-level graph of what imports what, and later milestones pl
 fairlead graph stats                 # files, edges, what didn't resolve, build time
 fairlead graph why FROM TO           # the chain by which FROM depends on TO
 fairlead graph importers FILE        # the files that depend on FILE directly
+fairlead graph hubs                  # the files that link the most changes to the most tests
 ```
 
 ## What counts as an edge
@@ -259,9 +260,37 @@ barrier = ["apps/api/src/{http,db,auth}/**"]
 
 The same fan-out happens on the test side: end-to-end specs often import one shared module, such as a strings or fixtures index, only to build their expected values, and then any change under it plans every spec. A barrier on that index fixes it.
 
-The walk reaches a barrier file, but doesn't go on to the files that import it. That includes a changed barrier file, which reaches nothing and is left to `tests.unreached`, unless `plan.run_all` or an owner rule covers it. So list a barrier's paths in `plan.run_all` when a change to them should run everything. `graph why` still shows a chain through a barrier and says the plan stops there, and `test --explain` names the barrier that kept a test out.
+The walk reaches a barrier file, but doesn't go on to the files that import it. *Unreleased:* that holds for a walk passing through the barrier, not one starting at it: a changed barrier file selects the tests of the files that import it, like any other changed file, and a change below it still stops at it. A `plan.run_all` entry that only covered a barrier's own changes isn't needed any more, and `fairlead migrate` names it; keep one when a change to the barrier should run everything. `graph why` still shows a chain through a barrier and says the plan stops there, and `test --explain` names the barrier that kept a test out. `graph hubs` lists the files a barrier would cut the most from ([Hubs](#hubs)).
 
 A rule edge is a claim the imports can't check. Replay measures it: a failure in a test the rule doesn't reach shows up as a miss.
+
+### Hubs
+
+*Unreleased:* `fairlead graph hubs` finds where a barrier would help most. For each file it counts the files whose change reaches it in the plan's walk, and the unit tests a change to it reaches, and ranks files by the product: the change and test pairs that can pass through it. It names the edge that makes each one wide, and ends with the barrier line for the top one:
+
+```text
+$ fairlead graph hubs --top 2
+files that link the most changes to the most tests, of 1840 files and 412 unit tests
+(files whose change reaches it, times the tests it reaches):
+
+ 1. src/providers/load.ts
+    reaches 90 tests, fed by 611 files: 54990 pairs
+    wide: a dynamic import with no literal path, so it depends on its whole module
+ 2. src/providers/storage.ts
+    reaches 90 tests, fed by 611 files: 54990 pairs
+    wide: through src/providers/load.ts: a dynamic import with no literal path, so it depends on its whole module
+
+to cut the top hub, so a change below it stops there and a change to it still selects its importers' tests:
+  graph.barrier = ["src/providers/load.ts"]
+`fairlead test --explain TEST` shows a selected test's chain through it, and `fairlead replay run` measures what the cut costs in recall.
+```
+
+- **Wide** names the file's own conservative edge (a dynamic import with no literal path, a local import that didn't resolve, a tsconfig that couldn't be applied, or a workspace import kept as a dependency on its whole package), else the nearest file feeding it that has one (`through`), else `plain edges only`. On a tie the file with the edge comes first, since a barrier there cuts the cause.
+- **What counts** is what the planner does: the same modules, test files and barriers. Barrier files and test files aren't listed, and only `unit` tests count, since the other classes don't run because a walk reached them. The product is an upper bound: a pair with another path around the file isn't cut by a barrier on it.
+- **A barrier can cost recall.** A wide hub sometimes catches failures by accident, such as a flaky test it selects on unrelated changes. Replay the config with the barrier before keeping it ([Replay](replay.md)).
+- `--top N` lists N files (10 by default), and `--json` prints the same list with `path`, `tests`, `feeders`, `score` and `why` (`kind`, `text`, and `through` when it names another file), the `barrier` line, and the seconds the graph and the count took.
+
+The count is one pass per 4,096 files over the graph's strongly connected components, with a bitset per component, not a walk from every file: O((V + E) × V / 64) word operations, so it stays a small part of the graph's own build. On pnpm/pnpm (9,871 files) it takes 0.02 s beside a 0.36 s build, and on Effect-TS/effect under 0.01 s.
 
 ## Resolution, without an install
 
