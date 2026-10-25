@@ -19,5 +19,5 @@ pub mod tree;
 pub mod workspace;
 
 pub use graph::{EdgeKind, Graph, Stats};
-pub use scan::{build, Scan};
+pub use scan::{build, build_sharing, Scan};
 pub use tree_sitter;

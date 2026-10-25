@@ -7,9 +7,27 @@ fairlead plan                      # changes since the remote's default branch
 fairlead plan --base main --json   # the plan as JSON (schema below)
 fairlead plan --files src/a.ts     # plan for these files or directories, no git needed
 fairlead test --explain test/a.test.ts   # why a test or check is in, or isn't
+fairlead plan --head HEAD~3        # a past commit's plan, without checking it out
 ```
 
 The working tree is always the head: in CI that's the checked-out commit. The base is the merge base of `--base` (default: `origin/HEAD`, then `origin/main`, `origin/master`, `main`, `master`) and `HEAD`. If there's no merge base, as in a shallow clone, the plan fails with exit code 2 rather than planning nothing; fetch more history (`fetch-depth: 0`) or pass `--files`.
+
+## Planning a past commit
+
+*Unreleased:* `fairlead plan --head REV` plans the changes of commit `REV` without checking it out, so a loop over history needs no script ([#225](https://github.com/mahkassem/fairlead/issues/225)). `--json` and `--out` work with it, and `fairlead test --head REV --explain FILE` explains that plan.
+
+```sh
+for c in $(git rev-list --first-parent -10 origin/main); do
+  fairlead plan --head "$c" --json > "plan-$c.json"
+done
+```
+
+- **What it compares.** Without `--base`, the head is measured from its merge base with the default branch (as `plan` finds it), or from its first parent when the head is already on that branch, as each commit of a loop over the default branch is. A root commit has no parent, so it needs `--base`. With `--base`, its merge base with `REV`. Both revisions are read in your checkout, so `--base HEAD~4` means your `HEAD`, not the head's.
+- **Where it plans.** Fairlead adds a detached worktree of `REV` under the system temp directory (`git worktree add --detach`), scans it with the `fairlead.toml` committed at `REV`, and removes it afterwards, on an error too. The plan's paths are repository-relative as always, never the temporary directory's. Your working tree, dirty or not, plays no part. Git hooks don't run in that worktree, so a `post-checkout` hook installs nothing there.
+- **Interrupted.** A run stopped by Ctrl-C leaves its worktree behind, named `fairlead-head-<pid>-…`. The next `plan --head` in the repository removes every such worktree whose process is gone (on Windows, once it is an hour old), then runs `git worktree prune`; `git worktree remove --force <path>` removes one at once.
+- **Fast.** The parse cache is keyed by each file's content, so the temporary worktree reads and adds to your checkout's cache instead of starting cold, and an old commit's files don't push out the current ones. After its first commit, a loop over history parses only the files each commit changed; adding and removing the worktree is a git checkout, which grows with the repository's size.
+- **Submodules and Git LFS.** Submodules aren't checked out in the temporary worktree, so their files aren't in the graph; a changed submodule is one changed path, as `git diff` names it, which is what `plan` sees in a checkout without `git submodule update`. Git LFS files are left as pointer files (`GIT_LFS_SKIP_SMUDGE=1`), so nothing is downloaded; they keep their paths, which is all the plan reads of a binary file.
+- **Not with** `--files`, which names its own changes, or in a [workspace](workspace.md) folder or with `--repo`: run it inside the one repository. `ci plan --head` is different: it checks that the head is the checked-out commit.
 
 ## How a plan is built
 

@@ -8,7 +8,7 @@ use clap::Args;
 use fairlead_core::config::{self, Config, LoadOptions};
 use fairlead_core::plan::{json_schema, Change, Plan, Status};
 use fairlead_lang::tree::Tree;
-use fairlead_lang::{build, Scan};
+use fairlead_lang::{build, build_sharing, Scan};
 use fairlead_tests::{digest, explain::explain, git, plan, render, Input};
 
 #[derive(Args, Clone)]
@@ -29,6 +29,9 @@ pub struct Changes {
     /// Plan everything whatever changed, for this reason; a full CI stage sets it.
     #[arg(skip)]
     pub everything: Option<String>,
+    /// Scan with the parse cache of the checkout here, not the scanned one's.
+    #[arg(skip)]
+    pub cache_from: Option<PathBuf>,
 }
 
 impl Changes {
@@ -40,6 +43,7 @@ impl Changes {
             sets,
             repo: None,
             everything: None,
+            cache_from: None,
         }
     }
 }
@@ -134,8 +138,11 @@ pub fn make(cwd: &Path, changes: &Changes) -> Result<Planned, String> {
     };
     let root = std::fs::canonicalize(&root).unwrap_or(root);
     let cwd = std::fs::canonicalize(cwd).unwrap_or_else(|_| cwd.to_path_buf());
-    let mut scan = build(&root, &loaded.config)
-        .map_err(|e| format!("could not read {}: {e}", root.display()))?;
+    let scanned = match &changes.cache_from {
+        Some(owner) => build_sharing(&root, &loaded.config, owner),
+        None => build(&root, &loaded.config),
+    };
+    let mut scan = scanned.map_err(|e| format!("could not read {}: {e}", root.display()))?;
     let changes_everything = changes.everything.clone();
     let (changes, base) = if changes.files.is_empty() {
         let base = match &changes.base {
@@ -176,9 +183,58 @@ pub fn make(cwd: &Path, changes: &Changes) -> Result<Planned, String> {
     })
 }
 
+/// The plan of `changes`, or with `head`, of that commit's changes from a
+/// temporary checkout of it, which lives as long as the returned guard.
+fn make_at(
+    cwd: &Path,
+    changes: &Changes,
+    head: Option<&str>,
+) -> Result<(Planned, Option<crate::head::Checkout>), String> {
+    let Some(rev) = head else {
+        return make(cwd, changes).map(|p| (p, None));
+    };
+    if !changes.files.is_empty() {
+        return Err("--head plans a commit's own changes, so it can't take --files".into());
+    }
+    let top = crate::head::top(cwd)?;
+    let checkout = crate::head::check_out(&top, rev)?;
+    let cwd = std::fs::canonicalize(cwd).unwrap_or_else(|_| cwd.to_path_buf());
+    let inner = cwd
+        .strip_prefix(&top)
+        .map(|rel| checkout.dir.join(rel))
+        .ok()
+        .filter(|d| d.is_dir())
+        .unwrap_or_else(|| checkout.dir.clone());
+    let mut at = changes.clone();
+    at.base = Some(crate::head::base(
+        &top,
+        &checkout.dir,
+        changes.base.as_deref(),
+    )?);
+    at.cache_from = Some(top);
+    let planned = make(&inner, &at)?;
+    Ok((planned, Some(checkout)))
+}
+
+/// A workspace plans each repository at its own head, so `--head` is for one.
+fn workspace_or_head(
+    cwd: &Path,
+    changes: &Changes,
+    head: Option<&str>,
+) -> Result<Option<fairlead_core::config::workspace::Found>, String> {
+    let found = crate::workspace_cmd::resolve(cwd, changes)?;
+    if found.is_some() && head.is_some() {
+        return Err(
+            "--head plans one repository: run it inside the repository, without --repo".into(),
+        );
+    }
+    Ok(found)
+}
+
 pub fn run_plan(
     cwd: &Path,
     changes: Changes,
+    head: Option<String>,
     json: bool,
     out: Option<PathBuf>,
     schema: bool,
@@ -190,7 +246,7 @@ pub fn run_plan(
         );
         return ExitCode::SUCCESS;
     }
-    match crate::workspace_cmd::resolve(cwd, &changes) {
+    match workspace_or_head(cwd, &changes, head.as_deref()) {
         Ok(Some(ws)) => return crate::workspace_cmd::run_plan(&ws, cwd, changes, json, out),
         Ok(None) => {}
         Err(e) => {
@@ -198,7 +254,7 @@ pub fn run_plan(
             return ExitCode::from(2);
         }
     }
-    let planned = match make(cwd, &changes) {
+    let (planned, _checkout) = match make_at(cwd, &changes, head.as_deref()) {
         Ok(p) => p,
         Err(e) => {
             eprintln!("{e}");
@@ -220,8 +276,8 @@ pub fn run_plan(
     ExitCode::SUCCESS
 }
 
-pub fn run_explain(cwd: &Path, changes: Changes, target: &str) -> ExitCode {
-    match crate::workspace_cmd::resolve(cwd, &changes) {
+pub fn run_explain(cwd: &Path, changes: Changes, head: Option<&str>, target: &str) -> ExitCode {
+    match workspace_or_head(cwd, &changes, head) {
         Ok(Some(ws)) => return crate::workspace_cmd::run_explain(&ws, cwd, changes, target),
         Ok(None) => {}
         Err(e) => {
@@ -229,14 +285,18 @@ pub fn run_explain(cwd: &Path, changes: Changes, target: &str) -> ExitCode {
             return ExitCode::from(2);
         }
     }
-    let planned = match make(cwd, &changes) {
+    let (planned, checkout) = match make_at(cwd, &changes, head) {
         Ok(p) => p,
         Err(e) => {
             eprintln!("{e}");
             return ExitCode::from(2);
         }
     };
-    let root = planned.scan.tree.root.clone();
+    // The target names a path as the caller sees it, in their own checkout.
+    let root = match &checkout {
+        Some(_) => crate::head::top(cwd).unwrap_or_else(|_| planned.scan.tree.root.clone()),
+        None => planned.scan.tree.root.clone(),
+    };
     let abs = std::fs::canonicalize(cwd.join(target)).unwrap_or_else(|_| cwd.join(target));
     let rel =
         fairlead_lang::tree::relative(&root, &abs).unwrap_or_else(|| target.replace('\\', "/"));
