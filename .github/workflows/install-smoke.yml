@@ -2,7 +2,7 @@
 # version it prints. Runs when the release workflow finishes a tag, or by hand
 # for any tag. The release is created with the workflow token, which starts no
 # `release` event, hence `workflow_run`. npm publishing waits for an approval,
-# so the npm legs wait for the package too.
+# so the npm legs wait for the package too. The Alpine leg installs on musl.
 name: install-smoke
 
 on:
@@ -19,7 +19,7 @@ permissions: {}
 
 jobs:
   install:
-    name: ${{ matrix.installer }} (${{ matrix.os }})
+    name: ${{ matrix.installer }} (${{ matrix.container && 'alpine' || matrix.os }})
     # A tag push that released, not the release workflow's pull request plan.
     if: >-
       github.event_name == 'workflow_dispatch' ||
@@ -35,12 +35,20 @@ jobs:
           - { os: ubuntu-24.04, installer: npm }
           - { os: macos-latest, installer: npm }
           - { os: windows-latest, installer: npm }
+          - os: ubuntu-24.04
+            installer: npm
+            container: node:24-alpine@sha256:06d7adf3e0ef61a13f1d28682726366f97a15aa1888c934d3ecec86c33918b53
     runs-on: ${{ matrix.os }}
+    container: ${{ matrix.container }}
     timeout-minutes: 75
     env:
       TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.event.workflow_run.head_branch }}
       BASE: https://github.com/mahkassem/fairlead/releases/download
     steps:
+      - name: Install bash in the Alpine container
+        if: matrix.container
+        shell: sh
+        run: apk add --no-cache bash
       - name: Check the tag
         shell: bash
         run: |
