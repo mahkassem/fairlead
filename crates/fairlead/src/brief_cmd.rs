@@ -33,6 +33,9 @@ pub struct BriefArgs {
     /// The agent session the brief belongs to, over `CLAUDE_CODE_SESSION_ID`.
     #[arg(long)]
     session: Option<String>,
+    /// Start the session's set of paths over with these, instead of adding them to it.
+    #[arg(long)]
+    fresh: bool,
     /// List every item instead of the first few of each section.
     #[arg(long)]
     all: bool,
@@ -62,6 +65,9 @@ pub struct Brief {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub task: Option<crate::tracker::Task>,
     pub paths: Vec<String>,
+    /// How many of `paths` earlier briefs of the session named and this one didn't.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub earlier: usize,
     /// Named paths that aren't in the tree yet.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub new: Vec<String>,
@@ -82,6 +88,10 @@ pub struct Brief {
     /// How many skills the text lists before "N more".
     #[serde(default = "skill_cap")]
     pub skill_cap: usize,
+}
+
+fn is_zero(n: &usize) -> bool {
+    *n == 0
 }
 
 fn skill_cap() -> usize {
@@ -139,6 +149,7 @@ fn brief(args: &BriefArgs, cwd: &Path) -> Result<(), String> {
         args.base.as_deref(),
         args.session.clone(),
         &args.sets,
+        args.fresh,
     )?;
     if args.json {
         println!(
@@ -153,12 +164,14 @@ fn brief(args: &BriefArgs, cwd: &Path) -> Result<(), String> {
 
 /// The brief for `paths`, kept in the session's store and offered as an
 /// event, with the plan it was made from: what `brief` and `context` share.
+/// The session's earlier paths are added unless `fresh`.
 pub fn build(
     cwd: &Path,
     named: &[String],
     base_arg: Option<&str>,
     session: Option<String>,
     sets: &[String],
+    fresh: bool,
 ) -> Result<(Brief, Planned), String> {
     let root = crate::graph_cmd::repo_root(cwd);
     let session = session.or_else(|| std::env::var(SESSION_ENV).ok());
@@ -174,7 +187,8 @@ pub fn build(
         }
         _ => None,
     };
-    if let Some(earlier) = &earlier {
+    let carried = earlier.as_ref().filter(|_| !fresh);
+    if let Some(earlier) = carried {
         // Stored paths are from the root; absolute, they resolve from any directory.
         let root = std::fs::canonicalize(&root).unwrap_or_else(|_| root.clone());
         paths.extend(
@@ -193,12 +207,13 @@ pub fn build(
         }
         (None, BriefPer::Call) => format!("b-{:08x}", fnv(&format!("{session:?}{now}")) as u32),
     };
-    let created = earlier
-        .as_ref()
-        .map_or(now.clone(), |b| b.created_at.clone());
+    let created = carried.map_or(now.clone(), |b| b.created_at.clone());
     let mut made = assemble(&planned, &root, id, session, base, created, now)?;
+    if let Some(earlier) = carried {
+        made.earlier = from_earlier(&made.paths, &earlier.paths, &root, cwd, named);
+    }
     made.branch = git::branch(&root);
-    // A task is read once per brief: a tracker call can take seconds.
+    // A task is read once per branch's brief, fresh or not: a tracker call can take seconds.
     made.task = match earlier.and_then(|b| b.task) {
         Some(task) => Some(task),
         None => crate::tracker::for_branch(&root, &loaded.config.tracker, made.branch.as_deref())
@@ -212,6 +227,41 @@ pub fn build(
     }
     offer(&root, &made);
     Ok((made, planned))
+}
+
+/// How many of `paths` came only from `earlier`: in it, and under none of
+/// the paths this call named.
+fn from_earlier(
+    paths: &[String],
+    earlier: &[String],
+    root: &Path,
+    cwd: &Path,
+    named: &[String],
+) -> usize {
+    let root = std::fs::canonicalize(root).unwrap_or_else(|_| root.to_path_buf());
+    let cwd = std::fs::canonicalize(cwd).unwrap_or_else(|_| cwd.to_path_buf());
+    let here = fairlead_lang::tree::relative(&root, &cwd).unwrap_or_default();
+    let named: Vec<String> = named
+        .iter()
+        .filter_map(|f| {
+            let given = Path::new(f);
+            if given.is_absolute() {
+                let abs = std::fs::canonicalize(given).unwrap_or_else(|_| given.to_path_buf());
+                fairlead_lang::tree::relative(&root, &abs)
+            } else {
+                fairlead_lang::tree::normalize(&here, &f.replace('\\', "/"))
+            }
+        })
+        .collect();
+    let covered = |p: &str| {
+        named
+            .iter()
+            .any(|n| n.is_empty() || p == n || p.starts_with(&format!("{n}/")))
+    };
+    paths
+        .iter()
+        .filter(|p| earlier.contains(p) && !covered(p))
+        .count()
 }
 
 /// One `offer` event naming what the brief offered, for the hit rate:
@@ -311,6 +361,7 @@ fn assemble(
         branch: None,
         task: None,
         paths,
+        earlier: 0,
         new,
         plan_id: plan.plan_id.clone(),
         reaches: Reaches {
@@ -419,6 +470,13 @@ pub fn text(b: &Brief, all: bool) -> String {
         b.paths.len(),
         if b.paths.len() == 1 { "" } else { "s" }
     ));
+    if b.earlier > 0 {
+        out.push_str(&format!(
+            "  paths this session: {}, including {} from earlier briefs; --fresh starts over\n",
+            b.paths.len(),
+            b.earlier
+        ));
+    }
     for p in &b.new {
         out.push_str(&format!(
             "  new      {p}: not in the tree yet, so nothing reaches it\n"

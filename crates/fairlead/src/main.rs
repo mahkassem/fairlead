@@ -20,6 +20,7 @@ mod find_cmd;
 mod graph_cmd;
 mod graph_hubs;
 mod guard_cmd;
+mod head;
 mod hook_cmd;
 mod hooks_cmd;
 mod import_cmd;
@@ -95,6 +96,9 @@ enum Command {
     Plan {
         #[command(flatten)]
         changes: plan_cmd::Changes,
+        /// Plan this commit's changes from a temporary checkout of it, without checking it out here.
+        #[arg(long, value_name = "REV")]
+        head: Option<String>,
         /// Print the plan as JSON.
         #[arg(long)]
         json: bool,
@@ -109,6 +113,9 @@ enum Command {
     Test {
         #[command(flatten)]
         changes: plan_cmd::Changes,
+        /// Explain the plan of this commit, from a temporary checkout of it.
+        #[arg(long, value_name = "REV")]
+        head: Option<String>,
         /// Why this test file or check is in the plan, or why it isn't.
         #[arg(long, value_name = "FILE_OR_CHECK")]
         explain: String,
@@ -572,18 +579,21 @@ fn main() -> ExitCode {
         Some(Command::Next { args }) => receipt_cmd::run_next(args, &cwd()),
         Some(Command::Plan {
             changes,
+            head,
             json,
             out,
             schema,
-        }) => plan_cmd::run_plan(&cwd(), changes, json, out, schema),
+        }) => plan_cmd::run_plan(&cwd(), changes, head, json, out, schema),
         Some(Command::Ci { action }) => ci_cmd::run(action, &cwd()),
         Some(Command::Replay { action }) => replay_cmd::run(action),
         Some(Command::Insights { args }) => insights_cmd::run(args, &cwd()),
         Some(Command::Mcp) => mcp_cmd::run(&cwd()),
         Some(Command::Tokens { action }) => tokens::run(action, &cwd()),
-        Some(Command::Test { changes, explain }) => {
-            plan_cmd::run_explain(&cwd(), changes, &explain)
-        }
+        Some(Command::Test {
+            changes,
+            head,
+            explain,
+        }) => plan_cmd::run_explain(&cwd(), changes, head.as_deref(), &explain),
         None => {
             println!(
                 "fairlead {}: see `fairlead --help`",

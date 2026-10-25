@@ -278,7 +278,7 @@ fn workflows(root: &Path) -> Vec<Update> {
 fn insights_workflow(root: &Path) -> Option<Update> {
     let file = root.join(crate::ci_workflow::INSIGHTS_PATH);
     let text = std::fs::read_to_string(&file).ok()?;
-    let fresh = crate::ci_workflow::render_insights();
+    let fresh = crate::ci_workflow::render_insights(&crate::ci_workflow::insights_config(root));
     (text.starts_with(crate::ci_workflow::MARKER) && text != fresh).then(|| Update {
         file,
         what: "the weekly insights workflow becomes this release's".into(),
