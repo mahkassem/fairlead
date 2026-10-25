@@ -6,7 +6,10 @@ use fairlead_core::plan::{Plan, Reason};
 
 pub fn reason(reason: &Reason) -> String {
     match reason {
-        Reason::RunAll { path } => format!("run_all: {path}"),
+        Reason::RunAll { path, change } => match change {
+            Some(kind) => format!("run_all ({}): {path}", kind.name()),
+            None => format!("run_all: {path}"),
+        },
         Reason::Changed => "changed".into(),
         Reason::Import { chain } => {
             format!("{} hops from {}", chain.len().saturating_sub(1), chain[0])

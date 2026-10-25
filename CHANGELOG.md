@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### New
+
+- `plan.run_all` by kind of change ([#221](https://github.com/mahkassem/fairlead/issues/221), ask 2). An entry is a glob, as before, or `{ paths = [...], on = [...] }` with some of `added`, `modified`, `deleted` and `renamed`, and then only a change of a listed kind runs everything; any other change to a matching path goes through the graph. Migrations sit in `run_all` because editing one that has run is never safe, so every new migration, the common case, ran everything too; with `on = ["modified", "deleted", "renamed"]` a new one selects only the tests that depend on it. A rename matches on its old path or its new one. `--explain`, the plan JSON (`change`, beside `path`) and the CI report name the kind that triggered the entry, and `config check` rejects an unknown kind or an empty `on`. A plain glob plans exactly as before. See [Run everything by kind of change](https://mahkassem.github.io/fairlead/docs/plan.html#run-everything-by-kind-of-change).
+
 ## 0.12.0 (2026-10-14)
 
 ### Changed

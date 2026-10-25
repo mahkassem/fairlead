@@ -30,6 +30,7 @@ fn go_manifests_in_run_all(cx: &Context) -> bool {
         .run_all
         .items()
         .iter()
+        .flat_map(|entry| entry.globs())
         .any(|p| p.contains("go.mod") || p.contains("go.sum"))
 }
 

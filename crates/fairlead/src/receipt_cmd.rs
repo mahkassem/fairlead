@@ -345,7 +345,7 @@ fn cause(reason: &Reason, test: &str) -> Option<String> {
         Reason::Import { chain } => chain.first().cloned(),
         Reason::Owner { changed, .. } => Some(changed.clone()),
         Reason::Changed => Some(test.to_string()),
-        Reason::RunAll { path } | Reason::Unreached { path, .. } => Some(path.clone()),
+        Reason::RunAll { path, .. } | Reason::Unreached { path, .. } => Some(path.clone()),
         _ => None,
     }
 }

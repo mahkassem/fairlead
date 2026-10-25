@@ -15,6 +15,7 @@ pub use fairlead_core::pattern;
 pub mod planner;
 pub mod quarantine;
 pub mod render;
+pub mod run_all;
 pub mod select;
 pub mod testfiles;
 pub mod trims;
