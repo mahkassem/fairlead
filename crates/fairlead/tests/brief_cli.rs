@@ -259,3 +259,63 @@ fn an_edit_without_a_brief_gets_one_note_per_session_and_never_after_a_brief() {
     let off = repo("nudgeoff", &format!("{CONFIG}[brief]\nnudge = false\n"), 0);
     assert_eq!(nudge(&off, "s1"), "");
 }
+
+#[test]
+fn an_accumulated_brief_says_so_and_fresh_starts_the_session_over() {
+    let dir = repo("fresh", CONFIG, 0);
+    let hint = "paths this session:";
+    let (_, first) = brief(&dir, &["src/a.ts", "--session", "s1"]);
+    assert!(!first.contains(hint), "{first}");
+    let (_, again) = brief(&dir, &["src/a.ts", "--session", "s1"]);
+    assert!(
+        !again.contains(hint),
+        "a path named again isn't carried: {again}"
+    );
+    let (_, added) = brief(&dir, &["test/b.test.ts", "--session", "s1"]);
+    assert!(
+        added.contains(
+            "  paths this session: 2, including 1 from earlier briefs; --fresh starts over"
+        ),
+        "{added}"
+    );
+    assert_eq!(stored(&dir)[0]["earlier"], 1);
+
+    let (code, fresh) = brief(&dir, &["src/b.ts", "--session", "s1", "--fresh"]);
+    assert_eq!(code, 0, "{fresh}");
+    assert!(fresh.lines().next().unwrap().ends_with("1 path"), "{fresh}");
+    assert!(!fresh.contains(hint), "{fresh}");
+    let briefs = stored(&dir);
+    assert_eq!(
+        briefs.len(),
+        1,
+        "the session's brief is replaced: {briefs:?}"
+    );
+    assert_eq!(briefs[0]["paths"], json!(["src/b.ts"]));
+    assert!(briefs[0].get("earlier").is_none(), "{}", briefs[0]);
+
+    std::fs::write(dir.join("src/a.ts"), "export const a = 2;\n").unwrap();
+    std::fs::write(
+        dir.join("src/b.ts"),
+        "import { a } from './a';\nexport const b = 2;\n",
+    )
+    .unwrap();
+    let out = command(
+        &dir,
+        env!("CARGO_BIN_EXE_fairlead"),
+        &["receipt", "--session", "s1", "--json"],
+    )
+    .output()
+    .unwrap();
+    let receipt: Value = serde_json::from_slice(&out.stdout).unwrap();
+    assert_eq!(
+        receipt["named"],
+        json!(["src/b.ts"]),
+        "the receipt reads the fresh set"
+    );
+
+    let (_, after) = brief(&dir, &["src/a.ts", "--session", "s1"]);
+    assert!(
+        after.contains("paths this session: 2, including 1"),
+        "{after}"
+    );
+}

@@ -68,6 +68,16 @@ pub struct Scan {
 }
 
 pub fn build(root: &Path, config: &Config) -> std::io::Result<Scan> {
+    build_with(root, config, None)
+}
+
+/// `build` with the parse cache of the checkout at `cache_owner`, for a
+/// temporary checkout whose own cache would start empty and be thrown away.
+pub fn build_sharing(root: &Path, config: &Config, cache_owner: &Path) -> std::io::Result<Scan> {
+    build_with(root, config, Some(cache_owner))
+}
+
+fn build_with(root: &Path, config: &Config, cache_owner: Option<&Path>) -> std::io::Result<Scan> {
     // Canonical and plain, so resolved paths (which the resolver canonicalizes) share its prefix.
     let root = crate::tree::plain(&std::fs::canonicalize(root)?);
     let tree = Tree::scan(&root);
@@ -78,10 +88,10 @@ pub fn build(root: &Path, config: &Config) -> std::io::Result<Scan> {
         .map(|p| (p.name.clone(), p.dir.clone()))
         .collect();
     let mut graph = Graph::with_files(tree.files.clone(), named);
-    let parse_cache = if config.graph.cache {
-        ParseCache::open(&root)
-    } else {
-        ParseCache::disabled()
+    let parse_cache = match (config.graph.cache, cache_owner) {
+        (false, _) => ParseCache::disabled(),
+        (true, None) => ParseCache::open(&root),
+        (true, Some(owner)) => ParseCache::borrow(owner),
     };
     let externals = config.graph.providers.items();
     let (owner, conflicts) = if externals.is_empty() {

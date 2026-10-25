@@ -314,5 +314,5 @@ pub fn run_explain(ws: &Found, cwd: &Path, changes: Changes, target: &str) -> Ex
         }
     };
     let own = changes_for(member, &changes, files);
-    crate::plan_cmd::run_explain(&member.dir, own, &target)
+    crate::plan_cmd::run_explain(&member.dir, own, None, &target)
 }
