@@ -17,6 +17,7 @@ pub mod planner;
 pub mod quarantine;
 pub mod reach;
 pub mod render;
+pub mod run_all;
 pub mod select;
 pub mod testfiles;
 pub mod trims;

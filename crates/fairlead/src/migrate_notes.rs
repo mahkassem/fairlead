@@ -31,6 +31,7 @@ fn go_manifests_in_run_all(cx: &Context) -> bool {
         .run_all
         .items()
         .iter()
+        .flat_map(|entry| entry.globs())
         .any(|p| p.contains("go.mod") || p.contains("go.sum"))
 }
 
@@ -89,12 +90,12 @@ fn run_all_covers_a_barrier(cx: &Context) -> bool {
 
 /// Whether a `run_all` entry is a barrier entry itself, or a plain path a
 /// barrier glob matches: one that covered only a barrier's own changes.
-fn names_only_barriers(run_all: &[String], barrier: &[String]) -> bool {
+fn names_only_barriers(run_all: &[fairlead_core::config::RunAll], barrier: &[String]) -> bool {
     let globs: Vec<Pattern> = barrier
         .iter()
         .filter_map(|g| Pattern::new(g).ok())
         .collect();
-    run_all.iter().any(|entry| {
+    run_all.iter().flat_map(|entry| entry.globs()).any(|entry| {
         barrier.contains(entry)
             || (!entry.contains(['*', '?', '[', '{']) && globs.iter().any(|g| g.is_match(entry)))
     })
@@ -310,22 +311,39 @@ pub const BASE: &[&str] = &[
 #[cfg(test)]
 mod tests {
     use super::names_only_barriers;
+    use fairlead_core::config::RunAll;
 
     fn strings(items: &[&str]) -> Vec<String> {
         items.iter().map(|s| s.to_string()).collect()
     }
 
+    fn globs(items: &[&str]) -> Vec<RunAll> {
+        items.iter().map(|s| RunAll::Glob(s.to_string())).collect()
+    }
+
     #[test]
     fn a_run_all_entry_counts_when_it_is_a_barrier_entry_or_a_path_one_matches() {
         let barrier = strings(&["src/http/**", "src/loader.ts"]);
-        assert!(names_only_barriers(&strings(&["src/loader.ts"]), &barrier));
-        assert!(names_only_barriers(&strings(&["src/http/**"]), &barrier));
+        assert!(names_only_barriers(&globs(&["src/loader.ts"]), &barrier));
+        assert!(names_only_barriers(&globs(&["src/http/**"]), &barrier));
         assert!(names_only_barriers(
-            &strings(&["migrations/**", "src/http/server.ts"]),
+            &globs(&["migrations/**", "src/http/server.ts"]),
             &barrier
         ));
-        assert!(!names_only_barriers(&strings(&["src/**"]), &barrier));
-        assert!(!names_only_barriers(&strings(&["src/db.ts"]), &barrier));
-        assert!(!names_only_barriers(&strings(&["src/loader.ts"]), &[]));
+        assert!(!names_only_barriers(&globs(&["src/**"]), &barrier));
+        assert!(!names_only_barriers(&globs(&["src/db.ts"]), &barrier));
+        assert!(!names_only_barriers(&globs(&["src/loader.ts"]), &[]));
+        let kinds: Vec<RunAll> = toml::from_str::<toml::Table>(
+            "e = { paths = [\"src/loader.ts\"], on = [\"modified\"] }",
+        )
+        .unwrap()["e"]
+            .clone()
+            .try_into()
+            .map(|e| vec![e])
+            .unwrap();
+        assert!(
+            names_only_barriers(&kinds, &barrier),
+            "a kind-limited entry counts too"
+        );
     }
 }

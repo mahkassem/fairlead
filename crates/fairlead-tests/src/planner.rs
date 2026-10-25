@@ -15,6 +15,7 @@ use crate::invoke::invocations;
 use crate::modules::Modules;
 use crate::owners::Owners;
 use crate::pattern::Pattern;
+use crate::run_all::RunAll;
 use crate::select::{everything, select};
 use crate::testfiles::{discover, TestFile};
 use crate::trims::Trims;
@@ -94,6 +95,32 @@ pub fn patterns(globs: &[String]) -> Result<Vec<Pattern>, String> {
     globs.iter().map(|g| Pattern::new(g)).collect()
 }
 
+/// The first changed path, in order, that a `plan.run_all` entry runs
+/// everything for, with the kind of change when the entry names kinds; a
+/// scoped lockfile, a trimmed path and an owner rule's override don't count.
+fn run_all_trigger(
+    cx: &Context,
+    run_all: &RunAll,
+    changes: &[Change],
+    test_paths: &[&str],
+) -> Result<Option<(String, Option<Status>)>, String> {
+    let kinds = crate::run_all::kinds_by_path(changes);
+    for path in &cx.changed {
+        let scoped = cx.lockfile.is_some() && path == LOCKFILE;
+        if scoped || cx.trims.quiet.contains(path) {
+            continue;
+        }
+        let at = kinds.get(path.as_str()).map_or(&[][..], Vec::as_slice);
+        let Some(change) = at.iter().find_map(|kind| run_all.hit(path, *kind)) else {
+            continue;
+        };
+        if !cx.owners.overrides_run_all(path, test_paths)? {
+            return Ok(Some((path.clone(), change)));
+        }
+    }
+    Ok(None)
+}
+
 fn changed_sets(changes: &[Change]) -> (BTreeSet<String>, BTreeSet<String>) {
     let mut changed = BTreeSet::new();
     let mut deleted = BTreeSet::new();
@@ -152,7 +179,7 @@ pub fn plan(scan: &mut Scan, config: &Config, input: Input) -> Result<Plan, Stri
         .collect();
     let owners = Owners::new(config.tests.owners.items())?;
     let lockfile = lockfile_scope(scan, config, &changed, &input.base_files);
-    let run_all = patterns(config.plan.run_all.items())?;
+    let run_all = RunAll::new(config.plan.run_all.items())?;
     let mut trims = crate::trims::trims(scan, config, &input.changes, &input.base_files, &run_all);
     let mut warnings = std::mem::take(&mut trims.warnings);
     let mut cx = Context {
@@ -187,17 +214,7 @@ pub fn plan(scan: &mut Scan, config: &Config, input: Input) -> Result<Plan, Stri
         .filter(|t| matches!(t.class, TestClass::Unit | TestClass::Own))
         .map(|t| t.path.as_str())
         .collect();
-    let mut trigger = None;
-    for path in &cx.changed {
-        let scoped = cx.lockfile.is_some() && path == LOCKFILE;
-        if scoped || cx.trims.quiet.contains(path) || !run_all.iter().any(|g| g.is_match(path)) {
-            continue;
-        }
-        if !cx.owners.overrides_run_all(path, &test_paths)? {
-            trigger = Some(path.clone());
-            break;
-        }
-    }
+    let mut trigger = run_all_trigger(&cx, &run_all, &input.changes, &test_paths)?;
     if cx.lockfile.as_ref().is_some_and(|l| l.manifests.is_empty()) {
         warnings.push(Warning {
             code: "lockfile-scoped-to-nothing".into(),
@@ -210,16 +227,16 @@ pub fn plan(scan: &mut Scan, config: &Config, input: Input) -> Result<Plan, Stri
     if trigger.is_none() {
         if let Some((path, warning)) = provider_failed(scan, &cx.changed) {
             warnings.push(warning);
-            trigger = Some(path);
+            trigger = Some((path, None));
         }
     }
     if trigger.is_none() {
-        trigger = input.everything.clone();
+        trigger = input.everything.clone().map(|why| (why, None));
     }
     let walked = start_walk(&cx);
     let (tests, unreached, all_reason) = match trigger {
-        Some(path) => {
-            let reason = Reason::RunAll { path };
+        Some((path, change)) => {
+            let reason = Reason::RunAll { path, change };
             (everything(&cx, &reason), Vec::new(), Some(reason))
         }
         None => select(&cx, &walked, &mut warnings)?,

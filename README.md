@@ -96,6 +96,9 @@ of trying things like a stranger.
   change runs only the packages whose dependencies actually changed.
   *Since 0.8.0:* in a bun project, a dependency's version bump runs only the
   tests of the files that import it, and nothing when nothing does.
+  *Unreleased:* a `plan.run_all` entry can name the kinds of change that run
+  everything, so a new migration goes through the graph and an edited one
+  runs everything.
 - **No install needed to read your code.** The import graph comes from source
   alone, with tsconfig paths, `go.mod` and composer's autoload resolved and
   parsed files cached, so a plan takes a fraction of a second.
