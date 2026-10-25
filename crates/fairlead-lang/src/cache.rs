@@ -29,6 +29,9 @@ pub struct ParseCache {
     dir: Option<PathBuf>,
     version: String,
     entries: HashMap<String, Extracted>,
+    /// Borrowed from another checkout: a save adds this run's entries and
+    /// prunes nothing, so a scan of an old commit leaves the owner's intact.
+    shared: bool,
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -78,9 +81,22 @@ impl ParseCache {
     }
 
     pub fn open(root: &Path) -> ParseCache {
-        let Some(dir) = dir_for(root) else {
-            return ParseCache::disabled();
-        };
+        match dir_for(root) {
+            Some(dir) => ParseCache::open_dir(dir, false),
+            None => ParseCache::disabled(),
+        }
+    }
+
+    /// The cache of the checkout at `owner`, for a scan of another checkout
+    /// of the same repository: keyed by content, its entries hold for both.
+    pub fn borrow(owner: &Path) -> ParseCache {
+        match dir_for(owner) {
+            Some(dir) => ParseCache::open_dir(dir, true),
+            None => ParseCache::disabled(),
+        }
+    }
+
+    fn open_dir(dir: PathBuf, shared: bool) -> ParseCache {
         let version = version();
         let entries = std::fs::read(dir.join(FILE))
             .ok()
@@ -92,6 +108,7 @@ impl ParseCache {
             dir: Some(dir),
             version,
             entries,
+            shared,
         }
     }
 
@@ -104,16 +121,21 @@ impl ParseCache {
     }
 
     /// Writes `entries`, the ones this run used, replacing what was there so
-    /// files no longer in the tree drop out. Nothing is written when they're
-    /// exactly what was read, and a failed write is ignored.
-    pub fn save(&self, entries: HashMap<String, Extracted>) {
+    /// files no longer in the tree drop out, or added to it when the cache
+    /// is borrowed. Nothing is written when that changes nothing, and a
+    /// failed write is ignored.
+    pub fn save(&self, mut entries: HashMap<String, Extracted>) {
         let Some(dir) = &self.dir else {
             return;
         };
-        let unchanged = entries.len() == self.entries.len()
-            && entries.keys().all(|k| self.entries.contains_key(k));
-        if unchanged {
+        let known = entries.keys().all(|k| self.entries.contains_key(k));
+        if known && (self.shared || entries.len() == self.entries.len()) {
             return;
+        }
+        if self.shared {
+            for (k, v) in &self.entries {
+                entries.entry(k.clone()).or_insert_with(|| v.clone());
+            }
         }
         remove_stale_temps(dir);
         let stored = Stored {
@@ -164,6 +186,22 @@ mod tests {
             "ce013625030ba8dba906f756967f9e9ca394464a"
         );
         assert_eq!(blob_id(b""), "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391");
+    }
+
+    #[test]
+    fn a_borrowed_cache_adds_entries_and_an_owned_one_prunes_them() {
+        let root = std::env::temp_dir().join(format!("fairlead-cache-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(root.join(".git")).unwrap();
+        let one = |k: &str| HashMap::from([(k.to_string(), Extracted::default())]);
+        ParseCache::open(&root).save(one("a"));
+        ParseCache::borrow(&root).save(one("b"));
+        let both = ParseCache::open(&root);
+        assert!(both.get("a").is_some() && both.get("b").is_some());
+        both.save(one("b"));
+        let pruned = ParseCache::open(&root);
+        assert!(pruned.get("a").is_none() && pruned.get("b").is_some());
+        let _ = std::fs::remove_dir_all(&root);
     }
 
     #[test]

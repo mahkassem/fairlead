@@ -32,6 +32,9 @@ pub struct ContextArgs {
     /// The agent session the brief belongs to, over `CLAUDE_CODE_SESSION_ID`.
     #[arg(long)]
     session: Option<String>,
+    /// Start the session's set of paths over with these, as for `fairlead brief`.
+    #[arg(long)]
+    fresh: bool,
     /// Print everything instead of stopping at 120 lines.
     #[arg(long)]
     all: bool,
@@ -100,6 +103,7 @@ fn context(args: &ContextArgs, cwd: &Path) -> Result<(), String> {
         args.base.as_deref(),
         args.session.clone(),
         &args.sets,
+        args.fresh,
     )?;
     let root = crate::graph_cmd::repo_root(cwd);
     let root = std::fs::canonicalize(&root).unwrap_or(root);
