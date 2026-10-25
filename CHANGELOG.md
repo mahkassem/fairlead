@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Added
+
+- `doctor` names the binary it runs and the versions the repository names: `package.json`'s spec, the package under `node_modules` and the config's floor. It warns when `package.json` asks for a later version than the binary, as when a new worktree's `node_modules` is a copy of an older one, and when the installed package isn't the binary that runs, as when a global install comes first on the PATH. Before, the first sign was a config check failing on the floor. See [Install](https://mahkassem.github.io/fairlead/docs/install.html).
+
 ### Fixed
 
 - `import rules --write` refreshes a routed skill whose rule changed ([#217](https://github.com/mahkassem/fairlead/issues/217)). It left an already routed skill alone even when its rule file's body had changed, so `skills sync` kept copying the stale body and a repository that keeps its rule files as the source had to hand-copy each edit. Now a dry run lists such a skill as `lags its rule`, `--write` rewrites its body and says `refreshed`, keeping the skill's front matter (a description edited by hand stays) and its route, and `--check` exits 1 without writing, for a hook or CI step. See [Skills](https://mahkassem.github.io/fairlead/docs/skills.html#starting-from-rule-files-import-rules).
