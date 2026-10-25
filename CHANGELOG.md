@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- The npm package installs on Alpine and other musl systems ([#218](https://github.com/mahkassem/fairlead/issues/218)). Its install script failed there, which stopped `npm install` or `bun install` in an Alpine image even when the image never runs the tool. Each release now has static `x86_64-unknown-linux-musl` and `aarch64-unknown-linux-musl` builds; the npm package picks one when the `ldd` script, Node, the musl loader or `ldd --version` shows musl, or when glibc is older than the 2.35 the glibc builds need, and the shell installer picks one when `ldd` shows musl. On a platform with no build at all, the install script now warns and succeeds, and running `fairlead` there exits 1 and prints the `cargo install` line that builds it from source. See [Install](https://mahkassem.github.io/fairlead/docs/install.html#platforms).
+
 ## 0.12.0 (2026-10-14)
 
 ### Changed
