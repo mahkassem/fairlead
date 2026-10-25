@@ -89,10 +89,11 @@ fn dependencies(scan: &Scan, id: u32) -> HashMap<u32, u32> {
     seen
 }
 
-/// The first barrier on the way from `changed` to `test`, other than `test`:
-/// the file where the planner's walk, which starts at the change, stops.
+/// The first barrier on the way from `changed` to `test`, other than either
+/// end: the file where the planner's walk, which starts at the change and
+/// goes past a changed barrier, stops.
 fn barrier_between(scan: &Scan, deps: &HashMap<u32, u32>, test: u32, changed: u32) -> Option<u32> {
-    let mut path = vec![changed];
+    let mut path = Vec::new();
     let mut at = changed;
     while at != test {
         at = *deps.get(&at)?;
