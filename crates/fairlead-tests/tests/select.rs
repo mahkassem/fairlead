@@ -90,7 +90,8 @@ fn a_run_all_path_selects_everything() {
     assert_eq!(
         reason(&plan, "packages/billing/test/other.test.ts"),
         &Reason::RunAll {
-            path: "pnpm-lock.yaml".into()
+            path: "pnpm-lock.yaml".into(),
+            change: None,
         }
     );
 }

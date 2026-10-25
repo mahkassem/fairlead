@@ -5,6 +5,7 @@
 use std::path::Path;
 
 use fairlead_core::config::Loaded;
+use fairlead_core::pattern::Pattern;
 
 pub struct Context<'a> {
     pub loaded: &'a Loaded,
@@ -30,6 +31,7 @@ fn go_manifests_in_run_all(cx: &Context) -> bool {
         .run_all
         .items()
         .iter()
+        .flat_map(|entry| entry.globs())
         .any(|p| p.contains("go.mod") || p.contains("go.sum"))
 }
 
@@ -79,6 +81,24 @@ fn extends_next(cx: &Context) -> bool {
         .origins
         .values()
         .any(|layer| layer.ends_with("pack next"))
+}
+
+fn run_all_covers_a_barrier(cx: &Context) -> bool {
+    let config = &cx.loaded.config;
+    names_only_barriers(config.plan.run_all.items(), config.graph.barrier.items())
+}
+
+/// Whether a `run_all` entry is a barrier entry itself, or a plain path a
+/// barrier glob matches: one that covered only a barrier's own changes.
+fn names_only_barriers(run_all: &[fairlead_core::config::RunAll], barrier: &[String]) -> bool {
+    let globs: Vec<Pattern> = barrier
+        .iter()
+        .filter_map(|g| Pattern::new(g).ok())
+        .collect();
+    run_all.iter().flat_map(|entry| entry.globs()).any(|entry| {
+        barrier.contains(entry)
+            || (!entry.contains(['*', '?', '[', '{']) && globs.iter().any(|g| g.is_match(entry)))
+    })
 }
 
 fn has_go(cx: &Context) -> bool {
@@ -241,6 +261,13 @@ pub const RELEASES: &[(&str, &[Note])] = &[
             },
         ],
     ),
+    (
+        "0.13.0",
+        &[Note {
+            text: "A changed `graph.barrier` file selects the tests of the files that import it, as any changed file does; a change below it still stops there. A `plan.run_all` entry that covered only a barrier's own changes can go, and leaving it keeps running everything when the barrier changes (see Barriers).",
+            applies: run_all_covers_a_barrier,
+        }],
+    ),
 ];
 
 /// Config tables and keys by the release that added them. The top-level
@@ -280,3 +307,43 @@ pub const SINCE: &[(&str, &str)] = &[
 pub const BASE: &[&str] = &[
     "fairlead", "modules", "graph", "tests", "checks", "plan", "replay",
 ];
+
+#[cfg(test)]
+mod tests {
+    use super::names_only_barriers;
+    use fairlead_core::config::RunAll;
+
+    fn strings(items: &[&str]) -> Vec<String> {
+        items.iter().map(|s| s.to_string()).collect()
+    }
+
+    fn globs(items: &[&str]) -> Vec<RunAll> {
+        items.iter().map(|s| RunAll::Glob(s.to_string())).collect()
+    }
+
+    #[test]
+    fn a_run_all_entry_counts_when_it_is_a_barrier_entry_or_a_path_one_matches() {
+        let barrier = strings(&["src/http/**", "src/loader.ts"]);
+        assert!(names_only_barriers(&globs(&["src/loader.ts"]), &barrier));
+        assert!(names_only_barriers(&globs(&["src/http/**"]), &barrier));
+        assert!(names_only_barriers(
+            &globs(&["migrations/**", "src/http/server.ts"]),
+            &barrier
+        ));
+        assert!(!names_only_barriers(&globs(&["src/**"]), &barrier));
+        assert!(!names_only_barriers(&globs(&["src/db.ts"]), &barrier));
+        assert!(!names_only_barriers(&globs(&["src/loader.ts"]), &[]));
+        let kinds: Vec<RunAll> = toml::from_str::<toml::Table>(
+            "e = { paths = [\"src/loader.ts\"], on = [\"modified\"] }",
+        )
+        .unwrap()["e"]
+            .clone()
+            .try_into()
+            .map(|e| vec![e])
+            .unwrap();
+        assert!(
+            names_only_barriers(&kinds, &barrier),
+            "a kind-limited entry counts too"
+        );
+    }
+}

@@ -138,7 +138,7 @@ fn a_root_dependency_bump_selects_everything() {
     let plan = plan_lock(&dir, CONFIG, Some(LOCK));
     assert!(plan.all);
     assert!(
-        matches!(reason(&plan, "packages/docs/test/site.test.ts"), Reason::RunAll { path } if path == "pnpm-lock.yaml")
+        matches!(reason(&plan, "packages/docs/test/site.test.ts"), Reason::RunAll { path, .. } if path == "pnpm-lock.yaml")
     );
 }
 

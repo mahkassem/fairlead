@@ -28,6 +28,35 @@ instead; add `"trustedDependencies": ["fairlead"]` to `package.json` to have
 git hook jobs, no longer race on that download: each extracts on its own
 and the first to finish is used ([#211](https://github.com/mahkassem/fairlead/issues/211)).
 
+*Unreleased:* the package picks the build for the system's C library: the
+musl build on Alpine and other musl systems, found from the `ldd` script,
+then what Node reports, the musl loader in `/lib` and `ldd --version`. On a
+platform with no build, the install prints a warning and succeeds, so a
+project or container image that never runs Fairlead still installs; running
+`fairlead` there exits 1 and prints the `cargo install` line that builds it
+from source ([#218](https://github.com/mahkassem/fairlead/issues/218)).
+
+## Platforms
+
+Each release has a build for:
+
+| System | Builds |
+|---|---|
+| Linux, glibc 2.35 or later | x86_64, aarch64 |
+| Linux, musl (Alpine), or an older glibc | x86_64, aarch64, statically linked |
+| macOS | x86_64, aarch64 |
+| Windows | x86_64, which also runs on ARM64 Windows |
+
+*Unreleased:* the musl builds. The shell installer and the npm package
+choose one when `ldd --version` or Node says the C library is musl; the npm
+package also chooses one when glibc is older than the glibc build needs.
+Anywhere else, build from source with Rust 1.95 or later, naming the
+release you want:
+
+```sh
+cargo install --locked --git https://github.com/mahkassem/fairlead --tag vX.Y.Z fairlead
+```
+
 ## Check it
 
 ```sh
@@ -37,6 +66,11 @@ fairlead doctor
 
 `doctor` prints the version, the platform and the config file Fairlead would
 use from the current directory.
+*Unreleased:* it also prints the binary's path and the versions the repository names: the spec in
+`package.json`, the package installed under `node_modules` and the config's `fairlead` floor. It warns
+when `package.json` asks for a later version than the binary, as when a new worktree's
+`node_modules` is a copy of an older one, and when the installed package isn't the binary that
+runs, as when a global install comes first on the PATH.
 `doctor --score` rates how ready the repository is, out of 100, and names the
 fixes worth the most ([Readiness score](score.md)).
 

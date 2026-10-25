@@ -19,6 +19,29 @@ pub enum Status {
     Renamed,
 }
 
+impl Status {
+    pub const ALL: [Status; 4] = [
+        Status::Added,
+        Status::Modified,
+        Status::Deleted,
+        Status::Renamed,
+    ];
+
+    /// The name config and the plan JSON use, such as `modified`.
+    pub fn name(self) -> &'static str {
+        match self {
+            Status::Added => "added",
+            Status::Modified => "modified",
+            Status::Deleted => "deleted",
+            Status::Renamed => "renamed",
+        }
+    }
+
+    pub fn from_name(name: &str) -> Option<Status> {
+        Status::ALL.into_iter().find(|s| s.name() == name)
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, JsonSchema)]
 pub struct Change {
     pub path: String,
@@ -204,7 +227,13 @@ pub struct UnreachedFile {
 #[serde(tag = "kind", rename_all = "kebab-case")]
 pub enum Reason {
     /// A changed path matched `plan.run_all`.
-    RunAll { path: String },
+    RunAll {
+        path: String,
+        /// The kind of change that triggered it, when the matching entry
+        /// names kinds with `on`; absent for an entry that matches any.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        change: Option<Status>,
+    },
     /// The test file itself changed.
     Changed,
     /// The test depends on a changed file: the chain runs from that file

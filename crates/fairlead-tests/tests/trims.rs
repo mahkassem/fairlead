@@ -177,7 +177,8 @@ fn a_manifest_change_beyond_versions_selects_everything() {
     assert_eq!(
         reason(&plan, "test/plain.test.ts"),
         &Reason::RunAll {
-            path: "package.json".into()
+            path: "package.json".into(),
+            change: None,
         }
     );
 }
@@ -196,7 +197,8 @@ fn a_lock_that_adds_a_package_selects_everything() {
     assert_eq!(
         reason(&plan, "test/plain.test.ts"),
         &Reason::RunAll {
-            path: "bun.lock".into()
+            path: "bun.lock".into(),
+            change: None,
         }
     );
 }
@@ -295,6 +297,50 @@ fn a_config_file_in_run_all_still_selects_everything() {
     let toml = format!("{BUN}\n[plan]\nrun_all = [\"fairlead.toml\"]\n");
     let plan = try_plan(&dir, &config(&toml), vec![modified("fairlead.toml")]).unwrap();
     assert!(plan.all);
+}
+
+#[test]
+fn a_config_file_under_a_kind_limited_entry_selects_everything_only_for_its_kinds() {
+    let dir = repo("config-run-all-kinds", &files(MANIFEST, LOCK));
+    let entry = |kind: &str| {
+        let toml = format!(
+            "{BUN}\n[plan]\nrun_all = [{{ paths = \"fairlead.toml\", on = [\"{kind}\"] }}]\n"
+        );
+        try_plan(&dir, &config(&toml), vec![modified("fairlead.toml")]).unwrap()
+    };
+    assert!(entry("modified").all);
+    let plan = entry("deleted");
+    assert!(!plan.all);
+    assert_eq!(codes(&plan), ["fairlead-config"]);
+}
+
+#[test]
+fn a_bumped_package_imported_by_a_file_whose_entry_skips_edits_stays_scoped() {
+    let (manifest, lock) = (bump(MANIFEST, "tool"), bump(LOCK, "tool"));
+    let mut fixture = files(&manifest, &lock);
+    fixture.push((
+        "vitest.config.ts",
+        "import tool from 'tool';\nexport default tool;\n",
+    ));
+    let dir = repo("bump-config-kinds", &fixture);
+    let plan = |kind: &str| {
+        let toml = format!(
+            "{BUN}\n[plan]\nrun_all = {{ replace = [\"package.json\", \"bun.lock\", {{ paths = \"vitest.config.*\", on = [\"{kind}\"] }}] }}\n"
+        );
+        let changes = vec![modified("bun.lock"), modified("package.json")];
+        let at_base = base(&[("package.json", MANIFEST), ("bun.lock", LOCK)]);
+        try_plan_with_base(&dir, &config(&toml), changes, at_base).unwrap()
+    };
+    let edits = plan("modified");
+    assert!(edits.all);
+    assert_eq!(codes(&edits), ["version-bump-runs-everything"]);
+    let adds = plan("added");
+    assert!(!adds.all);
+    assert!(
+        codes(&adds).contains(&"version-bump-scoped"),
+        "{:?}",
+        codes(&adds)
+    );
 }
 
 const NIGHTLY: &str = "name: nightly\non:\n  workflow_dispatch:\n  schedule:\n    - cron: '0 3 * * *'\njobs:\n  a:\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo hi\n";
