@@ -4,7 +4,9 @@
 //! specifier that didn't resolve, or a tsconfig that couldn't be applied
 //! depends on every file in its module, since no edge says which one it
 //! needs. At the root, outside any module, that means every file. A
-//! `graph.barrier` file is reached but never expanded, changed or not.
+//! `graph.barrier` file reached from another file is not expanded; one the
+//! walk starts at (a changed file, or one a changed manifest or a version
+//! bump stands for) is expanded like any other file.
 
 use std::collections::{HashMap, HashSet, VecDeque};
 
@@ -113,8 +115,9 @@ pub fn walk_until(
     let mut root_widened = false;
     while let Some(file) = queue.pop_front() {
         // Reached, but not gone past: a barrier's importers depend on it for
-        // plumbing, not for what a change to the file under it does.
-        if graph.is_barrier(file) {
+        // plumbing, not for what a change to the file under it does. A start
+        // (any via but a file) is the change itself, so its importers count.
+        if graph.is_barrier(file) && matches!(walk.reached.get(&file), Some(Via::File(_))) {
             continue;
         }
         let mut next: Vec<u32> = graph.importers(file).into_iter().map(|(f, _)| f).collect();

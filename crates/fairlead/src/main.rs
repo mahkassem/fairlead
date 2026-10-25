@@ -16,6 +16,7 @@ mod done_cmd;
 mod escapes;
 mod find_cmd;
 mod graph_cmd;
+mod graph_hubs;
 mod guard_cmd;
 mod hook_cmd;
 mod hooks_cmd;

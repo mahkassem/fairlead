@@ -21,6 +21,16 @@ pub enum GraphAction {
     Why { from: String, to: String },
     /// The files that depend on FILE directly.
     Importers { file: String },
+    /// The files that link the most changes to the most tests, and the
+    /// barrier that would cut the top one.
+    Hubs {
+        /// How many files to list.
+        #[arg(long, default_value_t = 10, value_name = "N")]
+        top: usize,
+        /// Print JSON instead of text.
+        #[arg(long)]
+        json: bool,
+    },
 }
 
 /// The repository root: the nearest directory with `.git`, else `start`.
@@ -82,6 +92,9 @@ pub fn run(action: GraphAction, sets: Vec<String>, cwd: &Path) -> ExitCode {
             &relative_to(&root, cwd, &to),
         ),
         GraphAction::Importers { file } => importers(&scan, &relative_to(&root, cwd, &file)),
+        GraphAction::Hubs { top, json } => {
+            crate::graph_hubs::run(&scan, &loaded.config, top, json, elapsed.as_secs_f64())
+        }
     }
 }
 
@@ -228,10 +241,11 @@ fn why(scan: &Scan, from: &str, to: &str) -> ExitCode {
     match scan.graph.why(a, b) {
         Some(chain) => {
             // The planner walks from `to` towards `from` and stops at the first
-            // barrier it meets, so any barrier but `from` itself cuts the chain.
-            let stop = chain
+            // barrier it meets, but goes past `to` when that is the change, so
+            // only a barrier strictly between them cuts the chain.
+            let inner = &chain[1..chain.len().saturating_sub(1).max(1)];
+            let stop = inner
                 .iter()
-                .skip(1)
                 .rev()
                 .find(|(f, _)| scan.graph.id(f).is_some_and(|id| scan.graph.is_barrier(id)));
             for (i, (file, kind)) in chain.iter().enumerate() {

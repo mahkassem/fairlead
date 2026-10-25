@@ -190,6 +190,11 @@ fn graph_why_says_where_a_barrier_stops_the_plan_and_stats_count_rule_edges() {
         text.contains("its walk stops at src/http/server.ts"),
         "{text}"
     );
+    // A changed barrier is where the walk starts, and it goes past it.
+    let why = fairlead_in(&dir, &["graph", "why", "src/a.ts", "src/http/server.ts"]);
+    let text = String::from_utf8_lossy(&why.stdout);
+    assert!(text.contains("src/http/server.ts"), "{text}");
+    assert!(!text.contains("its walk stops"), "{text}");
     let stats = fairlead_in(&dir, &["graph", "stats"]);
     let text = String::from_utf8_lossy(&stats.stdout);
     assert!(text.contains("rule edges: 1, barrier files: 1"), "{text}");
