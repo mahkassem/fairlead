@@ -5,6 +5,7 @@
 ### New
 
 - `fairlead plan --head REV` plans a commit without checking it out ([#225](https://github.com/mahkassem/fairlead/issues/225)). It adds a detached worktree of `REV` under the system temp directory, scans it with the config committed there, and removes it afterwards, so a loop over history needs no script, no worktree of its own and no copy of the config. Without `--base`, the head is measured from its merge base with the default branch, or from its first parent when it is already on that branch. `--json` works with it, `test --head REV --explain FILE` explains that plan, and the temporary worktree shares the checkout's parse cache, which is keyed by content, so a loop parses only what each commit changed. See [Planning a past commit](https://mahkassem.github.io/fairlead/docs/plan.html#planning-a-past-commit).
+- `fairlead brief --fresh <paths>` starts the session's set of paths over instead of adding to it, and replaces the stored brief, so `done`, `receipt` and `resume` read the new set ([#225](https://github.com/mahkassem/fairlead/issues/225)). A brief that carries paths from earlier briefs now says so, `paths this session: 3, including 2 from earlier briefs; --fresh starts over`, since adding to the session's paths looked like a wrong answer to anyone who didn't know. `context --fresh` and the MCP tools' `fresh` do the same. See [One brief per session](https://mahkassem.github.io/fairlead/docs/brief.html#one-brief-per-session).
 
 ## 0.12.0 (2026-10-14)
 

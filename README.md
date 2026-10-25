@@ -60,6 +60,8 @@ of trying things like a stranger.
   `fairlead done` is the gate a change passes before it's finished,
   `fairlead receipt` compares what changed with the brief, and `fairlead next`
   names the one step left.
+  *Unreleased:* a brief says when it carries paths from earlier briefs of the
+  session, and `brief --fresh` starts the set over.
 - **The right skills for the code in front of it.** A frontend change
   shouldn't come with database advice. Fairlead picks the skills that apply to
   what a change reaches, just as it picks tests, and checks the agent used them.

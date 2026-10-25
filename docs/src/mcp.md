@@ -24,6 +24,8 @@ For another client, the server is the command `fairlead mcp` with no arguments, 
 | `lessons` | `lessons list --json` | the lessons, with scope and review dates |
 | `skills_report` | `skills report --json` | skill routing's hit rate |
 
+*Unreleased:* `brief` and `context` take `fresh: true`, as `--fresh`, to start the session's set of paths over instead of adding to it.
+
 Every tool is read-only. `done` isn't one of them: it runs the tests, which takes minutes, and an MCP call can't be stopped midway. Run `fairlead done` through the agent's shell, where the hooks see it.
 
 Paths are from the repository root and must stay inside it. Branch names, sessions and other values can't start with `-`, so none can pass for an option. A refused or failed call comes back as a tool result with `isError`, with the reason as its text, so the agent can correct the call.
