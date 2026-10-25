@@ -190,6 +190,33 @@ fn the_insights_workflow_runs_weekly_runs_no_tests_and_is_written_beside_the_tes
     assert!(text
         .contains("fairlead replay fetch --repo \"$GITHUB_REPOSITORY\" --workflow fairlead.yml"));
     assert!(text.contains("fairlead insights --since"));
+    // The replay line, run as written, gets past argument parsing: it names every flag `replay run` requires.
+    let line = text
+        .lines()
+        .map(str::trim)
+        .find(|l| l.starts_with("fairlead replay run "))
+        .expect("the job replays");
+    assert!(line.contains("--config fairlead.toml"), "{line}");
+    let args: Vec<String> = line
+        .split_whitespace()
+        .skip(1)
+        .take_while(|a| *a != ">")
+        .map(|a| {
+            a.trim_matches('"')
+                .replace("$RUNNER_TEMP", &dir.display().to_string())
+        })
+        .collect();
+    let out = std::process::Command::new(env!("CARGO_BIN_EXE_fairlead"))
+        .args(&args)
+        .current_dir(&dir)
+        .output()
+        .unwrap();
+    let err = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        !err.contains("required arguments were not provided"),
+        "{err}"
+    );
+    assert!(!err.contains("unexpected argument"), "{err}");
     let (code, out, _) = workflow(&dir, &["--insights", "--write"]);
     assert_eq!(code, 0);
     assert!(
