@@ -145,6 +145,26 @@ pub fn first_parent_range(clone: &Path, base: &str, head: &str) -> Option<Vec<St
     Some(out.lines().map(str::to_string).collect())
 }
 
+/// The commit a revision names, such as `refs/remotes/origin/HEAD`.
+pub fn commit_of(clone: &Path, rev: &str) -> Option<String> {
+    git_local(
+        clone,
+        &["rev-parse", "--verify", "-q", &format!("{rev}^{{commit}}")],
+    )
+    .ok()
+    .filter(|s| !s.is_empty())
+}
+
+/// Which of `names` sit at the top of a commit's tree. Trees only, so a
+/// blobless clone answers without fetching.
+pub fn top_level(clone: &Path, sha: &str, names: &[&str]) -> Vec<String> {
+    let mut args = vec!["ls-tree", "--name-only", sha, "--"];
+    args.extend(names);
+    git_local(clone, &args)
+        .map(|out| out.lines().map(str::to_string).collect())
+        .unwrap_or_default()
+}
+
 pub fn tree_of(clone: &Path, sha: &str) -> Option<String> {
     git_local(clone, &["rev-parse", &format!("{sha}^{{tree}}")]).ok()
 }

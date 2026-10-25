@@ -179,6 +179,7 @@ mod tests {
             target: Target::Test(path.into()),
             outcome,
             hit_by: None,
+            why: String::new(),
             judged: None,
             detail: String::new(),
             changed: vec![changed.into()],

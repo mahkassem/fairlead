@@ -71,6 +71,9 @@ of trying things like a stranger.
   CI history, and the [benchmarks](https://mahkassem.github.io/fairlead/docs/benchmarks.html)
   measure that recall every week. *Since 0.6.0:* `ci run --judge` names each
   failing test on the default branch that the merged change's plan left out.
+  *Unreleased:* when the config being replayed differs from the base
+  branch's, `replay run` reports the recall of both side by side and names
+  each failure that moved between hit and miss.
 - **Fast because it remembers.** No rereading the codebase to rediscover what
   was learned last week. The graph, the plan and the lessons are already there.
   *Since 0.2.0:* the import graph is built without installing dependencies

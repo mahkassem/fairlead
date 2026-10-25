@@ -9,7 +9,7 @@ use std::time::Instant;
 use fairlead_core::config::Config;
 use fairlead_core::plan::{Plan, Reason};
 use fairlead_lang::build;
-use fairlead_tests::{git as plan_git, plan, Input};
+use fairlead_tests::{git as plan_git, plan, render, Input};
 use regex::Regex;
 
 use crate::attribute::{attribute, Attribution, Repo};
@@ -83,6 +83,8 @@ pub struct Failure {
     pub target: Target,
     pub outcome: Outcome,
     pub hit_by: Option<HitBy>,
+    /// For a hit, why the plan had it, as `plan --explain` words it.
+    pub why: String,
     /// What a quarantined or inherited failure would have been.
     pub judged: Option<Outcome>,
     /// Why it couldn't be judged; for a scheduled run's escape, where it came in.
@@ -337,6 +339,30 @@ fn widened_by(plan: &Plan, total: usize) -> Option<String> {
     })
 }
 
+/// Why a hit's target is in the plan: the selection's reason, or what
+/// widened the plan to everything.
+fn why_hit(plan: &Plan, target: &Target, by: HitBy, widened: &Option<String>) -> String {
+    match (by, target) {
+        (HitBy::RunAll, _) => match widened {
+            Some(cause) => format!("the plan selects everything ({cause})"),
+            None => "the plan selects everything".into(),
+        },
+        (HitBy::Selected, Target::Test(path)) => plan
+            .tests
+            .iter()
+            .find(|t| &t.path == path)
+            .map(|t| format!("selected: {}", render::reason(&t.reason)))
+            .unwrap_or_default(),
+        (HitBy::Check, Target::Check(id)) => plan
+            .checks
+            .iter()
+            .find(|c| &c.id == id)
+            .map(|c| format!("check: {}", render::reason(&c.reason)))
+            .unwrap_or_default(),
+        _ => String::new(),
+    }
+}
+
 fn changed_paths(plan: &Plan) -> Vec<String> {
     plan.changed
         .iter()
@@ -428,6 +454,7 @@ fn record(
         target,
         outcome,
         hit_by: None,
+        why: String::new(),
         judged: None,
         detail: detail.into(),
         changed: changed.to_vec(),
@@ -609,13 +636,14 @@ fn judge(r: &Replayer, row: &Row, base: &str, failed: Vec<&Job>, all: &[&Row], o
             return;
         }
     };
+    let widened = widened_by(&plan, tests.len());
     out.plans.push(Planned {
         run_id: row.run_id,
         selected: plan.tests.len(),
         total: tests.len(),
         all: plan.all,
         seconds,
-        widened: widened_by(&plan, tests.len()),
+        widened: widened.clone(),
     });
     let changed = changed_paths(&plan);
     let snapshot = r.snapshot();
@@ -649,9 +677,12 @@ fn judge(r: &Replayer, row: &Row, base: &str, failed: Vec<&Job>, all: &[&Row], o
             } else {
                 Outcome::Miss
             };
+            let why = hit_by.map(|by| why_hit(&plan, &target, by, &widened));
             record(out, row, &job.name, target, outcome, "", &changed);
             if outcome == Outcome::Hit {
-                out.failures.last_mut().expect("just recorded").hit_by = hit_by;
+                let last = out.failures.last_mut().expect("just recorded");
+                last.hit_by = hit_by;
+                last.why = why.unwrap_or_default();
             }
         }
     }

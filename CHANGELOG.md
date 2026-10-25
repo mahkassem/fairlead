@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### New
+
+- Replay against the base branch's config ([#221](https://github.com/mahkassem/fairlead/issues/221), follow-up). When the config being replayed differs from the one committed at the clone's default branch head, `replay run` replays the window under both and reports recall, strict recall, failures judged, misses and the share of tests selected side by side, then each failure that moved between hit and miss with its run, test, commit and the reason each side gave. Seeing what a config change costs meant replaying twice and diffing the reports by hand. The base config is found as the planner finds one, with packs and `extends` resolved from that commit's tree, and "differs" is decided on the loaded config, so a reformat doesn't count. With none committed, a line says so. `--compare-with PATH` names another config, `--no-compare` turns it off, and the JSON report gains a `comparison` object beside its existing fields. Each failed run is planned once per config, so a comparison roughly doubles planning time. See [Comparing with the base branch's config](https://mahkassem.github.io/fairlead/docs/replay.html#comparing-with-the-base-branchs-config).
+
 ## 0.12.0 (2026-10-14)
 
 ### Changed

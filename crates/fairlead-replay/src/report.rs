@@ -93,6 +93,9 @@ pub struct Report {
     pub widened_by: BTreeMap<String, usize>,
     /// The first plan's time, with the parse cache cold.
     pub first_plan_seconds: Option<f64>,
+    /// The same window replayed under the base branch's config.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub comparison: Option<crate::compare::Comparison>,
 }
 
 fn ratio(hits: usize, of: usize) -> Option<f64> {
@@ -278,6 +281,7 @@ pub fn report(repo: &str, window: &Window, min_failures: u32, replayed: &Replaye
         widened_by,
         first_plan_seconds: seconds.first().copied(),
         misses,
+        comparison: None,
     }
 }
 
@@ -470,6 +474,9 @@ pub fn text(r: &Report) -> String {
         }
         let _ = writeln!(out, "        fix: {}", m.fix);
     }
+    if let Some(c) = &r.comparison {
+        out.push_str(&crate::compare::text(c));
+    }
     out
 }
 
@@ -490,6 +497,7 @@ mod tests {
             target: Target::Test("okhttp/src/jvmTest/kotlin/okhttp3/CallTest.kt".into()),
             outcome: Outcome::Miss,
             hit_by: None,
+            why: String::new(),
             judged: None,
             detail: String::new(),
             changed: changed.iter().map(|s| s.to_string()).collect(),
