@@ -5,6 +5,15 @@
 ### New
 
 - `doctor` names the binary it runs and the versions the repository names: `package.json`'s spec, the package under `node_modules` and the config's floor. It warns when `package.json` asks for a later version than the binary, as when a new worktree's `node_modules` is a copy of an older one, and when the installed package isn't the binary that runs, as when a global install comes first on the PATH. Before, the first sign was a config check failing on the floor. See [Install](https://mahkassem.github.io/fairlead/docs/install.html).
+- `fairlead graph hubs` lists the files that link the most changes to the most tests ([#225](https://github.com/mahkassem/fairlead/issues/225), item 2). For each file it counts the files whose change reaches it in the plan's walk and the unit tests a change to it reaches, and ranks by the product; it names the edge that makes each one wide (a dynamic import with no literal path, an unresolved local import, a tsconfig that couldn't be applied, a whole-package dependency, or the file feeding it that has one), and ends with the `graph.barrier` line that would cut the top one and a pointer to `test --explain`. Finding such a file took a by-hand simulation before. `--top N` and `--json` are supported, and the planner's modules, test files and barriers apply. The counts come from one pass per 4,096 files over the graph's strongly connected components with bitsets, not a walk per file: on pnpm/pnpm (9,871 files, 862 unit tests) counting takes 0.02 s beside a 0.36 s graph build, and on Effect-TS/effect (2,955 files) under 0.01 s. See [Hubs](https://mahkassem.github.io/fairlead/docs/graph.html#hubs).
+
+### Changed
+
+- A barrier stops a walk passing through it, not one starting at it ([#225](https://github.com/mahkassem/fairlead/issues/225), item 1). A changed `graph.barrier` file reached nothing and was left to `tests.unreached`, so the documented workaround was to list it in `plan.run_all` too, which ran everything for a file that only loads other code. A changed barrier now selects the tests of the files that import it, as any changed file does, and a change below it still stops there; `graph why` and `test --explain` say the same. A `run_all` entry that only covered a barrier's own changes can go, and `fairlead migrate` says so where an entry is a barrier entry or a path a barrier matches. See [Barriers](https://mahkassem.github.io/fairlead/docs/graph.html#barriers).
+
+### Fixed
+
+- `import rules --write` refreshes a routed skill whose rule changed ([#217](https://github.com/mahkassem/fairlead/issues/217)). It left an already routed skill alone even when its rule file's body had changed, so `skills sync` kept copying the stale body and a repository that keeps its rule files as the source had to hand-copy each edit. Now a dry run lists such a skill as `lags its rule`, `--write` rewrites its body and says `refreshed`, keeping the skill's front matter (a description edited by hand stays) and its route, and `--check` exits 1 without writing, for a hook or CI step. See [Skills](https://mahkassem.github.io/fairlead/docs/skills.html#starting-from-rule-files-import-rules).
 
 ### Fixed
 
