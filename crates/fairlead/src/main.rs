@@ -9,6 +9,7 @@ mod brief_cmd;
 mod ci_cmd;
 mod ci_judge;
 mod ci_report;
+mod ci_shard;
 mod ci_workflow;
 mod context_cmd;
 mod coverage_cmd;

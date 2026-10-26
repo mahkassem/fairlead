@@ -27,6 +27,12 @@ pub struct Results {
     /// Each failing test judged against the merge's plan, by `ci run --judge`.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub judged: Vec<crate::ci_judge::Verdict>,
+    /// The shard `ci run --shard K/N` ran, as `K/N`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub shard: Option<String>,
+    /// Shards of a sharded plan that sent no results, once merged.
+    #[serde(skip)]
+    pub missing: Vec<u32>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -71,6 +77,7 @@ pub fn write_results(
     ran: Vec<Ran>,
     judged: &[crate::ci_judge::Verdict],
     started: Instant,
+    shard: Option<&str>,
 ) -> Result<(), String> {
     let results = Results {
         version: 1,
@@ -79,6 +86,8 @@ pub fn write_results(
         seconds: tenths(started.elapsed().as_secs_f64()),
         invocations: ran,
         judged: judged.to_vec(),
+        shard: shard.map(str::to_string),
+        missing: Vec::new(),
     };
     let text = serde_json::to_string_pretty(&results).expect("results serialize") + "\n";
     std::fs::write(path, text).map_err(|e| format!("could not write {}: {e}", path.display()))
@@ -87,30 +96,26 @@ pub fn write_results(
 pub fn run(
     cwd: &Path,
     plan: &Path,
-    results: Option<&Path>,
+    results: &[std::path::PathBuf],
     receipt: Option<&Path>,
     comment: bool,
 ) -> Result<ExitCode, String> {
     let plan = crate::ci_cmd::read_plan(cwd, plan)?;
-    let results: Option<Results> = match results {
-        Some(p) => {
-            let text = std::fs::read_to_string(cwd.join(p))
-                .map_err(|e| format!("could not read {}: {e}", p.display()))?;
-            Some(
-                serde_json::from_str(&text)
-                    .map_err(|e| format!("{} isn't a results file: {e}", p.display()))?,
-            )
-        }
-        None => None,
-    };
-    if let Some(r) = &results {
+    let mut read = Vec::new();
+    for p in results {
+        let text = std::fs::read_to_string(cwd.join(p))
+            .map_err(|e| format!("could not read {}: {e}", p.display()))?;
+        let r: Results = serde_json::from_str(&text)
+            .map_err(|e| format!("{} isn't a results file: {e}", p.display()))?;
         if r.plan_id != plan.plan_id {
             return Err(format!(
                 "the results are for plan {}, not {}; pass the plan `ci run` ran",
                 r.plan_id, plan.plan_id
             ));
         }
+        read.push(r);
     }
+    let results = merge(&plan, read)?;
     let receipt = match receipt {
         Some(p) => Some(
             std::fs::read_to_string(cwd.join(p))
@@ -150,6 +155,62 @@ pub fn run(
     Ok(ExitCode::SUCCESS)
 }
 
+/// The shard a results file came from, by its `K/N`.
+fn shard_of(r: &Results) -> Option<(u32, u32)> {
+    let (k, n) = r.shard.as_deref()?.split_once('/')?;
+    Some((k.trim().parse().ok()?, n.trim().parse().ok()?))
+}
+
+/// Several jobs' results as one run: every invocation in shard order, the
+/// longest job's time, passed only when each passed and, for a sharded
+/// plan, every shard sent results. A shard sent twice is refused.
+pub fn merge(plan: &Plan, mut all: Vec<Results>) -> Result<Option<Results>, String> {
+    let count = plan
+        .shards
+        .as_ref()
+        .map(|s| s.count)
+        .or_else(|| all.iter().find_map(shard_of).map(|(_, n)| n));
+    let sharded = all.iter().any(|r| r.shard.is_some());
+    all.sort_by_key(|r| shard_of(r).map_or(0, |(k, _)| k));
+    let mut seen = Vec::new();
+    for (k, n) in all.iter().filter_map(shard_of) {
+        if Some(n) != count {
+            return Err(format!(
+                "results for shard {k}/{n} don't match the plan's shards"
+            ));
+        }
+        if seen.contains(&k) {
+            return Err(format!(
+                "two results files are for shard {k}/{n}; pass each shard's once"
+            ));
+        }
+        seen.push(k);
+    }
+    let missing: Vec<u32> = match count {
+        Some(n) if sharded => (1..=n).filter(|k| !seen.contains(k)).collect(),
+        _ => Vec::new(),
+    };
+    let mut merged = match all.len() {
+        0 => return Ok(None),
+        1 => all.pop().expect("one"),
+        _ => {
+            let mut rest = all.into_iter();
+            let mut first = rest.next().expect("several");
+            for r in rest {
+                first.passed &= r.passed;
+                first.seconds = first.seconds.max(r.seconds);
+                first.invocations.extend(r.invocations);
+                first.judged.extend(r.judged);
+            }
+            first.shard = None;
+            first
+        }
+    };
+    merged.passed &= missing.is_empty();
+    merged.missing = missing;
+    Ok(Some(merged))
+}
+
 /// The report: the headline, why the plan selected what it did, what ran,
 /// what failed with the command to run it again, and the receipt.
 pub fn markdown(plan: &Plan, results: Option<&Results>, receipt: Option<&str>) -> String {
@@ -160,6 +221,8 @@ pub fn markdown(plan: &Plan, results: Option<&Results>, receipt: Option<&str>) -
             let failed = r.invocations.iter().filter(|i| i.failed()).count();
             let outcome = if r.passed {
                 "passed".to_string()
+            } else if failed == 0 && !r.missing.is_empty() {
+                "incomplete".to_string()
             } else {
                 format!("{failed} of {} invocations failed", r.invocations.len())
             };
@@ -203,6 +266,16 @@ pub fn markdown(plan: &Plan, results: Option<&Results>, receipt: Option<&str>) -
         }
         out.push_str("\n\n");
     }
+    if let Some(shards) = &plan.shards {
+        let by = match shards.by {
+            fairlead_core::plan::ShardWeight::Durations => "durations",
+            fairlead_core::plan::ShardWeight::Files => "file count",
+        };
+        out.push_str(&format!(
+            "Split across {} shards by {by}.\n\n",
+            shards.count
+        ));
+    }
     let mut why: BTreeMap<String, usize> = BTreeMap::new();
     for t in &plan.tests {
         *why.entry(reason_class(&t.reason)).or_default() += 1;
@@ -245,6 +318,14 @@ pub fn markdown(plan: &Plan, results: Option<&Results>, receipt: Option<&str>) -
             ));
         }
         out.push('\n');
+    }
+    if let Some(r) = results.filter(|r| !r.missing.is_empty()) {
+        let missing: Vec<String> = r.missing.iter().map(u32::to_string).collect();
+        out.push_str(&format!(
+            "**Incomplete:** no results from shard{} {}, so the plan didn't all run.\n\n",
+            if missing.len() == 1 { "" } else { "s" },
+            missing.join(", ")
+        ));
     }
     if let Some(r) = results {
         out.push_str(&results_section(r));
