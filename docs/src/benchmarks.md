@@ -2,28 +2,28 @@
 
 Replay results on public repositories, written by the `bench` workflow. See [Replay](replay.md) for what each measure means; the configs are in `bench/`.
 
-Planned with Fairlead 0.12.0 at `b6c5ad82b10e`.
+Planned with Fairlead 0.13.0 at `081f41fc5e91`.
 
 ## Effect-TS/effect
 
-Window 2026-06-01 to 2026-08-29; dataset `bench/data/Effect-TS_effect.jsonl`, 2775 run attempts from 2026-06-22 to 2026-08-29. Fetch: `fetch partial: 300 new rows in out/data.jsonl; run again to continue`.
+Window 2026-06-08 to 2026-09-05; dataset `bench/data/Effect-TS_effect.jsonl`, 3075 run attempts from 2026-06-22 to 2026-09-05. Fetch: `fetch partial: 300 new rows in out/data.jsonl; run again to continue`.
 
 | Measure | Value |
 | --- | --- |
-| Runs replayed | 527 |
-| Attributed failures (gate 30) | 1465 (met) |
-| Recall | 99.2% |
-| Recall with quarantined tests counted (raw) | 97.7% (n=1607) |
-| Recall with them left out (adjusted) | 99.2% (n=1465) |
-| Strict recall (unconfirmed as misses) | 99.1% |
-| Hits: selected, run everything, checks | 472, 703, 278 |
-| Misses | 12 |
-| Flaky, unconfirmed, unattributed | 65, 1, 67 |
-| Unavailable, errors, ignored | 0, 0, 7 |
-| Test files selected: median, p90 | 6.8%, 100.0% |
-| Plans that selected everything | 20.0% |
-| Plan time: first (cold), median, p90 | 1.23 s, 0.12 s, 0.41 s |
-| Recall on `pull_request` runs (strict) | 99.2% (99.1%) |
+| Runs replayed | 558 |
+| Attributed failures (gate 30) | 1520 (met) |
+| Recall | 99.1% |
+| Recall with quarantined tests counted (raw) | 97.5% (n=1661) |
+| Recall with them left out (adjusted) | 99.1% (n=1520) |
+| Strict recall (unconfirmed as misses) | 98.9% |
+| Hits: selected, run everything, checks | 511, 705, 290 |
+| Misses | 14 |
+| Flaky, unconfirmed, unattributed | 68, 3, 67 |
+| Unavailable, errors, ignored | 0, 0, 8 |
+| Test files selected: median, p90 | 6.9%, 100.0% |
+| Plans that selected everything | 18.9% |
+| Plan time: first (cold), median, p90 | 1.70 s, 0.15 s, 0.53 s |
+| Recall on `pull_request` runs (strict) | 99.1% (98.9%) |
 
 Quarantined tests (declared in the bench config, applied only while the data bears them out):
 
@@ -31,8 +31,8 @@ Quarantined tests (declared in the bench config, applied only while the data bea
   - Absorbed in: `Test (1/2, Deno)`, `Test (1/2, Node)`
 - `packages/sql/mysql2/test/KeyValueStore.test.ts` in jobs `^Test \(2/2, (Node Deno)\)$`: active, 9 failures absorbed (8 would-be hits, 1 would-be misses), 9 pull requests, until 2026-12-31. Its setup hook times out after 30 s waiting on MySQL: failed in 8 pull requests in July, only in the second test shard. Two of them broke the build instead (a transform error, a missing import).
   - Absorbed in: `Test (2/2, Deno)`, `Test (2/2, Node)`
-- `packages/sql/d1/test/Resolver.test.ts` in jobs `^Test \(2/2, Node\)$`: active, 7 failures absorbed (7 would-be hits, 0 would-be misses), 8 pull requests, until 2026-12-31. Times out after 5 s against the local D1 engine: failed in 7 pull requests in July, only in the second Node test shard.
-  - Absorbed in: `Test (2/2, Node)`
+- `packages/sql/d1/test/Resolver.test.ts` in jobs `^Test \(2/2, Node\)$`: unverified, 0 failures absorbed (0 would-be hits, 0 would-be misses), 9 pull requests, until 2026-12-31. Times out after 5 s against the local D1 engine: failed in 7 pull requests in July, only in the second Node test shard.
+  - Also failed in: `Test (Bun)`
 
 Plans that selected everything, by cause:
 
@@ -67,37 +67,39 @@ Misses:
 - run 30955200961 attempt 1: `packages/platform-deno/test/cluster/SocketRunner.test.ts`, changed `.changeset/good-cups-reply.md, packages/sql/mssql/src/MssqlClient.ts, packages/sql/mssql/test/Client.test.ts`
 - run 31047937195 attempt 1: `packages/platform-node/test/cluster/SqlMessageStorage.integration.test.ts`, changed `packages/ai/openai/test/OpenAiSchema.test.ts`
 - run 31654685741 attempt 1: `packages/sql/mssql/test/Persistence.integration.test.ts`, changed `.changeset/scope-message-storage-clear-address.md, packages/effect/src/unstable/cluster/MessageStorage.ts, packages/effect/src/unstable/cluster/SqlMessageStorage.ts, packages/effect/test/cluster/MessageStorage.test.ts, packages/platform/node/test/cluster/MessageStorageTest.ts`
+- run 33872621422 attempt 1: `packages/sql/d1/test/Resolver.test.ts`, changed `.changeset/docgen-class-property-examples.md, packages/tools/docgen/src/Core.ts, packages/tools/docgen/test/Core.propertyExamples.fixtures.ts, packages/tools/docgen/test/Core.propertyExamples.test.ts`
+- run 33872655573 attempt 1: `packages/tools/openapi-generator/test/OpenApiGenerator.test.ts`, changed `packages/tools/api-diff/src/MigrationDoc.ts, packages/tools/api-diff/test/MigrationDoc.fence.test.ts`
 
 ## pnpm/pnpm
 
-Window 2026-06-01 to 2026-08-29; dataset `bench/data/pnpm_pnpm.jsonl`, 3400 run attempts from 2026-06-25 to 2026-08-29. Fetch: `fetch partial: 300 new rows in out/data.jsonl; run again to continue`.
+Window 2026-06-01 to 2026-08-29; dataset `bench/data/pnpm_pnpm.jsonl`, 3700 run attempts from 2026-06-25 to 2026-08-29. Fetch: `fetch partial: 300 new rows in out/data.jsonl; run again to continue`.
 
 | Measure | Value |
 | --- | --- |
-| Runs replayed | 484 |
-| Attributed failures (gate 30) | 630 (met) |
+| Runs replayed | 511 |
+| Attributed failures (gate 30) | 665 (met) |
 | Recall | 99.8% |
 | Strict recall (unconfirmed as misses) | 99.8% |
-| Hits: selected, run everything, checks | 94, 535, 0 |
+| Hits: selected, run everything, checks | 96, 568, 0 |
 | Misses | 1 |
-| Flaky, unconfirmed, unattributed | 13, 0, 249 |
-| Unavailable, errors, ignored | 0, 0, 527 |
+| Flaky, unconfirmed, unattributed | 15, 0, 257 |
+| Unavailable, errors, ignored | 0, 0, 555 |
 | Test files selected: median, p90 | 100.0%, 100.0% |
-| Plans that selected everything | 83.5% |
-| Plan time: first (cold), median, p90 | 1.32 s, 0.48 s, 0.57 s |
+| Plans that selected everything | 83.9% |
+| Plan time: first (cold), median, p90 | 1.33 s, 0.47 s, 0.58 s |
 | Recall on `pull_request` runs (strict) | 99.8% (99.8%) |
 
 Plans that selected everything, by cause:
 
-- `unreached pnpm/**`: 155
-- `run-all pnpm-lock.yaml`: 108
+- `unreached pnpm/**`: 161
+- `run-all pnpm-lock.yaml`: 120
 - `unreached Cargo.lock`: 31
-- `run-all .github/**`: 28
+- `run-all .github/**`: 29
 - `unreached pacquet/**`: 19
 - `unreached .gitignore`: 14
-- `unreached cspell.json`: 10
+- `unreached cspell.json`: 12
 - `run-all package.json`: 9
-- `run-all pnpm-workspace.yaml`: 3
+- `run-all pnpm-workspace.yaml`: 4
 - `unreached .typos.toml`: 1
 
 Misses:
@@ -106,42 +108,42 @@ Misses:
 
 ## vitest-dev/vitest
 
-Window 2026-07-22 to 2026-10-19; dataset `bench/data/vitest-dev_vitest.jsonl`, 2119 run attempts from 2026-06-21 to 2026-10-19. Fetch: `fetch complete: 90 new rows in out/data.jsonl`.
+Window 2026-07-29 to 2026-10-26; dataset `bench/data/vitest-dev_vitest.jsonl`, 2253 run attempts from 2026-06-21 to 2026-10-26. Fetch: `fetch complete: 134 new rows in out/data.jsonl`.
 
 | Measure | Value |
 | --- | --- |
-| Runs replayed | 1079 |
-| Attributed failures (gate 30) | 690 (met) |
-| Recall | 99.1% |
-| Recall with quarantined tests counted (raw) | 95.4% (n=1209) |
-| Recall with them left out (adjusted) | 99.1% (n=690) |
-| Strict recall (unconfirmed as misses) | 98.8% |
-| Hits: selected, run everything, checks | 528, 75, 81 |
+| Runs replayed | 1032 |
+| Attributed failures (gate 30) | 765 (met) |
+| Recall | 99.2% |
+| Recall with quarantined tests counted (raw) | 95.6% (n=1325) |
+| Recall with them left out (adjusted) | 99.2% (n=765) |
+| Strict recall (unconfirmed as misses) | 99.0% |
+| Hits: selected, run everything, checks | 570, 100, 89 |
 | Misses | 6 |
-| Flaky, unconfirmed, unattributed | 18, 2, 2022 |
-| Unavailable, errors, ignored | 0, 0, 1611 |
-| Test files selected: median, p90 | 98.7%, 100.0% |
-| Plans that selected everything | 27.3% |
-| Plan time: first (cold), median, p90 | 0.73 s, 0.14 s, 0.28 s |
-| Recall on `pull_request` runs (strict) | 99.1% (98.8%) |
+| Flaky, unconfirmed, unattributed | 35, 2, 1515 |
+| Unavailable, errors, ignored | 0, 0, 1576 |
+| Test files selected: median, p90 | 98.5%, 100.0% |
+| Plans that selected everything | 25.5% |
+| Plan time: first (cold), median, p90 | 0.69 s, 0.18 s, 0.54 s |
+| Recall on `pull_request` runs (strict) | 99.2% (99.0%) |
 
 Quarantined tests (declared in the bench config, applied only while the data bears them out):
 
-- `test/typescript/test/typechecker.test.ts` in jobs `^Test: unit, node-24, windows-latest$`: active, 89 failures absorbed (73 would-be hits, 15 would-be misses), 45 pull requests, until 2026-12-31. Fails only on the Windows unit job (its out-of-memory crash and missing-command cases): 60 failures across 36 pull requests from June to August 2026, while the same job passed 356 times and no other job ever failed it.
+- `test/typescript/test/typechecker.test.ts` in jobs `^Test: unit, node-24, windows-latest$`: active, 88 failures absorbed (72 would-be hits, 15 would-be misses), 44 pull requests, until 2026-12-31. Fails only on the Windows unit job (its out-of-memory crash and missing-command cases): 60 failures across 36 pull requests from June to August 2026, while the same job passed 356 times and no other job ever failed it.
   - Absorbed in: `Test: unit, node-24, windows-latest`
 
 Plans that selected everything, by cause:
 
-- `run-all .github/**`: 141
-- `run-all package.json`: 59
-- `run-all pnpm-lock.yaml`: 39
-- `run-all pnpm-workspace.yaml`: 17
+- `run-all .github/**`: 118
+- `run-all package.json`: 47
+- `run-all pnpm-lock.yaml`: 30
+- `run-all pnpm-workspace.yaml`: 19
+- `unreached .gitattributes`: 12
 - `run-all test/**`: 8
 - `unreached .dockerignore`: 8
 - `unreached eslint.config.js`: 4
 - `unreached knip.jsonc`: 2
 - `unreached test/**`: 2
-- `unreached .github/**`: 1
 
 Failed jobs no rule watches:
 
