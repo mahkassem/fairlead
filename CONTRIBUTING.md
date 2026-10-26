@@ -28,8 +28,12 @@ Thanks for helping. A few rules keep the project small and trustworthy.
 - **Releasing:** one PR bumps every crate's version, dates the `Unreleased`
   notes as the new version, and moves each `documents Fairlead X.Y.Z` line,
   `*Unreleased:*` label, the README's Status and the action pin in
-  `docs/src/ci.md` to it. Before tagging, `python3 scripts/docs_check.py
-  --release vX.Y.Z` must pass on the merged main. The tag goes on that commit.
+  `docs/src/ci.md` to it. The Status describes that release alone and points
+  to the changelog for the rest, and the release's section goes at the end of
+  the upgrade guide (`docs/src/migrate.md`), whose releases run oldest first;
+  `scripts/docs_check.py` fails on either. Before tagging,
+  `python3 scripts/docs_check.py --release vX.Y.Z` must pass on the merged
+  main. The tag goes on that commit.
   `release.yml` runs the same check before it builds anything, so a tag the
   docs lag builds nothing, releases nothing and publishes nothing.
 - **Dependencies:** say why in the PR. Every new crate must pass `cargo deny`.

@@ -104,6 +104,16 @@ class DocsCheck(unittest.TestCase):
         [p] = self.problems(tag)
         self.assertIn('an "unreleased" label is left', p)
 
+    def test_an_upgrade_guide_release_out_of_order_fails(self):
+        self.edit("docs/src/migrate.md", "### To 0.5.0", "### To 0.99.0")
+        [p] = self.problems()
+        self.assertIn('"To 0.5.1" comes after "To 0.99.0"', p)
+
+    def test_a_status_that_names_an_earlier_release_too_fails(self):
+        self.edit("README.md", "## Status\n", "## Status\n\nv0.1.0 came first.\n")
+        [p] = self.problems()
+        self.assertIn("the Status section names v0.1.0", p)
+
     def test_an_unreleased_label_in_parentheses_fails_a_release_too(self):
         tag = self.released()
         self.edit("README.md", "*Since 0.4.0:*", "*(Unreleased)*")

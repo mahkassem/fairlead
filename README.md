@@ -160,8 +160,8 @@ This README documents Fairlead 0.13.0. Each command, by what it's for:
   lists, reviews and checks them. The brief offers the ones a change reaches.
 - **Skills:** `[[skills.routes]]` scopes each SKILL.md, and the brief lists the
   skills a change reaches. `import rules` turns path-scoped rule files into
-  skills and routes, and refreshes a skill when its rule changes, and `skills sync` writes each skill where Claude Code,
-  Codex and Cursor load it.
+  skills and routes, and refreshes a skill when its rule changes, and
+  `skills sync` writes each skill where Claude Code, Codex and Cursor load it.
 - **Finding things:** `find` searches lessons, skills, docs headings and
   declared names, nearest the brief first.
 - **Agents over MCP:** `mcp` serves the plan, the brief, the receipt and the
@@ -193,40 +193,9 @@ splits a plan across a matrix of jobs, replay compares a config with the
 base branch's, `plan --head` plans a past commit without checking it out,
 and `doctor` names the binary it runs. It also ships musl builds, refreshes
 skills whose rule changed, and fixes the weekly insights workflow's replay
-step. v0.12.0 fixed a runner asked to run everything loading another
-runner's tests, two first runs of the npm package racing on the binary's
-download, and the Next.js pack's end-to-end rule overriding a project's
-own spec owners, which is now its own pack, `next-e2e`. v0.11.0 added a Next.js pack with `init` naming the
-pack a project needs, edges across the repositories of a workspace, and
-the SessionStart hook for Codex and Gemini CLI, and fixed sessions in a
-linked worktree going uncounted, the weekly insights workflow lacking the
-scopes replay needs, and replay leaving a Go package whose tests didn't
-build unattributed. v0.10.0 connected Fairlead to the
-rest of the work and measured the setup: an MCP server (`fairlead mcp`),
-trackers that put a branch's task in the brief, escapes filed as issues
-from CI, tokens and cost per session, a readiness score (`doctor --score`),
-`fairlead insights` with a weekly summary job, blueprints for `init`,
-framework packs, workspaces of several repositories, and replay setting
-recurring failures aside. v0.9.0 let replay measure a project whose
-pushes run the plan too, by reading its scheduled full runs (`replay fetch
---event schedule`), named each hop of a `test --explain` chain that isn't a
-plain import, and had `migrate` refresh Codex and Gemini CLI hooks. v0.8.0
-added memory and skills: lessons in `.fairlead/lessons/` written by
-`fairlead learn` or imported from a document a team already keeps, skills
-routed by what a change reaches, `fairlead find`, `fairlead context` and
-`resume`, and a block in AGENTS.md and CLAUDE.md that `agents sync` keeps
-current. It also added CI stages: each runner and check says
-when it runs (a draft, a ready pull request, a merge or a full run), a merge
-skips what its pull request passed on the same tree, end-to-end runs batch
-after merge, and `ci workflow` writes the staged workflow. v0.7.1 let a runner say what "everything" means
-(`all_command`) and kept a run of everything whole around a held test
-(`exclude_arg`). v0.7.0 brought the hooks to Codex and Gemini
-CLI, reads Java and Kotlin in the graph and Maven and Gradle in replay, and
-adds `fairlead init` for a first config, `fairlead migrate` for an upgrade, and
-`[[quarantine]]` for a test that fails on one platform whatever the change.
-v0.6.0 added the change loop for agents: `fairlead brief` before an edit,
-`fairlead done` and a Stop hook that holds an agent to it, `fairlead receipt`
-after it, and in CI `fairlead ci report` and `ci run --judge`.
+step. What each earlier release added is in the [changelog](CHANGELOG.md),
+and what upgrading to it asks of you is in the
+[upgrade guide](https://mahkassem.github.io/fairlead/docs/migrate.html).
 Recall on real CI failures, with every miss and its cause, is in the
 [changelog](CHANGELOG.md) and on the
 [benchmarks page](https://mahkassem.github.io/fairlead/docs/benchmarks.html).
