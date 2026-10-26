@@ -51,7 +51,7 @@ of trying things like a stranger.
   exactly those files.
   *Since 0.2.0:* `fairlead plan` names the tests and checks a change can
   reach, and `test --explain` says why each one is in or out.
-  *Unreleased:* `plan --head REV` plans a past commit without checking it out.
+  *Since 0.13.0:* `plan --head REV` plans a past commit without checking it out.
 - **Plans the change, not just the tests.** Before an edit, the agent sees
   what it's about to touch, everything that depends on it, the rules and
   lessons recorded there, and what has to pass before it's done. Afterwards,
@@ -60,7 +60,7 @@ of trying things like a stranger.
   `fairlead done` is the gate a change passes before it's finished,
   `fairlead receipt` compares what changed with the brief, and `fairlead next`
   names the one step left.
-  *Unreleased:* a brief says when it carries paths from earlier briefs of the
+  *Since 0.13.0:* a brief says when it carries paths from earlier briefs of the
   session, and `brief --fresh` starts the set over.
 - **The right skills for the code in front of it.** A frontend change
   shouldn't come with database advice. Fairlead picks the skills that apply to
@@ -74,7 +74,7 @@ of trying things like a stranger.
   CI history, and the [benchmarks](https://mahkassem.github.io/fairlead/docs/benchmarks.html)
   measure that recall every week. *Since 0.6.0:* `ci run --judge` names each
   failing test on the default branch that the merged change's plan left out.
-  *Unreleased:* when the config being replayed differs from the base
+  *Since 0.13.0:* when the config being replayed differs from the base
   branch's, `replay run` reports the recall of both side by side and names
   each failure that moved between hit and miss.
 - **Fast because it remembers.** No rereading the codebase to rediscover what
@@ -102,7 +102,7 @@ of trying things like a stranger.
   change runs only the packages whose dependencies actually changed.
   *Since 0.8.0:* in a bun project, a dependency's version bump runs only the
   tests of the files that import it, and nothing when nothing does.
-  *Unreleased:* a `plan.run_all` entry can name the kinds of change that run
+  *Since 0.13.0:* a `plan.run_all` entry can name the kinds of change that run
   everything, so a new migration goes through the graph and an edited one
   runs everything.
 - **No install needed to read your code.** The import graph comes from source
@@ -137,16 +137,16 @@ repositories are on the way
 
 ## What it does
 
-This README documents Fairlead 0.12.0. Each command, by what it's for:
+This README documents Fairlead 0.13.0. Each command, by what it's for:
 
 - **The test plan:** `plan`, `test --explain`, the import graph (`graph`) and
-  coverage maps (`coverage import`). *Unreleased:* `graph hubs` lists the
+  coverage maps (`coverage import`). *Since 0.13.0:* `graph hubs` lists the
   files that link the most changes to the most tests and the barrier that
   would cut the top one, and a changed barrier file selects its importers'
   tests.
 - **Plans in CI:** `ci plan` (by stage, with `--since-green`), `ci run` (with
   `--results`, `--judge`, `--only` and `--except`), `ci report`, `ci workflow`,
-  which writes a staged workflow, and the GitHub Action. *Unreleased:*
+  which writes a staged workflow, and the GitHub Action. *Since 0.13.0:*
   `ci plan --shards N` splits a plan across a matrix of N jobs, balanced by
   past durations, and `ci run --shard K/N` runs one job's share.
 - **Rules as the agent works:** `guard check`, the hooks `hooks install` adds,
@@ -185,11 +185,18 @@ The [quick start](#quick-start) shows the first few, and the
 
 ## Status
 
-Pre-alpha. The latest release, v0.12.0, fixes a runner asked to run
-everything loading another runner's tests, two first runs of the npm
-package racing on the binary's download, and the Next.js pack's
-end-to-end rule overriding a project's own spec owners, which is now its
-own pack, `next-e2e`. v0.11.0 added a Next.js pack with `init` naming the
+Pre-alpha. The latest release, v0.13.0, works through what adopters
+reported: `graph hubs` names the files that link the most changes to the
+most tests, a changed barrier selects its importers, `plan.run_all` entries
+can name the kinds of change that run everything, `ci plan --shards N`
+splits a plan across a matrix of jobs, replay compares a config with the
+base branch's, `plan --head` plans a past commit without checking it out,
+and `doctor` names the binary it runs. It also ships musl builds, refreshes
+skills whose rule changed, and fixes the weekly insights workflow's replay
+step. v0.12.0 fixed a runner asked to run everything loading another
+runner's tests, two first runs of the npm package racing on the binary's
+download, and the Next.js pack's end-to-end rule overriding a project's
+own spec owners, which is now its own pack, `next-e2e`. v0.11.0 added a Next.js pack with `init` naming the
 pack a project needs, edges across the repositories of a workspace, and
 the SessionStart hook for Codex and Gemini CLI, and fixed sessions in a
 linked worktree going uncounted, the weekly insights workflow lacking the
@@ -242,7 +249,7 @@ bun add -d fairlead   # or: npm i -D fairlead
 
 Then `fairlead doctor` says which binary, platform and config it would use.
 
-*Unreleased:* static musl builds for x86_64 and aarch64 Linux, which the
+*Since 0.13.0:* static musl builds for x86_64 and aarch64 Linux, which the
 installers pick on a musl system such as an Alpine container image. On a
 platform with no build, the npm package still installs, and `fairlead` says
 how to build it from source ([Install](https://mahkassem.github.io/fairlead/docs/install.html#platforms)).

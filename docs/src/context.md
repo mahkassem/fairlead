@@ -12,7 +12,7 @@ fairlead resume --json               # the same, as JSON
 
 ## Context
 
-`context` makes the same brief `fairlead brief` makes for the paths, kept in the session's store the same way (*Unreleased:* `--fresh` starts the session's set over, as for `brief`), and prints it. Then, in this order:
+`context` makes the same brief `fairlead brief` makes for the paths, kept in the session's store the same way (*Since 0.13.0:* `--fresh` starts the session's set over, as for `brief`), and prints it. Then, in this order:
 
 - **lessons:** each [lesson](lessons.md) the brief offered, with why, and its body. A lesson's body passed the secrets check when it was loaded.
 - **skills:** each [skill](skills.md) the brief routed, with its description and the SKILL.md to load before editing.

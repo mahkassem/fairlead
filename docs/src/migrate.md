@@ -221,9 +221,13 @@ For you to decide:
   as a use until `fairlead hooks uninstall --gemini` and
   `hooks install --gemini` write this release's.
 
-### To the next release
+### To 0.13.0
 
-*Unreleased:* migrate updates nothing in your files.
+Migrate updates:
+
+- The weekly insights workflow that `ci workflow --insights` wrote, which
+  called `replay run` without its required `--config` and so failed its
+  replay step on every run.
 
 For you to decide:
 
@@ -232,6 +236,14 @@ For you to decide:
   covered only a barrier's own changes can go, and `fairlead migrate` names
   the case when an entry is a barrier entry or a path a barrier matches
   ([Barriers](graph.md#barriers), [#225](https://github.com/mahkassem/fairlead/issues/225)).
+- A `plan.run_all` entry can name the kinds of change that run everything,
+  so a new migration can go through the graph while an edited one still runs
+  everything. A config that uses `on` needs 0.13 to load
+  ([Run everything by kind of change](plan.md#run-everything-by-kind-of-change)).
+- On Alpine and other musl systems the npm package now installs the musl
+  build, and on a platform with no build it warns instead of failing the
+  install, so `--ignore-scripts` is no longer needed in such images
+  ([Install](install.md), [#218](https://github.com/mahkassem/fairlead/issues/218)).
 
 ### To 0.12.0
 
