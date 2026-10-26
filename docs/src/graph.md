@@ -260,13 +260,13 @@ barrier = ["apps/api/src/{http,db,auth}/**"]
 
 The same fan-out happens on the test side: end-to-end specs often import one shared module, such as a strings or fixtures index, only to build their expected values, and then any change under it plans every spec. A barrier on that index fixes it.
 
-The walk reaches a barrier file, but doesn't go on to the files that import it. *Unreleased:* that holds for a walk passing through the barrier, not one starting at it: a changed barrier file selects the tests of the files that import it, like any other changed file, and a change below it still stops at it. A `plan.run_all` entry that only covered a barrier's own changes isn't needed any more, and `fairlead migrate` names it; keep one when a change to the barrier should run everything. `graph why` still shows a chain through a barrier and says the plan stops there, and `test --explain` names the barrier that kept a test out. `graph hubs` lists the files a barrier would cut the most from ([Hubs](#hubs)).
+The walk reaches a barrier file, but doesn't go on to the files that import it. *Since 0.13.0:* that holds for a walk passing through the barrier, not one starting at it: a changed barrier file selects the tests of the files that import it, like any other changed file, and a change below it still stops at it. A `plan.run_all` entry that only covered a barrier's own changes isn't needed any more, and `fairlead migrate` names it; keep one when a change to the barrier should run everything. `graph why` still shows a chain through a barrier and says the plan stops there, and `test --explain` names the barrier that kept a test out. `graph hubs` lists the files a barrier would cut the most from ([Hubs](#hubs)).
 
 A rule edge is a claim the imports can't check. Replay measures it: a failure in a test the rule doesn't reach shows up as a miss.
 
 ### Hubs
 
-*Unreleased:* `fairlead graph hubs` finds where a barrier would help most. For each file it counts the files whose change reaches it in the plan's walk, and the unit tests a change to it reaches, and ranks files by the product: the change and test pairs that can pass through it. It names the edge that makes each one wide, and ends with the barrier line for the top one:
+*Since 0.13.0:* `fairlead graph hubs` finds where a barrier would help most. For each file it counts the files whose change reaches it in the plan's walk, and the unit tests a change to it reaches, and ranks files by the product: the change and test pairs that can pass through it. It names the edge that makes each one wide, and ends with the barrier line for the top one:
 
 ```text
 $ fairlead graph hubs --top 2

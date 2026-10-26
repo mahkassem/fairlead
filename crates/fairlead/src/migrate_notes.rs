@@ -300,6 +300,7 @@ pub const SINCE: &[(&str, &str)] = &[
     ("workspace", "0.10"),
     ("tracker", "0.10"),
     ("workspace.edges", "0.11"),
+    ("plan.run_all.on", "0.13"),
 ];
 
 /// Top-level tables every released config format has had.

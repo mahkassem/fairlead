@@ -24,7 +24,7 @@ For another client, the server is the command `fairlead mcp` with no arguments, 
 | `lessons` | `lessons list --json` | the lessons, with scope and review dates |
 | `skills_report` | `skills report --json` | skill routing's hit rate |
 
-*Unreleased:* `brief` and `context` take `fresh: true`, as `--fresh`, to start the session's set of paths over instead of adding to it.
+*Since 0.13.0:* `brief` and `context` take `fresh: true`, as `--fresh`, to start the session's set of paths over instead of adding to it.
 
 Every tool is read-only. `done` isn't one of them: it runs the tests, which takes minutes, and an MCP call can't be stopped midway. Run `fairlead done` through the agent's shell, where the hooks see it.
 

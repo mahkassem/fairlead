@@ -14,7 +14,7 @@ The working tree is always the head: in CI that's the checked-out commit. The ba
 
 ## Planning a past commit
 
-*Unreleased:* `fairlead plan --head REV` plans the changes of commit `REV` without checking it out, so a loop over history needs no script ([#225](https://github.com/mahkassem/fairlead/issues/225)). `--json` and `--out` work with it, and `fairlead test --head REV --explain FILE` explains that plan.
+*Since 0.13.0:* `fairlead plan --head REV` plans the changes of commit `REV` without checking it out, so a loop over history needs no script ([#225](https://github.com/mahkassem/fairlead/issues/225)). `--json` and `--out` work with it, and `fairlead test --head REV --explain FILE` explains that plan.
 
 ```sh
 for c in $(git rev-list --first-parent -10 origin/main); do
@@ -32,7 +32,7 @@ done
 ## How a plan is built
 
 1. **Changed paths.** `git diff --name-status --find-renames` from the base to the working tree, plus untracked files. A rename counts both paths; its old path counts as deleted.
-2. **Run everything.** A changed path matching `plan.run_all` selects every test and check. *Unreleased:* an entry can name the kinds of change that run everything, so a new file there goes through the graph: see [Run everything by kind of change](#run-everything-by-kind-of-change). The defaults are lockfiles, root manifests, tsconfig files, test-runner and task-runner config, and CI workflows. With `plan.lockfile = "scope"` (opt-in for now), a root `pnpm-lock.yaml` is the exception when it can be read: see [Lockfile changes](#lockfile-changes). *Since 0.8.0:* a change that only moves dependency versions, an edit to Fairlead's own config and a workflow that runs only by hand or on a schedule are exceptions too: see [Changes that don't run everything](#changes-that-dont-run-everything).
+2. **Run everything.** A changed path matching `plan.run_all` selects every test and check. *Since 0.13.0:* an entry can name the kinds of change that run everything, so a new file there goes through the graph: see [Run everything by kind of change](#run-everything-by-kind-of-change). The defaults are lockfiles, root manifests, tsconfig files, test-runner and task-runner config, and CI workflows. With `plan.lockfile = "scope"` (opt-in for now), a root `pnpm-lock.yaml` is the exception when it can be read: see [Lockfile changes](#lockfile-changes). *Since 0.8.0:* a change that only moves dependency versions, an edit to Fairlead's own config and a workflow that runs only by hand or on a schedule are exceptions too: see [Changes that don't run everything](#changes-that-dont-run-everything).
 3. **Ignored paths.** A changed path matching `plan.ignore` still selects every test it reaches through the files that depend on it. When it reaches none, it's listed under `ignored` and selects nothing, where it would otherwise fall to `tests.unreached`. That holds for source files too, imported or not: a unit test's fake, or a dev tool's code, reaches no end-to-end spec. A changed test file is never ignored. So a layer that plans a different kind of test (say `--env e2e`) can list the unit tests, their fakes and dev tools here. The defaults are root Markdown, the changesets tool's folder (`.changeset/**`), `docs/**`, READMEs, changelogs and licences.
 4. **Deleted files.** A deleted file goes back into the graph as a phantom, joined to every import that now fails but would resolve to it, every path literal that names it, and its package, so whatever depended on it still counts.
 5. **Package manifests.** A changed `<package>/package.json` counts as every file in that package changing.
@@ -42,7 +42,7 @@ done
 
 ## Run everything by kind of change
 
-*Unreleased:* a `plan.run_all` entry is a glob, which runs everything whatever kind of change reaches a matching path, or a table that names the kinds:
+*Since 0.13.0:* a `plan.run_all` entry is a glob, which runs everything whatever kind of change reaches a matching path, or a table that names the kinds:
 
 ```toml
 [plan]
