@@ -14,6 +14,19 @@ Thanks for helping. A few rules keep the project small and trustworthy.
   `dist-workspace.toml` to the same SHA and regenerate, or the `dist` job fails.
 - **Tests:** anything with a branch, a loop or a rule gets a test. Integration
   tests drive the built binary (`tests/`).
+- **A faster edit loop (optional):** [blaze](https://github.com/indexable-inc/ra-jit)
+  (still published as `ra-jit`) keeps the workspace loaded in a daemon and
+  rebuilds only what an edit touched. On Linux x86_64, rebuilding and running
+  the binary after an edit took 0.1 s instead of 2 s in the `fairlead` crate,
+  and 0.1 s instead of 5 s in `fairlead-core`; the first build loads the
+  workspace and takes about a minute. It needs Rust 1.99.0, newer than the
+  pinned toolchain, so name it on each command:
+  `rustup toolchain install 1.99.0 -c rust-src`,
+  `cargo +1.99.0 install --locked ra-jit`, then
+  `cargo +1.99.0 ra-jit build`, `run` or `test`. It runs no borrow checker,
+  so `cargo check` and `cargo clippy` stay the judge, and it falls back to
+  cargo for what it can't build (`cargo ra-jit status` says what). Linux and
+  Apple silicon only. CI and releases build with cargo.
 - **No project-specific logic.** Fairlead must work in any repository, so
   issues, pull requests and commit messages stay generic too (the `leak-text`
   workflow checks them).
