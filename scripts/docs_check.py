@@ -132,6 +132,18 @@ def check(root: Path, release: str | None = None) -> list[str]:
         if page.name != "SUMMARY.md" and f"({page.name})" not in summary:
             problems.append(f"docs/src/SUMMARY.md: {page.name} isn't in the book's contents")
 
+    guide = (root / "docs/src/migrate.md").read_text()
+    steps = [parse(v) for v in re.findall(rf"^### To ({VERSION})", guide, re.M)]
+    for a, b in zip(steps, steps[1:]):
+        if b <= a:
+            shown = lambda t: ".".join(map(str, t))
+            problems.append(f"docs/src/migrate.md: \"To {shown(b)}\" comes after \"To {shown(a)}\"; releases go oldest first")
+
+    named = set(re.findall(rf"\bv({VERSION})\b", section(readme, "## Status\n")))
+    if len(named) > 1:
+        listed = ", ".join(f"v{v}" for v in sorted(named, key=parse))
+        problems.append(f"README.md: the Status section names {listed}; it describes the latest release and points to the changelog for the rest")
+
     if first and re.match(VERSION, first) and not first.startswith(f"{version} ("):
         problems.append(f"CHANGELOG.md: the top section is {first}, but Cargo.toml says {version}")
 

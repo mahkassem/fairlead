@@ -221,6 +221,81 @@ For you to decide:
   as a use until `fairlead hooks uninstall --gemini` and
   `hooks install --gemini` write this release's.
 
+### To 0.9.0
+
+Migrate updates:
+
+- Codex hooks in `.codex/hooks.json` and Gemini CLI hooks in
+  `.gemini/settings.json`, which `migrate` now refreshes as it does Claude
+  Code's. Gemini CLI hooks from 0.7 get `read_file` in the nudge's matcher,
+  so a SKILL.md read there counts as a use; the uninstall and install the
+  0.8.0 notes asked for is no longer needed.
+
+For you to decide:
+
+- A project whose pushes run the plan and whose full suite runs on a
+  schedule can add `--event schedule` to its `replay fetch`, so replay
+  counts what the nightly caught and no push ran ([Scheduled
+  runs](replay.md#scheduled-runs)).
+- `fairlead graph why` names edge kinds in words (`type import`,
+  `path literal`) where it printed `typeimport` and `pathliteral`; a script
+  that reads its output needs the new names.
+
+### To 0.10.0
+
+Migrate updates nothing in your files: every new table is optional.
+
+For you to decide:
+
+- Replay sets recurring failures aside: a test failing in one job across
+  three or more unrelated pull requests gets the outcome `recurring` and
+  leaves adjusted recall, so a gate can pass that failed before. Confirm
+  the `[[replay.quarantine]]` entries it lists ([Recurring
+  failures](replay.md#recurring-failures)).
+- `fairlead doctor --score` rates the setup out of 100 and names the three
+  fixes worth the most ([Readiness score](score.md)); `fairlead ci workflow
+  --insights --write` adds the weekly summary ([Insights](insights.md)).
+- `fairlead mcp` serves read-only tools to an agent ([MCP server](mcp.md)),
+  `[tracker]` puts a branch's task in the brief ([Trackers](trackers.md)),
+  and `ci.escapes = "file"` opens an issue per escape ([CI](ci.md)).
+
+### To 0.11.0
+
+Migrate updates:
+
+- `.github/workflows/fairlead-insights.yml`, when `ci workflow --insights`
+  wrote it: it's rewritten with the `pull-requests` and `checks` read scopes
+  `replay fetch` needs ([#201](https://github.com/mahkassem/fairlead/issues/201)).
+
+For you to decide:
+
+- Sessions in a linked worktree count now: every worktree writes to the
+  main checkout's event log, so `doctor --score`, `insights` and
+  `tokens report` may show more than before.
+- A Next.js app can add `extends = ["next"]`, which `fairlead init` now
+  names ([Framework packs](graph.md#framework-packs)).
+- A workspace can declare `[[workspace.edges]]` between its repositories
+  ([Edges across repositories](workspace.md#edges-across-repositories)).
+- Building from source needs Rust 1.95.
+
+### To 0.12.0
+
+Migrate updates nothing in your files.
+
+For you to decide:
+
+- The `next` pack's end-to-end rule, every spec that calls `page.goto(`
+  reaching every route and `middleware`, is its own pack now. Add
+  `"next-e2e"` to `extends` to keep it, or leave it out when your owner
+  rules already map pages to specs
+  ([Framework packs](graph.md#framework-packs), [#212](https://github.com/mahkassem/fairlead/issues/212)).
+- With more than one runner, a runner whose folder holds another runner's
+  tests names its own when everything runs, so its command line lists
+  them; `all_command` keeps the tool's own discovery
+  ([Planning](plan.md), [#210](https://github.com/mahkassem/fairlead/issues/210)).
+- Under Bun, `"trustedDependencies": ["fairlead"]` has `bun install`
+  download the binary instead of the first command ([Install](install.md)).
+
 ### To 0.13.0
 
 Migrate updates:
@@ -244,81 +319,6 @@ For you to decide:
   build, and on a platform with no build it warns instead of failing the
   install, so `--ignore-scripts` is no longer needed in such images
   ([Install](install.md), [#218](https://github.com/mahkassem/fairlead/issues/218)).
-
-### To 0.12.0
-
-Migrate updates nothing in your files.
-
-For you to decide:
-
-- The `next` pack's end-to-end rule, every spec that calls `page.goto(`
-  reaching every route and `middleware`, is its own pack now. Add
-  `"next-e2e"` to `extends` to keep it, or leave it out when your owner
-  rules already map pages to specs
-  ([Framework packs](graph.md#framework-packs), [#212](https://github.com/mahkassem/fairlead/issues/212)).
-- With more than one runner, a runner whose folder holds another runner's
-  tests names its own when everything runs, so its command line lists
-  them; `all_command` keeps the tool's own discovery
-  ([Planning](plan.md), [#210](https://github.com/mahkassem/fairlead/issues/210)).
-- Under Bun, `"trustedDependencies": ["fairlead"]` has `bun install`
-  download the binary instead of the first command ([Install](install.md)).
-
-### To 0.11.0
-
-Migrate updates:
-
-- `.github/workflows/fairlead-insights.yml`, when `ci workflow --insights`
-  wrote it: it's rewritten with the `pull-requests` and `checks` read scopes
-  `replay fetch` needs ([#201](https://github.com/mahkassem/fairlead/issues/201)).
-
-For you to decide:
-
-- Sessions in a linked worktree count now: every worktree writes to the
-  main checkout's event log, so `doctor --score`, `insights` and
-  `tokens report` may show more than before.
-- A Next.js app can add `extends = ["next"]`, which `fairlead init` now
-  names ([Framework packs](graph.md#framework-packs)).
-- A workspace can declare `[[workspace.edges]]` between its repositories
-  ([Edges across repositories](workspace.md#edges-across-repositories)).
-- Building from source needs Rust 1.95.
-
-### To 0.10.0
-
-Migrate updates nothing in your files: every new table is optional.
-
-For you to decide:
-
-- Replay sets recurring failures aside: a test failing in one job across
-  three or more unrelated pull requests gets the outcome `recurring` and
-  leaves adjusted recall, so a gate can pass that failed before. Confirm
-  the `[[replay.quarantine]]` entries it lists ([Recurring
-  failures](replay.md#recurring-failures)).
-- `fairlead doctor --score` rates the setup out of 100 and names the three
-  fixes worth the most ([Readiness score](score.md)); `fairlead ci workflow
-  --insights --write` adds the weekly summary ([Insights](insights.md)).
-- `fairlead mcp` serves read-only tools to an agent ([MCP server](mcp.md)),
-  `[tracker]` puts a branch's task in the brief ([Trackers](trackers.md)),
-  and `ci.escapes = "file"` opens an issue per escape ([CI](ci.md)).
-
-### To 0.9.0
-
-Migrate updates:
-
-- Codex hooks in `.codex/hooks.json` and Gemini CLI hooks in
-  `.gemini/settings.json`, which `migrate` now refreshes as it does Claude
-  Code's. Gemini CLI hooks from 0.7 get `read_file` in the nudge's matcher,
-  so a SKILL.md read there counts as a use; the uninstall and install the
-  0.8.0 notes asked for is no longer needed.
-
-For you to decide:
-
-- A project whose pushes run the plan and whose full suite runs on a
-  schedule can add `--event schedule` to its `replay fetch`, so replay
-  counts what the nightly caught and no push ran ([Scheduled
-  runs](replay.md#scheduled-runs)).
-- `fairlead graph why` names edge kinds in words (`type import`,
-  `path literal`) where it printed `typeimport` and `pathliteral`; a script
-  that reads its output needs the new names.
 
 ## Going back to an older release
 
