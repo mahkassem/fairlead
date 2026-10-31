@@ -12,9 +12,9 @@ use serde::Serialize;
 use serde_json::Value;
 
 use crate::knowledge::lesson::{self, days};
-use crate::{graph_cmd, hooks_cmd};
+use crate::{graph_cmd, hooks_cmd, test_bench};
 
-pub const RUBRIC: u32 = 1;
+pub const RUBRIC: u32 = 2;
 /// Where `--replay` looks when not given a report.
 pub const REPLAY_REPORT: &str = ".fairlead/replay.json";
 const FRESH_DAYS: i64 = 30;
@@ -106,7 +106,18 @@ fn name(path: &Path) -> String {
         .unwrap_or_default()
 }
 
-fn runners_item(root: &Path, loaded: &Loaded) -> Item {
+/// Whether a runner runs `bun test`, which gives 5 of the runner points to `bench`.
+fn has_bun_runner(loaded: &Loaded) -> bool {
+    loaded
+        .config
+        .tests
+        .runners
+        .items()
+        .iter()
+        .any(|r| test_bench::is_bun_test(&r.command))
+}
+
+fn runners_item(root: &Path, loaded: &Loaded, max: u32) -> Item {
     let runners = loaded.config.tests.runners.items().len();
     let tree = fairlead_lang::tree::Tree::scan(root);
     let problems = fairlead_tests::testfiles::runner_problems(&tree, &loaded.config)
@@ -118,11 +129,58 @@ fn runners_item(root: &Path, loaded: &Loaded) -> Item {
     };
     pass(
         "runners",
-        15,
+        max,
         runners > 0 && problems.is_empty(),
         evidence,
         "give every test file exactly one runner; `fairlead config check` lists them",
     )
+}
+
+/// A `bun test` runner in the mode `fairlead test bench` last found fastest.
+fn bench_item(root: &Path, loaded: &Loaded) -> Item {
+    let fix = "run `fairlead test bench` and give the runner the mode it recommends";
+    let Some(b) = test_bench::load(root) else {
+        return pass(
+            "bench",
+            5,
+            false,
+            "no `fairlead test bench` result".into(),
+            fix,
+        );
+    };
+    let runners = loaded.config.tests.runners.items();
+    let Some(runner) = runners.iter().find(|r| r.id == b.runner) else {
+        let evidence = format!("the measured runner `{}` isn't configured", b.runner);
+        return pass("bench", 5, false, evidence, fix);
+    };
+    let configured = test_bench::Mode::of(&runner.command);
+    let mean = |m: test_bench::Mode| {
+        b.modes
+            .iter()
+            .find(|t| t.mode == m)
+            .map_or("-".to_string(), |t| test_bench::secs(t.mean_seconds))
+    };
+    let (ok, evidence) = match b.recommended {
+        None if !test_bench::parallel_available(&b.bun) => {
+            (true, format!("Bun {} has one test mode to run", b.bun))
+        }
+        None => (false, format!("nothing recommended: {}", b.reason)),
+        Some(m) if m == configured => (
+            true,
+            format!("runs `{}`, measured fastest at {}", m.label(), mean(m)),
+        ),
+        Some(m) => (
+            false,
+            format!(
+                "runs `{}` ({}); `{}` measured {}",
+                configured.label(),
+                mean(configured),
+                m.label(),
+                mean(m)
+            ),
+        ),
+    };
+    pass("bench", 5, ok, evidence, fix)
 }
 
 /// Agents the repository shows, each scored by whether its hooks are in.
@@ -317,7 +375,12 @@ pub fn score(dir: &Path, opts: &LoadOptions, replay: Option<&Path>) -> Score {
     let Ok(l) = &loaded else {
         return finish(items, events, report, today);
     };
-    items.push(runners_item(&root, l));
+    if has_bun_runner(l) {
+        items.push(runners_item(&root, l, 10));
+        items.push(bench_item(&root, l));
+    } else {
+        items.push(runners_item(&root, l, 15));
+    }
     items.push(hooks_item(&root, l));
     items.push(done_item(&events, today));
     items.push(ci_item(&root, l));

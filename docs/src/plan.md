@@ -8,6 +8,7 @@ fairlead plan --base main --json   # the plan as JSON (schema below)
 fairlead plan --files src/a.ts     # plan for these files or directories, no git needed
 fairlead test --explain test/a.test.ts   # why a test or check is in, or isn't
 fairlead plan --head HEAD~3        # a past commit's plan, without checking it out
+fairlead test bench                # which Bun test mode is fastest on these tests
 ```
 
 The working tree is always the head: in CI that's the checked-out commit. The base is the merge base of `--base` (default: `origin/HEAD`, then `origin/main`, `origin/master`, `main`, `master`) and `HEAD`. If there's no merge base, as in a shallow clone, the plan fails with exit code 2 rather than planning nothing; fetch more history (`fetch-depth: 0`) or pass `--files`.
@@ -208,6 +209,33 @@ src/a.ts
 ```
 
 The other conservative hops read `a dynamic import with no literal path` or `its tsconfig couldn't be applied`, and a workspace import that resolved to no file names the specifier and the package it's kept as a dependency on. `graph why` names each edge's kind the same way.
+
+## Measuring Bun's test modes
+
+*Unreleased:* `fairlead test bench` times the three ways Bun 1.4.4 runs a suite on the repository's own tests and recommends one, with its numbers ([#237](https://github.com/mahkassem/fairlead/issues/237)). Which is fastest depends on the suite, so it's measured rather than assumed.
+
+```sh
+fairlead test bench                # the first runner whose command is `bun test`
+fairlead test bench --runner unit  # another one
+fairlead test bench --runs 3       # each mode three times (default 2)
+fairlead test bench --json         # the result as JSON
+```
+
+It runs the runner's command with its test files (every class but `demand`, as when everything runs) in each mode, with a JUnit report so each file's result is read:
+
+| Mode | Where it loses |
+|---|---|
+| `bun test` | one file after another; the slowest on every suite measured |
+| `bun test --parallel` | one process per file: slower than serial on a suite of many small files (8.5 s against 3.1 s on one) |
+| `bun test --parallel --no-isolate` | fastest on every suite measured (3.1 s serial to 2.6 s, 88 s to 38.5 s), but files that share a worker see each other's leftovers |
+
+Each mode runs twice, or `--runs N` times. A file that fails in one run and passes in another is reported as order-dependent, with the runs it failed in; every repository measured turned up at least one when it moved to `--parallel`. A file that fails in every run is broken, not order-dependent, and doesn't count against a mode. The recommendation is the fastest mode by mean time that no order-dependent file failed in and whose runs all wrote their report, with the faster modes it passed over and why. A flaky test looks the same as an order-dependent one here; run the bench again, or with more runs, to tell them apart.
+
+When a check's command runs `tsc`, the bench also times it against `bun check` with the same `-p` and `-b`, and reports both times and whether each passed. It recommends nothing there: `bun check` went from 62.7 s to 1.8 s against a cold `tsc -b` on one monorepo, while on another repository the measure was 35 to 52 s against 1.4 s for an incremental `tsc`, so it wins mainly on a cold CI checkout. `bun check` follows TypeScript 7, so a difference in pass or fail is worth reading before switching.
+
+Below Bun 1.4.4 (from `bun --version`), there's no `--parallel` or `bun check`: the bench runs nothing and recommends nothing. A runner that runs per module isn't measured.
+
+The last result goes to `.fairlead/test-bench.json`. [`doctor --score`](score.md) reads it, [`insights --suggest`](insights.md) offers the recommended command with the times, and `fairlead migrate` points a runner still on plain `bun test` here. Timings belong to the machine they ran on: commit the file if CI should score it, or run the bench in CI.
 
 ## Plan JSON, version 1
 

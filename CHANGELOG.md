@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+### New
+
+- `fairlead test bench` measures which way of running Bun's tests is fastest on the repository's own tests ([#237](https://github.com/mahkassem/fairlead/issues/237)). It runs a `bun test` runner's test files serially, with `--parallel` and with `--parallel --no-isolate`, twice each (`--runs N`), reads each file's result from a JUnit report, and names any file that failed in one run and passed in another as order-dependent, with the runs it failed in. It recommends the fastest mode no order-dependent file failed in, with each mode's times; `--parallel --no-isolate` was fastest on every suite measured, while isolated `--parallel` was slower than serial on a suite of many small files (8.5 s against 3.1 s). When a check runs `tsc`, it also times `bun check` against it and reports both, without a recommendation, since `bun check` wins mainly on a cold checkout. Below Bun 1.4.4 it runs nothing and recommends nothing. `--json` prints the result, and the last one is kept in `.fairlead/test-bench.json`, where `insights --suggest` offers the recommended runner command with the measured times and `fairlead migrate` points a runner still on plain `bun test` at it. See [Measuring Bun's test modes](https://mahkassem.github.io/fairlead/docs/plan.html#measuring-buns-test-modes).
+
+### Changed
+
+- `doctor --score` is on rubric 2, which adds a `bench` item for a repository with a `bun test` runner: 5 points when the runner runs the mode `fairlead test bench` last recommended. It takes 5 of that repository's 15 runner points, so the total stays 100, and a repository without a `bun test` runner scores as it did on rubric 1. See [Readiness score](https://mahkassem.github.io/fairlead/docs/score.html).
+
 ## 0.13.0 (2026-10-26)
 
 ### New

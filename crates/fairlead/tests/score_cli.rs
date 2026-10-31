@@ -76,7 +76,7 @@ fn a_bare_repository_scores_zero_and_names_the_biggest_fixes_first() {
     let s = score(&dir, &[]);
     assert_eq!(
         (s["rubric"].as_u64(), s["score"].as_u64()),
-        (Some(1), Some(0))
+        (Some(2), Some(0))
     );
     let max: u64 = s["items"]
         .as_array()
@@ -86,7 +86,7 @@ fn a_bare_repository_scores_zero_and_names_the_biggest_fixes_first() {
         .sum();
     assert_eq!(max, 100, "the rubric sums to 100");
     let text = String::from_utf8_lossy(&fairlead(&dir, &["doctor", "--score"]).stdout).into_owned();
-    assert!(text.starts_with("readiness 0/100 (rubric 1)"), "{text}");
+    assert!(text.starts_with("readiness 0/100 (rubric 2)"), "{text}");
     assert!(
         text.contains("next:\n  +30 run `fairlead replay fetch`"),
         "the two replay items share one fix: {text}"
@@ -176,5 +176,33 @@ fn evidence_earns_each_item_and_config_alone_does_not() {
         0,
         "recall from plans that run everything doesn't count"
     );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn a_bun_runner_gives_five_of_the_runner_points_to_the_bench() {
+    let dir = repo("bun");
+    write(&dir, "fairlead.toml", "[[tests.runners]]\nid = \"bun\"\nmatch = [\"test/**\"]\ncommand = [\"bun\", \"test\", \"{files}\"]\n");
+    let s = score(&dir, &[]);
+    let max = |id: &str| {
+        s["items"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|i| i["id"] == id)
+            .unwrap_or_else(|| panic!("no item {id}"))["max"]
+            .as_u64()
+            .unwrap()
+    };
+    assert_eq!((max("runners"), max("bench")), (10, 5));
+    assert_eq!(points(&s, "runners"), 10);
+    assert_eq!(points(&s, "bench"), 0, "no bench result earns nothing");
+    let total: u64 = s["items"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|i| i["max"].as_u64().unwrap())
+        .sum();
+    assert_eq!(total, 100, "the rubric still sums to 100");
     let _ = std::fs::remove_dir_all(&dir);
 }

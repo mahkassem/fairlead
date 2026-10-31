@@ -172,7 +172,11 @@ This README documents Fairlead 0.13.0. Each command, by what it's for:
   setup and the config changes they back; `tokens`, the tokens and cost of
   each agent session; `replay`, the benchmarks, `skills eval`, which scores
   skill routing on the repository's history, and `skills report`, the hit
-  rate of what routing offers against what agents load.
+  rate of what routing offers against what agents load. *Unreleased:*
+  `test bench` times `bun test` serial, `--parallel` and
+  `--parallel --no-isolate` on the repository's tests, flags order-dependent
+  ones, and recommends the fastest mode for `doctor --score` and
+  `insights --suggest`.
 - **Getting started:** `init` writes a first config from what the repository
   shows, and `init --blueprint` adds a starting point for a kind of project:
   config, starter skills and the CI workflow.

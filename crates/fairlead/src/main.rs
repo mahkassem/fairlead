@@ -45,6 +45,7 @@ mod skills_eval_cmd;
 mod skills_report_cmd;
 mod stage;
 mod step;
+mod test_bench;
 mod tokens;
 mod tracker;
 mod workspace_cmd;
@@ -109,16 +110,19 @@ enum Command {
         #[arg(long)]
         schema: bool,
     },
-    /// Explain test selection.
+    /// Explain test selection, or time Bun's test modes with `bench`.
+    #[command(args_conflicts_with_subcommands = true, subcommand_negates_reqs = true)]
     Test {
+        #[command(subcommand)]
+        action: Option<test_bench::TestAction>,
         #[command(flatten)]
         changes: plan_cmd::Changes,
         /// Explain the plan of this commit, from a temporary checkout of it.
         #[arg(long, value_name = "REV")]
         head: Option<String>,
         /// Why this test file or check is in the plan, or why it isn't.
-        #[arg(long, value_name = "FILE_OR_CHECK")]
-        explain: String,
+        #[arg(long, value_name = "FILE_OR_CHECK", required = true)]
+        explain: Option<String>,
     },
     /// Serve the plan, the brief and the other read-only commands to an agent over MCP (stdio).
     Mcp,
@@ -590,10 +594,20 @@ fn main() -> ExitCode {
         Some(Command::Mcp) => mcp_cmd::run(&cwd()),
         Some(Command::Tokens { action }) => tokens::run(action, &cwd()),
         Some(Command::Test {
+            action: Some(test_bench::TestAction::Bench(args)),
+            ..
+        }) => test_bench::run(args, &cwd()),
+        Some(Command::Test {
             changes,
             head,
             explain,
-        }) => plan_cmd::run_explain(&cwd(), changes, head.as_deref(), &explain),
+            ..
+        }) => plan_cmd::run_explain(
+            &cwd(),
+            changes,
+            head.as_deref(),
+            explain.as_deref().unwrap_or_default(),
+        ),
         None => {
             println!(
                 "fairlead {}: see `fairlead --help`",

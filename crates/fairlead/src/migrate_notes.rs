@@ -7,6 +7,8 @@ use std::path::Path;
 use fairlead_core::config::Loaded;
 use fairlead_core::pattern::Pattern;
 
+use crate::test_bench::{is_bun_test, Mode};
+
 pub struct Context<'a> {
     pub loaded: &'a Loaded,
     pub root: &'a Path,
@@ -115,6 +117,18 @@ fn has_jvm_build(cx: &Context) -> bool {
     ]
     .iter()
     .any(|f| cx.root.join(f).is_file())
+}
+
+/// Whether a runner still runs `bun test` one file after another; whether a
+/// parallel mode is faster depends on the suite, so the bench decides.
+fn serial_bun_test(cx: &Context) -> bool {
+    cx.loaded
+        .config
+        .tests
+        .runners
+        .items()
+        .iter()
+        .any(|r| is_bun_test(&r.command) && Mode::of(&r.command) == Mode::Serial)
 }
 
 /// Each release, oldest first, with what it changed that needs a decision.
@@ -268,6 +282,13 @@ pub const RELEASES: &[(&str, &[Note])] = &[
             applies: run_all_covers_a_barrier,
         }],
     ),
+    (
+        "0.14.0",
+        &[Note {
+            text: "A runner runs `bun test` one file after another. Bun 1.4.4 adds `--parallel` and `--parallel --no-isolate`, which can be much faster or slower depending on the suite and tend to turn up order-dependent tests; `fairlead test bench` times the three on this repository's tests and says which to use. The runner is left as it is (see Measuring Bun's test modes).",
+            applies: serial_bun_test,
+        }],
+    ),
 ];
 
 /// Config tables and keys by the release that added them. The top-level
@@ -311,8 +332,33 @@ pub const BASE: &[&str] = &[
 
 #[cfg(test)]
 mod tests {
-    use super::names_only_barriers;
+    use super::{names_only_barriers, serial_bun_test, Context};
     use fairlead_core::config::RunAll;
+
+    #[test]
+    fn the_bench_note_is_for_a_bun_test_runner_with_no_parallel_mode() {
+        let applies = |command: &str| {
+            let text =
+                format!("[[tests.runners]]\nid = \"t\"\nmatch = [\"**\"]\ncommand = {command}\n");
+            let dir =
+                std::env::temp_dir().join(format!("fairlead-notes-bench-{}", std::process::id()));
+            std::fs::create_dir_all(&dir).unwrap();
+            std::fs::write(dir.join("fairlead.toml"), text).unwrap();
+            let loaded = fairlead_core::config::load(&dir, &Default::default()).unwrap();
+            let _ = std::fs::remove_dir_all(&dir);
+            serial_bun_test(&Context {
+                loaded: &loaded,
+                root: &dir,
+                claude_hooks: false,
+            })
+        };
+        assert!(applies(r#"["bun", "test", "{files}"]"#));
+        assert!(!applies(r#"["bun", "test", "--parallel", "{files}"]"#));
+        assert!(!applies(
+            r#"["bun", "test", "--parallel", "--no-isolate", "{files}"]"#
+        ));
+        assert!(!applies(r#"["vitest", "run", "{files}"]"#));
+    }
 
     fn strings(items: &[&str]) -> Vec<String> {
         items.iter().map(|s| s.to_string()).collect()
