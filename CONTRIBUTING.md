@@ -41,8 +41,9 @@ Thanks for helping. A few rules keep the project small and trustworthy.
 - **Releasing:** one PR bumps every crate's version and the exact
   `version = "=X.Y.Z"` pins between the `fairlead-*` crates, dates the `Unreleased`
   notes as the new version, and moves each `documents Fairlead X.Y.Z` line,
-  `*Unreleased:*` label, the README's Status and the action pin in
-  `docs/src/ci.md` to it. The Status describes that release alone and points
+  `*Unreleased:*` label, the README's Status, the action pin in
+  `docs/src/ci.md` and the Composer launcher's `STAMPED` version in
+  `src-php/Version.php` to it. The Status describes that release alone and points
   to the changelog for the rest, and the release's section goes at the end of
   the upgrade guide (`docs/src/migrate.md`), whose releases run oldest first;
   `scripts/docs_check.py` fails on either. Before tagging,

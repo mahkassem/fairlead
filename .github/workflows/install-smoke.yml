@@ -2,7 +2,10 @@
 # version it prints. Runs when the release workflow finishes a tag, or by hand
 # for any tag. The release is created with the workflow token, which starts no
 # `release` event, hence `workflow_run`. Publishing to npm, crates.io and the
-# Homebrew tap waits for an approval, so those legs wait for the package too. The Alpine leg installs on musl.
+# Homebrew tap waits for an approval, so those legs wait for the package too.
+# The Alpine leg installs on musl. The Composer legs install the tag's own
+# launcher from a path repository, so they test the launcher against the
+# release before Packagist lists it.
 name: install-smoke
 
 on:
@@ -40,6 +43,9 @@ jobs:
           - os: ubuntu-24.04
             installer: npm
             container: node:24-alpine@sha256:06d7adf3e0ef61a13f1d28682726366f97a15aa1888c934d3ecec86c33918b53
+          - { os: ubuntu-24.04, installer: composer }
+          - { os: macos-latest, installer: composer }
+          - { os: windows-latest, installer: composer }
     runs-on: ${{ matrix.os }}
     container: ${{ matrix.container }}
     timeout-minutes: 75
@@ -118,6 +124,26 @@ jobs:
           done
           brew install mahkassem/tap/fairlead
           "$(brew --prefix)/bin/fairlead" --version | tee version.txt
+      - name: Check out the tag's launcher
+        if: matrix.installer == 'composer'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.TAG }}
+          path: fairlead-src
+          persist-credentials: false
+      - name: Install with Composer
+        if: matrix.installer == 'composer'
+        shell: bash
+        run: |
+          command -v php >/dev/null || brew install php composer
+          version="${TAG#v}"
+          mkdir smoke && cd smoke
+          # Relative, so Windows PHP never sees a bash-style /d/... path.
+          src=../fairlead-src
+          # The path repository gives the package the tag's version, as Packagist would.
+          php -r '$v = $argv[1]; $src = $argv[2]; file_put_contents("composer.json", json_encode(["repositories" => [["type" => "path", "url" => $src, "options" => ["symlink" => false, "versions" => ["mahkassem/fairlead" => $v]]]], "require-dev" => ["mahkassem/fairlead" => $v]], JSON_UNESCAPED_SLASHES));' "$version" "$src"
+          composer install --no-interaction --no-progress
+          php vendor/bin/fairlead --version | tee ../version.txt
       - name: The installed binary prints the tag's version
         shell: bash
         run: |

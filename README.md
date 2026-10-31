@@ -175,7 +175,9 @@ This README documents Fairlead 0.13.0. Each command, by what it's for:
   rate of what routing offers against what agents load.
 - **Getting started:** `init` writes a first config from what the repository
   shows, and `init --blueprint` adds a starting point for a kind of project:
-  config, starter skills and the CI workflow.
+  config, starter skills and the CI workflow. *Unreleased:* on Bun 1.4.4 or
+  later, `init` runs `bun test` in parallel (`--parallel --no-isolate`) and
+  offers `bun fmt --check` on the changed files as a check.
 - **The config:** `config check`, `show` and `schema`.
 - **Upgrading:** `migrate`, which brings the hooks, the config's version
   floor and the version pins to the release you installed. *Since 0.7.0.*
@@ -214,6 +216,9 @@ powershell -c "irm https://github.com/mahkassem/fairlead/releases/latest/downloa
 
 # In a JavaScript or TypeScript project, as a dev dependency
 bun add -d fairlead   # or: npm i -D fairlead
+
+# In a PHP project, as a dev dependency
+composer require --dev mahkassem/fairlead
 ```
 
 *Unreleased:* with Homebrew, `brew install mahkassem/tap/fairlead`, or from
@@ -225,6 +230,11 @@ Then `fairlead doctor` says which binary, platform and config it would use.
 installers pick on a musl system such as an Alpine container image. On a
 platform with no build, the npm package still installs, and `fairlead` says
 how to build it from source ([Install](https://mahkassem.github.io/fairlead/docs/install.html#platforms)).
+
+*Unreleased:* the Composer package, for a PHP project without Node. A small
+PHP launcher downloads the release build for the platform on its first run,
+checks its sha256 before unpacking it, and caches it in `vendor/`
+([Install](https://mahkassem.github.io/fairlead/docs/install.html#composer)).
 
 ## Quick start
 

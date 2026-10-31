@@ -23,6 +23,8 @@ VERSION = r"\d+\.\d+\.\d+"
 MARKED = ["README.md", "docs/src/introduction.md", "site/index.html"]
 # The pages whose feature labels say when each feature shipped.
 LABELLED = ["README.md", "site/index.html"]
+# The Composer launcher, whose stamped release is the one it runs when Composer names none.
+LAUNCHER = "src-php/Version.php"
 
 
 def parse(v: str) -> tuple[int, ...]:
@@ -37,6 +39,11 @@ def cargo_version(root: Path) -> str:
     if not m:
         raise SystemExit("docs-check: no version in Cargo.toml")
     return m.group(1)
+
+
+def launcher_version(root: Path) -> str | None:
+    m = re.search(rf"const STAMPED = '({VERSION})';", (root / LAUNCHER).read_text())
+    return m.group(1) if m else None
 
 
 def released(root: Path) -> tuple[list[str], str | None]:
@@ -167,6 +174,11 @@ def check(root: Path, release: str | None = None) -> list[str]:
     if len(named) > 1:
         listed = ", ".join(f"v{v}" for v in sorted(named, key=parse))
         problems.append(f"README.md: the Status section names {listed}; it describes the latest release and points to the changelog for the rest")
+
+    if (root / LAUNCHER).exists():
+        stamped = launcher_version(root)
+        if stamped != version:
+            problems.append(f"{LAUNCHER}: the Composer launcher's STAMPED version is {stamped}, but Cargo.toml says {version}")
 
     if first and re.match(VERSION, first) and not first.startswith(f"{version} ("):
         problems.append(f"CHANGELOG.md: the top section is {first}, but Cargo.toml says {version}")
