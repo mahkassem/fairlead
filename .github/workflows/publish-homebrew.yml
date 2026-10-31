@@ -1,0 +1,60 @@
+# Called by release.yml (dist's custom publish job) in place of dist's own
+# Homebrew job, which runs outside the `release` environment: here the tap's
+# token is a `release` environment secret, and the formula ships only after
+# a reviewer approves, like npm and crates.io.
+name: publish-homebrew
+
+on:
+  workflow_call:
+    inputs:
+      plan:
+        required: true
+        type: string
+
+permissions: {}
+
+jobs:
+  publish:
+    runs-on: ubuntu-22.04
+    environment: release
+    permissions: {}
+    env:
+      PLAN: ${{ inputs.plan }}
+      TAP: mahkassem/homebrew-tap
+    steps:
+      # dist's global build writes the formula, with each archive's checksum.
+      - name: Fetch the formula
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        with:
+          pattern: artifacts-*
+          path: formula/
+          merge-multiple: true
+      - name: Push the formula to the tap
+        shell: bash
+        env:
+          TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+        run: |
+          set -euo pipefail
+          [ -n "$TAP_TOKEN" ] || { echo "the release environment has no HOMEBREW_TAP_TOKEN"; exit 1; }
+          # Sent as a header, as actions/checkout does, so the token is never
+          # written into the clone's config.
+          basic=$(printf 'x-access-token:%s' "$TAP_TOKEN" | base64 -w0)
+          echo "::add-mask::$basic"
+          auth="AUTHORIZATION: basic $basic"
+          git -c "http.https://github.com/.extraheader=$auth" clone --depth 1 "https://github.com/${TAP}.git" tap
+          mkdir -p tap/Formula
+          for release in $(echo "$PLAN" | jq --compact-output '.releases[] | select([.artifacts[] | endswith(".rb")] | any)'); do
+            file=$(echo "$release" | jq --raw-output '.artifacts[] | select(endswith(".rb"))')
+            version=$(echo "$release" | jq --raw-output '.app_version')
+            cp "formula/${file}" "tap/Formula/${file}"
+            git -C tap add "Formula/${file}"
+            # A re-run after the push finds nothing to commit.
+            if git -C tap diff --cached --quiet; then
+              echo "${file} ${version} is already in the tap"
+              continue
+            fi
+            git -C tap -c user.name="github-actions[bot]" \
+              -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+              commit --quiet -m "${file%.rb} ${version}"
+          done
+          git -C tap -c "http.https://github.com/.extraheader=$auth" push origin HEAD

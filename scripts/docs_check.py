@@ -15,6 +15,7 @@ import argparse
 import os
 import re
 import sys
+import tomllib
 from pathlib import Path
 
 VERSION = r"\d+\.\d+\.\d+"
@@ -22,6 +23,8 @@ VERSION = r"\d+\.\d+\.\d+"
 MARKED = ["README.md", "docs/src/introduction.md", "site/index.html"]
 # The pages whose feature labels say when each feature shipped.
 LABELLED = ["README.md", "site/index.html"]
+# The Composer launcher, whose stamped release is the one it runs when Composer names none.
+LAUNCHER = "src-php/Version.php"
 
 
 def parse(v: str) -> tuple[int, ...]:
@@ -36,6 +39,11 @@ def cargo_version(root: Path) -> str:
     if not m:
         raise SystemExit("docs-check: no version in Cargo.toml")
     return m.group(1)
+
+
+def launcher_version(root: Path) -> str | None:
+    m = re.search(rf"const STAMPED = '({VERSION})';", (root / LAUNCHER).read_text())
+    return m.group(1) if m else None
 
 
 def released(root: Path) -> tuple[list[str], str | None]:
@@ -62,6 +70,29 @@ def roadmap(root: Path) -> dict[str, str]:
         if len(cells) >= 2 and re.fullmatch(r"K\d+", cells[0]):
             rows[cells[0]] = cells[2] if len(cells) >= 3 else ""
     return rows
+
+
+def crate_pins(root: Path, version: str) -> list[str]:
+    """Each crate must require its siblings at exactly the workspace version.
+    They release together with no semver promise between them, so a caret
+    requirement would let `cargo install` pair crates from different releases."""
+    problems = []
+    want = f"={version}"
+    for manifest in [root / "Cargo.toml", *sorted(root.glob("crates/*/Cargo.toml"))]:
+        if not manifest.exists():
+            continue
+        data = tomllib.loads(manifest.read_text())
+        tables = [data, data.get("workspace", {}), *data.get("target", {}).values()]
+        for table in tables:
+            for kind in ("dependencies", "dev-dependencies", "build-dependencies"):
+                for name, spec in table.get(kind, {}).items():
+                    if not re.fullmatch(r"fairlead(-[a-z]+)?", name):
+                        continue
+                    got = spec.get("version") if isinstance(spec, dict) else spec
+                    if got != want:
+                        rel = manifest.relative_to(root)
+                        problems.append(f'{rel}: {name} is required as "{got}", not "{want}"; pin each sibling crate exactly')
+    return problems
 
 
 def lines_matching(text: str, pattern: str, flags: int = 0):
@@ -144,8 +175,15 @@ def check(root: Path, release: str | None = None) -> list[str]:
         listed = ", ".join(f"v{v}" for v in sorted(named, key=parse))
         problems.append(f"README.md: the Status section names {listed}; it describes the latest release and points to the changelog for the rest")
 
+    if (root / LAUNCHER).exists():
+        stamped = launcher_version(root)
+        if stamped != version:
+            problems.append(f"{LAUNCHER}: the Composer launcher's STAMPED version is {stamped}, but Cargo.toml says {version}")
+
     if first and re.match(VERSION, first) and not first.startswith(f"{version} ("):
         problems.append(f"CHANGELOG.md: the top section is {first}, but Cargo.toml says {version}")
+
+    problems += crate_pins(root, version)
 
     if release is not None:
         problems += check_release(root, release, version, first)
