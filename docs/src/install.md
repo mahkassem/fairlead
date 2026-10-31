@@ -42,7 +42,7 @@ from source ([#218](https://github.com/mahkassem/fairlead/issues/218)).
 brew install mahkassem/tap/fairlead
 ```
 
-*Unreleased:* the formula lives in the
+*Since 0.14.0:* the formula lives in the
 [mahkassem/homebrew-tap](https://github.com/mahkassem/homebrew-tap) tap and
 installs the release's own build, checked against the release's checksums.
 `brew upgrade fairlead` moves to each new release once it is published.
@@ -53,14 +53,14 @@ installs the release's own build, checked against the release's checksums.
 cargo install --locked fairlead
 ```
 
-*Unreleased:* builds the release from crates.io with Rust 1.95 or later, on
+*Since 0.14.0:* builds the release from crates.io with Rust 1.95 or later, on
 any platform Rust builds for, including one with no prebuilt build below.
 `--locked` uses the dependency versions the release was tested with. The
 `fairlead-*` library crates beside it on crates.io are its parts, published
 only so it builds; their APIs have no semver promise.
 ## Composer
 
-*Unreleased:* for a PHP project, with no Node needed:
+*Since 0.14.0:* for a PHP project, with no Node needed:
 
 ```sh
 composer require --dev mahkassem/fairlead
@@ -139,7 +139,7 @@ release you want:
 cargo install --locked --git https://github.com/mahkassem/fairlead --tag vX.Y.Z fairlead
 ```
 
-*Unreleased:* or from crates.io, `cargo install --locked fairlead --version X.Y.Z`
+*Since 0.14.0:* or from crates.io, `cargo install --locked fairlead --version X.Y.Z`
 ([Cargo](#cargo-cratesio)).
 
 ## Check it
@@ -176,13 +176,13 @@ each with a comment saying where it came from. A runner goes in only when its
 | It finds | It writes |
 |---|---|
 | `vitest`, `jest`, `ava` or `mocha` in `package.json`, or `bun test` or `node --test` in the test scripts, one `npm run` step deep | that runner, through the lockfile's package runner (`bun x`, `pnpm exec`, `yarn`, `npx`), on the standard test-file names, `ava.files` for AVA, and any other file that imports the runner (`from "vitest"`), such as a `test.ts` beside each function |
-| *Unreleased:* Bun 1.4.4 or later in `package.json`'s `packageManager` (`bun@1.4.4`) or in `.bun-version` | `bun test --parallel --no-isolate {files}` for the `bun test` runner, and a `bun-fmt` check, `bun fmt --no-script --check {files}` on the changed JavaScript and TypeScript files, commented out unless a script already runs `bun fmt` |
+| *Since 0.14.0:* Bun 1.4.4 or later in `package.json`'s `packageManager` (`bun@1.4.4`) or in `.bun-version` | `bun test --parallel --no-isolate {files}` for the `bun test` runner, and a `bun-fmt` check, `bun fmt --no-script --check {files}` on the changed JavaScript and TypeScript files, commented out unless a script already runs `bun fmt` |
 | `go.mod` at the root | `go test {packages}` on `**/*_test.go` |
 | `pyproject.toml`, `setup.py`, `setup.cfg`, `pytest.ini` or `tox.ini` | pytest on `**/test_*.py` and `**/*_test.py`, through `uv run` or `poetry run` when their lockfile is there |
 | `composer.json` | `php artisan test`, Pest or PHPUnit on the test directories `phpunit.xml` or `phpunit.xml.dist` names, else `tests/**/*Test.php` |
 | `Cargo.toml`, `gradlew`, `pom.xml`, a `.csproj`, or a `Gemfile` with `spec/` (RSpec) or `test/*_test.rb` (minitest) | a `[[checks]]` entry that runs the whole suite on any change in that language, which the import graph doesn't read yet |
 
-*Unreleased:* on Bun 1.4.4 or later, the `bun test` runner runs its files
+*Since 0.14.0:* on Bun 1.4.4 or later, the `bun test` runner runs its files
 in parallel workers. `--no-isolate` lets each worker run several files in one
 process: isolated `--parallel`, a process per file, can be slower than serial
 on suites of many small files (8.5 s against 3.1 s on one we measured), while

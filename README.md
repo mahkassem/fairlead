@@ -104,7 +104,7 @@ of trying things like a stranger.
   tests of the files that import it, and nothing when nothing does.
   *Since 0.13.0:* a `plan.run_all` entry can name the kinds of change that run
   everything, so a new migration goes through the graph and an edited one
-  runs everything. *Unreleased:* a named import from a barrel depends on the
+  runs everything. *Since 0.14.0:* a named import from a barrel depends on the
   file that declares the name, so a change behind a package's `index.ts`
   selects only the tests that import what it declares.
 - **No install needed to read your code.** The import graph comes from source
@@ -139,7 +139,7 @@ repositories are on the way
 
 ## What it does
 
-This README documents Fairlead 0.13.0. Each command, by what it's for:
+This README documents Fairlead 0.14.0. Each command, by what it's for:
 
 - **The test plan:** `plan`, `test --explain`, the import graph (`graph`) and
   coverage maps (`coverage import`). *Since 0.13.0:* `graph hubs` lists the
@@ -174,14 +174,14 @@ This README documents Fairlead 0.13.0. Each command, by what it's for:
   setup and the config changes they back; `tokens`, the tokens and cost of
   each agent session; `replay`, the benchmarks, `skills eval`, which scores
   skill routing on the repository's history, and `skills report`, the hit
-  rate of what routing offers against what agents load. *Unreleased:*
+  rate of what routing offers against what agents load. *Since 0.14.0:*
   `test bench` times `bun test` serial, `--parallel` and
   `--parallel --no-isolate` on the repository's tests, flags order-dependent
   ones, and recommends the fastest mode for `doctor --score` and
   `insights --suggest`.
 - **Getting started:** `init` writes a first config from what the repository
   shows, and `init --blueprint` adds a starting point for a kind of project:
-  config, starter skills and the CI workflow. *Unreleased:* on Bun 1.4.4 or
+  config, starter skills and the CI workflow. *Since 0.14.0:* on Bun 1.4.4 or
   later, `init` runs `bun test` in parallel (`--parallel --no-isolate`) and
   offers `bun fmt --check` on the changed files as a check.
 - **The config:** `config check`, `show` and `schema`.
@@ -193,17 +193,15 @@ The [quick start](#quick-start) shows the first few, and the
 
 ## Status
 
-Pre-alpha. The latest release, v0.13.0, works through what adopters
-reported: `graph hubs` names the files that link the most changes to the
-most tests, a changed barrier selects its importers, `plan.run_all` entries
-can name the kinds of change that run everything, `ci plan --shards N`
-splits a plan across a matrix of jobs, replay compares a config with the
-base branch's, `plan --head` plans a past commit without checking it out,
-and `doctor` names the binary it runs. It also ships musl builds, refreshes
-skills whose rule changed, and fixes the weekly insights workflow's replay
-step. What each earlier release added is in the [changelog](CHANGELOG.md),
-and what upgrading to it asks of you is in the
-[upgrade guide](https://mahkassem.github.io/fairlead/docs/migrate.html).
+Pre-alpha. The latest release, v0.14.0, measures and uses Bun 1.4.4: `init`
+writes the parallel test runner and offers a per-change `bun fmt` check, and
+`fairlead test bench` times Bun's test modes on your own tests and says which
+to use. A named import through a barrel now depends on the file that declares
+the name, so a change behind a package's `index.ts` selects only the tests
+that use it. Fairlead installs with Composer too, and releases are ready to
+publish to crates.io and a Homebrew tap. What each earlier release added is
+in the [changelog](CHANGELOG.md), and what upgrading to it asks of you is in
+the [upgrade guide](https://mahkassem.github.io/fairlead/docs/migrate.html).
 Recall on real CI failures, with every miss and its cause, is in the
 [changelog](CHANGELOG.md) and on the
 [benchmarks page](https://mahkassem.github.io/fairlead/docs/benchmarks.html).
@@ -227,7 +225,7 @@ bun add -d fairlead   # or: npm i -D fairlead
 composer require --dev mahkassem/fairlead
 ```
 
-*Unreleased:* with Homebrew, `brew install mahkassem/tap/fairlead`, or from
+*Since 0.14.0:* with Homebrew, `brew install mahkassem/tap/fairlead`, or from
 crates.io, `cargo install --locked fairlead`.
 
 Then `fairlead doctor` says which binary, platform and config it would use.
@@ -237,7 +235,7 @@ installers pick on a musl system such as an Alpine container image. On a
 platform with no build, the npm package still installs, and `fairlead` says
 how to build it from source ([Install](https://mahkassem.github.io/fairlead/docs/install.html#platforms)).
 
-*Unreleased:* the Composer package, for a PHP project without Node. A small
+*Since 0.14.0:* the Composer package, for a PHP project without Node. A small
 PHP launcher downloads the release build for the platform on its first run,
 checks its sha256 before unpacking it, and caches it in `vendor/`
 ([Install](https://mahkassem.github.io/fairlead/docs/install.html#composer)).

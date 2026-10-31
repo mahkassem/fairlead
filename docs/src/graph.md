@@ -15,7 +15,7 @@ fairlead graph hubs                  # the files that link the most changes to t
 | --- | --- |
 | import | `import`, `import x = require(…)` |
 | type import | `import type`; off with `graph.type_imports = false` |
-| re-export | `export … from`, and `export type … from` as a type re-export, which `graph.type_imports = false` turns off too. *Unreleased:* labelled `re-export` rather than `import`, since the walk treats it differently ([below](#named-imports-through-re-exports)) |
+| re-export | `export … from`, and `export type … from` as a type re-export, which `graph.type_imports = false` turns off too. *Since 0.14.0:* labelled `re-export` rather than `import`, since the walk treats it differently ([below](#named-imports-through-re-exports)) |
 | dynamic | `import("…")` with a plain string |
 | require | `require("…")` and `require.resolve("…")` |
 | mock | `vi.mock`, `jest.mock` and their relatives, naming a module |
@@ -29,7 +29,7 @@ An `import()` or `require()` whose argument isn't a plain string is counted as a
 
 ### Named imports through re-exports
 
-*Unreleased:* a barrel, an `index.ts` that re-exports other modules, made every file that imports from it depend on everything behind it, so one change behind a barrel selected every test that imports the barrel. A named import is now followed to the file that declares each name:
+*Since 0.14.0:* a barrel, an `index.ts` that re-exports other modules, made every file that imports from it depend on everything behind it, so one change behind a barrel selected every test that imports the barrel. A named import is now followed to the file that declares each name:
 
 ```ts
 // lib/index.ts
@@ -320,7 +320,7 @@ to cut the top hub, so a change below it stops there and a change to it still se
 ```
 
 - **Wide** names the file's own conservative edge (a dynamic import with no literal path, a local import that didn't resolve, a tsconfig that couldn't be applied, or a workspace import kept as a dependency on its whole package), else the nearest file feeding it that has one (`through`), else `plain edges only`. On a tie the file with the edge comes first, since a barrier there cuts the cause.
-- **What counts** is what the planner does: the same modules, test files and barriers. *Unreleased:* except for [re-exports](#named-imports-through-re-exports), which count as imports here, so a barrel ranks as if every file importing from it needed all of it; the planner's walk doesn't go from what a barrel re-exports to an import resolved past it. Barrier files and test files aren't listed, and only `unit` tests count, since the other classes don't run because a walk reached them. The product is an upper bound: a pair with another path around the file isn't cut by a barrier on it.
+- **What counts** is what the planner does: the same modules, test files and barriers. *Since 0.14.0:* except for [re-exports](#named-imports-through-re-exports), which count as imports here, so a barrel ranks as if every file importing from it needed all of it; the planner's walk doesn't go from what a barrel re-exports to an import resolved past it. Barrier files and test files aren't listed, and only `unit` tests count, since the other classes don't run because a walk reached them. The product is an upper bound: a pair with another path around the file isn't cut by a barrier on it.
 - **A barrier can cost recall.** A wide hub sometimes catches failures by accident, such as a flaky test it selects on unrelated changes. Replay the config with the barrier before keeping it ([Replay](replay.md)).
 - `--top N` lists N files (10 by default), and `--json` prints the same list with `path`, `tests`, `feeders`, `score` and `why` (`kind`, `text`, and `through` when it names another file), the `barrier` line, and the seconds the graph and the count took.
 
