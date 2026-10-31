@@ -221,12 +221,17 @@ powershell -c "irm https://github.com/mahkassem/fairlead/releases/latest/downloa
 # In a JavaScript or TypeScript project, as a dev dependency
 bun add -d fairlead   # or: npm i -D fairlead
 
-# In a PHP project, as a dev dependency
+# In a PHP or Laravel project, as a dev dependency
 composer require --dev mahkassem/fairlead
+
+# With Homebrew (macOS and Linux)
+brew install mahkassem/tap/fairlead
+
+# From crates.io, with Rust 1.95 or later
+cargo install --locked fairlead
 ```
 
-*Since 0.14.0:* with Homebrew, `brew install mahkassem/tap/fairlead`, or from
-crates.io, `cargo install --locked fairlead`.
+*Since 0.14.0:* the Homebrew tap, crates.io and Composer.
 
 Then `fairlead doctor` says which binary, platform and config it would use.
 

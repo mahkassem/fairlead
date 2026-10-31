@@ -58,14 +58,19 @@ any platform Rust builds for, including one with no prebuilt build below.
 `--locked` uses the dependency versions the release was tested with. The
 `fairlead-*` library crates beside it on crates.io are its parts, published
 only so it builds; their APIs have no semver promise.
+
 ## Composer
 
-*Since 0.14.0:* for a PHP project, with no Node needed:
+*Since 0.14.0:* for a PHP or Laravel project, with no Node needed:
 
 ```sh
 composer require --dev mahkassem/fairlead
 vendor/bin/fairlead --version
 ```
+
+In a Laravel app, `vendor/bin/fairlead init` then finds `artisan` and
+`laravel/framework`, uses the Laravel pack, and runs your tests with Pest or
+PHPUnit, whichever `composer.json` names.
 
 The package is a small PHP launcher, not the binary. Its first run downloads
 the release build for the platform from the repository's GitHub releases, the
