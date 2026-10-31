@@ -296,6 +296,7 @@ fn a_runner_that_isnt_bun_test_is_refused() {
 }
 
 /// Whether `label` is followed somewhere in `text` by a number of seconds, such as `0.31 s`.
+#[cfg(unix)]
 fn quotes_seconds(text: &str, label: &str) -> bool {
     text.match_indices(label).any(|(i, _)| {
         let rest = &text[i + label.len()..];
