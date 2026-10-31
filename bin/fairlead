@@ -1,0 +1,17 @@
+#!/usr/bin/env php
+<?php
+
+declare(strict_types=1);
+
+// Composer's bin proxy names its autoloader, which brings InstalledVersions and
+// composer/ca-bundle; the launcher's own classes load by path, so a project's
+// autoloader never carries them.
+foreach ([$GLOBALS['_composer_autoload_path'] ?? null, __DIR__ . '/../../../autoload.php', __DIR__ . '/../vendor/autoload.php'] as $autoload) {
+    if (is_string($autoload) && is_file($autoload)) {
+        require_once $autoload;
+        break;
+    }
+}
+require_once __DIR__ . '/../src-php/load.php';
+
+\Fairlead\Composer\Launcher::main($_SERVER['argv'] ?? [], dirname(__DIR__));
