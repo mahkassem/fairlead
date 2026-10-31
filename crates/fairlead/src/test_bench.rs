@@ -246,8 +246,19 @@ fn disqualified(timed: &Timed, order: &[OrderDependent]) -> Option<String> {
     }
 }
 
-/// The fastest mode no order-dependent file failed in, and why, or none.
-pub fn recommend(bun: &str, modes: &[Timed], order: &[OrderDependent]) -> (Option<Mode>, String) {
+/// How much faster another mode must be before the configured one is worth
+/// changing: two runs on a busy machine differ by more than a small gap.
+const NOISE_SECONDS: f64 = 0.25;
+const NOISE_SHARE: f64 = 0.10;
+
+/// The fastest mode no order-dependent file failed in, and why, or none. The
+/// configured mode stays when it ran clean and is within noise of the fastest.
+pub fn recommend(
+    bun: &str,
+    configured: Mode,
+    modes: &[Timed],
+    order: &[OrderDependent],
+) -> (Option<Mode>, String) {
     if !parallel_available(bun) {
         return (
             None,
@@ -265,6 +276,24 @@ pub fn recommend(bun: &str, modes: &[Timed], order: &[OrderDependent]) -> (Optio
                 secs(timed.mean_seconds)
             )),
             None => {
+                let kept = modes.iter().find(|t| {
+                    t.mode == configured
+                        && t.mode != timed.mode
+                        && disqualified(t, order).is_none()
+                        && t.mean_seconds - timed.mean_seconds
+                            < NOISE_SECONDS.max(NOISE_SHARE * t.mean_seconds)
+                });
+                if let Some(kept) = kept {
+                    return (
+                        Some(kept.mode),
+                        format!(
+                            "the configured mode ({}) is within noise of the fastest, {} ({})",
+                            secs(kept.mean_seconds),
+                            timed.mode.label(),
+                            secs(timed.mean_seconds)
+                        ),
+                    );
+                }
                 let mut reason = format!(
                     "the fastest mode with no order-dependent failure ({})",
                     secs(timed.mean_seconds)
@@ -579,7 +608,7 @@ fn bench(args: &BenchArgs, cwd: &Path) -> Result<Bench, String> {
         b.order_dependent = order_dependent(&b.modes);
         b.typecheck = measure_typecheck(&loaded.config, &program, &root, args.runs)?;
     }
-    (b.recommended, b.reason) = recommend(&version, &b.modes, &b.order_dependent);
+    (b.recommended, b.reason) = recommend(&version, b.configured, &b.modes, &b.order_dependent);
     save(&root, &b)?;
     Ok(b)
 }
@@ -685,7 +714,7 @@ mod tests {
             timed(Mode::ParallelNoIsolate, vec![run(1.0, &[]), run(1.2, &[])]),
         ];
         let order = order_dependent(&modes);
-        let (mode, why) = recommend("1.4.4", &modes, &order);
+        let (mode, why) = recommend("1.4.4", Mode::Serial, &modes, &order);
         assert_eq!(mode, Some(Mode::ParallelNoIsolate));
         assert!(why.contains("1.10 s"), "{why}");
         assert!(
@@ -700,12 +729,15 @@ mod tests {
                 t
             })
             .collect();
-        assert_eq!(recommend("1.4.4", &clean, &[]).0, Some(Mode::Parallel));
+        assert_eq!(
+            recommend("1.4.4", Mode::Serial, &clean, &[]).0,
+            Some(Mode::Parallel)
+        );
     }
 
     #[test]
     fn nothing_is_recommended_before_bun_1_4_4_or_when_every_mode_tripped() {
-        let (mode, why) = recommend("1.3.0", &[], &[]);
+        let (mode, why) = recommend("1.3.0", Mode::Serial, &[], &[]);
         assert_eq!(mode, None);
         assert!(why.contains("came in Bun 1.4.4"), "{why}");
         let modes = vec![
@@ -718,11 +750,31 @@ mod tests {
                 }],
             ),
         ];
-        let (mode, why) = recommend("1.4.4", &modes, &order_dependent(&modes));
+        let (mode, why) = recommend("1.4.4", Mode::Serial, &modes, &order_dependent(&modes));
         assert_eq!(mode, None);
         assert!(
             why.contains("wrote no report") && why.contains("a failed in it"),
             "{why}"
         );
+    }
+
+    #[test]
+    fn the_configured_mode_stays_when_the_fastest_is_within_noise() {
+        let modes = vec![
+            timed(Mode::Serial, vec![run(0.05, &[]), run(0.04, &[])]),
+            timed(
+                Mode::ParallelNoIsolate,
+                vec![run(0.07, &[]), run(0.14, &[])],
+            ),
+        ];
+        let (mode, why) = recommend("1.4.4", Mode::ParallelNoIsolate, &modes, &[]);
+        assert_eq!(mode, Some(Mode::ParallelNoIsolate));
+        assert!(why.contains("within noise"), "{why}");
+        let slow = vec![
+            timed(Mode::Serial, vec![run(3.0, &[]), run(3.0, &[])]),
+            timed(Mode::ParallelNoIsolate, vec![run(1.0, &[]), run(1.0, &[])]),
+        ];
+        let (mode, _) = recommend("1.4.4", Mode::Serial, &slow, &[]);
+        assert_eq!(mode, Some(Mode::ParallelNoIsolate));
     }
 }

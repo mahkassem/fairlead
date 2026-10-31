@@ -167,7 +167,7 @@ fn bench_item(root: &Path, loaded: &Loaded) -> Item {
         None => (false, format!("nothing recommended: {}", b.reason)),
         Some(m) if m == configured => (
             true,
-            format!("runs `{}`, measured fastest at {}", m.label(), mean(m)),
+            format!("runs `{}`, the recommended mode ({})", m.label(), mean(m)),
         ),
         Some(m) => (
             false,

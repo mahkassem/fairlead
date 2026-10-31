@@ -289,7 +289,7 @@ fn gather(root: &Path, args: &InsightsArgs, cfg: &config::Config) -> Result<Insi
     Ok(out)
 }
 
-/// The runner mode `fairlead test bench` last measured fastest, while the
+/// The runner mode `fairlead test bench` last recommended, while the
 /// runner it measured runs another, with the times that back it.
 fn bench_suggestion(root: &Path, cfg: &config::Config) -> Option<Suggestion> {
     let b = crate::test_bench::load(root)?;
