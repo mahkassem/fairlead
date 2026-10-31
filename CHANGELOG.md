@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- The release builds the Apple-silicon macOS binary on GitHub's `macos-15` runner. The `macos-14` image it used is being retired, and its brownouts cancelled 0.14.0's build before it started, so 0.14.0 has no GitHub release, npm package or Homebrew formula; its crates are on crates.io.
+
 ## 0.14.0 (2026-10-31)
 
 ### New
