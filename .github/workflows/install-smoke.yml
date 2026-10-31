@@ -1,10 +1,11 @@
 # Installs a released tag through each installer on each OS and checks the
 # version it prints. Runs when the release workflow finishes a tag, or by hand
 # for any tag. The release is created with the workflow token, which starts no
-# `release` event, hence `workflow_run`. npm publishing waits for an approval,
-# so the npm legs wait for the package too. The Alpine leg installs on musl.
-# The Composer legs install the tag's own launcher from a path repository, so
-# they test the launcher against the release before Packagist lists it.
+# `release` event, hence `workflow_run`. Publishing to npm, crates.io and the
+# Homebrew tap waits for an approval, so those legs wait for the package too.
+# The Alpine leg installs on musl. The Composer legs install the tag's own
+# launcher from a path repository, so they test the launcher against the
+# release before Packagist lists it.
 name: install-smoke
 
 on:
@@ -37,6 +38,8 @@ jobs:
           - { os: ubuntu-24.04, installer: npm }
           - { os: macos-latest, installer: npm }
           - { os: windows-latest, installer: npm }
+          - { os: ubuntu-24.04, installer: cargo }
+          - { os: macos-latest, installer: brew }
           - os: ubuntu-24.04
             installer: npm
             container: node:24-alpine@sha256:06d7adf3e0ef61a13f1d28682726366f97a15aa1888c934d3ecec86c33918b53
@@ -87,6 +90,40 @@ jobs:
             sleep 60
           done
           npx --yes "fairlead@$version" --version | tee version.txt
+      - name: Install from crates.io
+        if: matrix.installer == 'cargo'
+        shell: bash
+        run: |
+          version="${TAG#v}"
+          if [[ "$version" == *-* ]]; then
+            echo "prereleases aren't published to crates.io"
+            echo "fairlead $version" > version.txt
+            exit 0
+          fi
+          for _ in $(seq 60); do
+            curl -fsS https://index.crates.io/fa/ir/fairlead | grep -qF "\"vers\":\"$version\"" && break
+            echo "fairlead $version isn't on crates.io yet; waiting for the publish approval"
+            sleep 60
+          done
+          cargo install fairlead --version "$version" --locked
+          "${CARGO_HOME:-$HOME/.cargo}/bin/fairlead" --version | tee version.txt
+      - name: Install from the Homebrew tap
+        if: matrix.installer == 'brew'
+        shell: bash
+        run: |
+          version="${TAG#v}"
+          if [[ "$version" == *-* ]]; then
+            echo "prereleases aren't published to the tap"
+            echo "fairlead $version" > version.txt
+            exit 0
+          fi
+          for _ in $(seq 60); do
+            curl -fsS https://raw.githubusercontent.com/mahkassem/homebrew-tap/HEAD/Formula/fairlead.rb | grep -qF "version \"$version\"" && break
+            echo "fairlead $version isn't in the tap yet; waiting for the publish approval"
+            sleep 60
+          done
+          brew install mahkassem/tap/fairlead
+          "$(brew --prefix)/bin/fairlead" --version | tee version.txt
       - name: Check out the tag's launcher
         if: matrix.installer == 'composer'
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

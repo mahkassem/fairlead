@@ -225,6 +225,9 @@ bun add -d fairlead   # or: npm i -D fairlead
 composer require --dev mahkassem/fairlead
 ```
 
+*Unreleased:* with Homebrew, `brew install mahkassem/tap/fairlead`, or from
+crates.io, `cargo install --locked fairlead`.
+
 Then `fairlead doctor` says which binary, platform and config it would use.
 
 *Since 0.13.0:* static musl builds for x86_64 and aarch64 Linux, which the

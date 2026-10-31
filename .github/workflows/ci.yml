@@ -144,3 +144,12 @@ jobs:
           set -euo pipefail
           curl --proto '=https' --tlsv1.2 -LsSf https://github.com/axodotdev/cargo-dist/releases/download/v0.32.0/cargo-dist-installer.sh | sh
           dist generate --check
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
+        with:
+          toolchain: "1.95.0"
+      # Builds each crate from its package against its siblings' packages
+      # (cargo stands a local registry in for the unpublished ones), so a file
+      # left out of a crate or a broken pin fails here rather than mid-release.
+      # About three minutes cold, beside jobs that take longer.
+      - name: Every crate packages and builds as crates.io will see it
+        run: cargo publish --workspace --dry-run --locked
