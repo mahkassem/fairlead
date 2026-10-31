@@ -1,8 +1,13 @@
 //! The file graph. An edge from A to B means A depends on B, so walking
 //! edges backwards from a changed file finds everything it can affect. A
 //! package edge stands for an edge to every file in that package.
+//!
+//! A file the walk reaches only over re-export edges changed in something
+//! it re-exports, not in its own code, so it doesn't go on to an importer
+//! whose named import was resolved past it to the files that declare the
+//! names: that importer has edges to those files already.
 
-use std::collections::{HashMap, VecDeque};
+use std::collections::{HashMap, HashSet, VecDeque};
 
 use crate::extract::SpecKind;
 
@@ -10,6 +15,9 @@ use crate::extract::SpecKind;
 pub enum EdgeKind {
     Import,
     TypeImport,
+    /// `export … from`: the module passes the target's names on.
+    ReExport,
+    TypeReExport,
     Dynamic,
     Require,
     Mock,
@@ -35,6 +43,8 @@ impl EdgeKind {
         match self {
             EdgeKind::Import => "import",
             EdgeKind::TypeImport => "type import",
+            EdgeKind::ReExport => "re-export",
+            EdgeKind::TypeReExport => "type re-export",
             EdgeKind::Dynamic => "dynamic import",
             EdgeKind::Require => "require",
             EdgeKind::Mock => "mock",
@@ -46,6 +56,10 @@ impl EdgeKind {
             EdgeKind::Rule => "[[graph.edges]] rule",
         }
     }
+
+    pub fn is_reexport(self) -> bool {
+        matches!(self, EdgeKind::ReExport | EdgeKind::TypeReExport)
+    }
 }
 
 impl From<SpecKind> for EdgeKind {
@@ -56,6 +70,8 @@ impl From<SpecKind> for EdgeKind {
             SpecKind::Dynamic => EdgeKind::Dynamic,
             SpecKind::Require => EdgeKind::Require,
             SpecKind::Mock => EdgeKind::Mock,
+            SpecKind::ReExport => EdgeKind::ReExport,
+            SpecKind::TypeReExport => EdgeKind::TypeReExport,
         }
     }
 }
@@ -91,6 +107,9 @@ pub struct Graph {
     pub tsconfig_fallbacks: Vec<u32>,
     /// Files the walk reaches but doesn't go past (`graph.barrier`).
     pub barrier: std::collections::HashSet<u32>,
+    /// Import edges added for a named import resolved by name, which a
+    /// file reached only through its re-exports doesn't follow.
+    named: HashSet<(u32, u32, EdgeKind)>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -164,10 +183,54 @@ impl Graph {
     }
 
     pub fn add_edge(&mut self, from: u32, to: u32, kind: EdgeKind) {
+        if !self.named.is_empty() {
+            self.named.remove(&(from, to, kind));
+        }
         if from != to && !self.deps[from as usize].contains(&(to, kind)) {
             self.deps[from as usize].push((to, kind));
             self.rdeps[to as usize].push((from, kind));
         }
+    }
+
+    /// An edge for a named import resolved by name: the importer needs
+    /// `to`'s own code, not what `to` re-exports. The same edge added any
+    /// other way, before or after, wins.
+    pub fn add_named_edge(&mut self, from: u32, to: u32, kind: EdgeKind) {
+        if from == to || self.deps[from as usize].contains(&(to, kind)) {
+            return;
+        }
+        self.named.insert((from, to, kind));
+        self.deps[from as usize].push((to, kind));
+        self.rdeps[to as usize].push((from, kind));
+    }
+
+    /// Whether `from`'s edge to `to` was a named import resolved by name.
+    pub fn is_named(&self, from: u32, to: u32, kind: EdgeKind) -> bool {
+        self.named.contains(&(from, to, kind))
+    }
+
+    /// The importers a walk goes on to from `file`, each with whether it's
+    /// reached whole, which only a re-export edge doesn't give. `whole`
+    /// says how `file` was reached: one reached only over re-exports
+    /// isn't followed along a named edge.
+    pub fn next(&self, file: u32, whole: bool) -> Vec<(u32, bool)> {
+        let mut out: Vec<(u32, bool)> = Vec::new();
+        for &(from, kind) in &self.rdeps[file as usize] {
+            if !whole && self.named.contains(&(from, file, kind)) {
+                continue;
+            }
+            out.push((from, !kind.is_reexport()));
+        }
+        if let Some(p) = self.package_of[file as usize] {
+            out.extend(
+                self.package_importers[p as usize]
+                    .iter()
+                    .map(|&f| (f, true)),
+            );
+        }
+        out.sort_unstable_by_key(|&(f, w)| (f, !w));
+        out.dedup_by_key(|(f, _)| *f);
+        out
     }
 
     /// `add_edge` without the duplicate check, for callers that dedupe a
@@ -219,38 +282,68 @@ impl Graph {
         out
     }
 
-    /// Every file that can be affected by a change to any of `changed`, with
-    /// the file that led to each one, for reasons.
-    pub fn affected(&self, changed: &[u32]) -> HashMap<u32, Option<u32>> {
-        let mut seen: HashMap<u32, Option<u32>> = changed.iter().map(|&c| (c, None)).collect();
-        let mut queue: VecDeque<u32> = changed.iter().copied().collect();
-        while let Some(file) = queue.pop_front() {
-            for (importer, _) in self.importers(file) {
-                if let std::collections::hash_map::Entry::Vacant(slot) = seen.entry(importer) {
-                    slot.insert(Some(file));
-                    queue.push_back(importer);
+    /// The walk from `changed`, in both states a file can be reached in:
+    /// whole, and only through re-exports. Each entry names the file and
+    /// state it was reached from, which was reached first, so following
+    /// them always ends at a changed file.
+    fn reach(&self, changed: &[u32]) -> [HashMap<u32, Option<(u32, bool)>>; 2] {
+        let mut seen: [HashMap<u32, Option<(u32, bool)>>; 2] = Default::default();
+        let mut queue: VecDeque<(u32, bool)> = VecDeque::new();
+        for &c in changed {
+            if seen[1].insert(c, None).is_none() {
+                queue.push_back((c, true));
+            }
+        }
+        while let Some((file, whole)) = queue.pop_front() {
+            for (importer, reach_whole) in self.next(file, whole) {
+                let known = seen[1].contains_key(&importer)
+                    || (!reach_whole && seen[0].contains_key(&importer));
+                if !known {
+                    seen[reach_whole as usize].insert(importer, Some((file, whole)));
+                    queue.push_back((importer, reach_whole));
                 }
             }
         }
         seen
     }
 
+    /// Every file that can be affected by a change to any of `changed`, with
+    /// the file that led to each one, for reasons.
+    pub fn affected(&self, changed: &[u32]) -> HashMap<u32, Option<u32>> {
+        let [through, whole] = self.reach(changed);
+        let mut out: HashMap<u32, Option<u32>> = through
+            .into_iter()
+            .map(|(f, via)| (f, via.map(|v| v.0)))
+            .collect();
+        out.extend(whole.into_iter().map(|(f, via)| (f, via.map(|v| v.0))));
+        out
+    }
+
     /// The shortest chain by which `from` depends on `to`, `from` first.
     pub fn why(&self, from: u32, to: u32) -> Option<Vec<Step>> {
-        let affected = self.affected(&[to]);
-        affected.get(&from)?;
+        let seen = self.reach(&[to]);
+        let mut state = if seen[1].contains_key(&from) {
+            true
+        } else {
+            seen[0].get(&from)?;
+            false
+        };
         let mut chain = Vec::new();
         let mut at = Some(from);
         while let Some(file) = at {
-            let next = affected[&file];
-            let kind = next.and_then(|n| {
+            let next = seen[state as usize][&file];
+            let kind = next.and_then(|(n, n_whole)| {
                 self.deps[file as usize]
                     .iter()
-                    .find(|(t, _)| *t == n)
+                    .filter(|&&(t, k)| t == n && (n_whole || !self.is_named(file, n, k)))
                     .map(|(_, k)| *k)
+                    .min()
             });
             chain.push((self.files[file as usize].clone(), kind));
-            at = next;
+            at = next.map(|(n, s)| {
+                state = s;
+                n
+            });
         }
         Some(chain)
     }
@@ -274,5 +367,82 @@ impl Graph {
             unknown: self.unknown.len(),
             tsconfig_fallbacks: self.tsconfig_fallbacks.len(),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// 0 imports `a` from barrel 1, which re-exports 2 (declaring `a`) and 3;
+    /// 4 imports all of 1; 5 re-exports 1; 6 imports `a` from 5.
+    fn barrel() -> Graph {
+        let files = (0..7).map(|i| format!("f{i}.ts")).collect();
+        let mut g = Graph::with_files(files, Vec::new());
+        g.add_edge(1, 2, EdgeKind::ReExport);
+        g.add_edge(1, 3, EdgeKind::ReExport);
+        g.add_named_edge(0, 1, EdgeKind::Import);
+        g.add_named_edge(0, 2, EdgeKind::Import);
+        g.add_edge(4, 1, EdgeKind::Import);
+        g.add_edge(5, 1, EdgeKind::ReExport);
+        for to in [5, 1, 2] {
+            g.add_named_edge(6, to, EdgeKind::Import);
+        }
+        g
+    }
+
+    fn reached(g: &Graph, changed: u32) -> Vec<u32> {
+        let mut out: Vec<u32> = g.affected(&[changed]).into_keys().collect();
+        out.sort();
+        out
+    }
+
+    #[test]
+    fn a_named_import_resolved_past_a_barrel_skips_what_else_it_re_exports() {
+        let g = barrel();
+        assert_eq!(reached(&g, 3), [1, 3, 4, 5]);
+        assert_eq!(reached(&g, 2), [0, 1, 2, 4, 5, 6]);
+        // The barrel's own code reaches everything that imports from it.
+        assert_eq!(reached(&g, 1), [0, 1, 4, 5, 6]);
+        assert_eq!(
+            g.why(4, 3).unwrap(),
+            vec![
+                ("f4.ts".to_string(), Some(EdgeKind::Import)),
+                ("f1.ts".to_string(), Some(EdgeKind::ReExport)),
+                ("f3.ts".to_string(), None),
+            ]
+        );
+        assert_eq!(g.why(0, 3), None);
+    }
+
+    #[test]
+    fn the_same_edge_added_any_other_way_is_followed_whole() {
+        let mut g = barrel();
+        g.add_edge(0, 1, EdgeKind::Import);
+        assert_eq!(reached(&g, 3), [0, 1, 3, 4, 5]);
+        let mut g = barrel();
+        g.add_edge(0, 1, EdgeKind::Mock);
+        assert_eq!(reached(&g, 3), [0, 1, 3, 4, 5]);
+        // A named edge after a plain one doesn't narrow it.
+        let mut g = barrel();
+        g.add_edge(6, 5, EdgeKind::TypeImport);
+        g.add_named_edge(6, 5, EdgeKind::TypeImport);
+        assert_eq!(reached(&g, 3), [1, 3, 4, 5, 6]);
+    }
+
+    #[test]
+    fn a_file_reached_through_re_exports_then_whole_goes_on_to_named_importers() {
+        let mut g = barrel();
+        // 1 also imports 3 for its own code.
+        g.add_edge(1, 3, EdgeKind::Import);
+        assert_eq!(reached(&g, 3), [0, 1, 3, 4, 5, 6]);
+        assert_eq!(
+            g.why(0, 3).unwrap(),
+            vec![
+                ("f0.ts".to_string(), Some(EdgeKind::Import)),
+                ("f1.ts".to_string(), Some(EdgeKind::Import)),
+                ("f3.ts".to_string(), None),
+            ]
+        );
     }
 }

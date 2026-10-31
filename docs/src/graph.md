@@ -13,8 +13,9 @@ fairlead graph hubs                  # the files that link the most changes to t
 
 | Edge | From |
 | --- | --- |
-| import | `import`, `export … from`, `import x = require(…)` |
-| type import | `import type` and `export type … from`; off with `graph.type_imports = false` |
+| import | `import`, `import x = require(…)` |
+| type import | `import type`; off with `graph.type_imports = false` |
+| re-export | `export … from`, and `export type … from` as a type re-export, which `graph.type_imports = false` turns off too. *Unreleased:* labelled `re-export` rather than `import`, since the walk treats it differently ([below](#named-imports-through-re-exports)) |
 | dynamic | `import("…")` with a plain string |
 | require | `require("…")` and `require.resolve("…")` |
 | mock | `vi.mock`, `jest.mock` and their relatives, naming a module |
@@ -25,6 +26,37 @@ fairlead graph hubs                  # the files that link the most changes to t
 Single-file components are sources too. In a `.vue` or `.svelte` file every `<script>` block is read, `<script setup>` and Svelte's `context="module"` included, and in an `.astro` file its `---` frontmatter and its `<script>` blocks. Each block is parsed as its `lang` says (`ts`, `tsx`, `js`), else as JavaScript in Vue and Svelte and TypeScript in Astro, and a `<script src="…">` counts as an import. The component file is the node, so `import Card from './Card.vue'` resolves to it like any other import, and a change to a component reaches the tests that import it, directly or through other components.
 
 An `import()` or `require()` whose argument isn't a plain string is counted as an unknown dynamic import; the planner treats the file as depending on its whole module.
+
+### Named imports through re-exports
+
+*Unreleased:* a barrel, an `index.ts` that re-exports other modules, made every file that imports from it depend on everything behind it, so one change behind a barrel selected every test that imports the barrel. A named import is now followed to the file that declares each name:
+
+```ts
+// lib/index.ts
+export * from './money';
+export * from './dates';
+
+// money.test.ts
+import { money } from './lib';
+```
+
+`money.test.ts` depends on `lib/money.ts`, which declares `money`, and on `lib/index.ts` for the barrel's own code. A change to either selects it; a change to `lib/dates.ts` doesn't.
+
+How a name becomes a file:
+
+- `import { a, b as c } from "…"` and `import type { T } from "…"` name `a`, `b` and `T`, and each is looked up in the file the specifier resolves to. A name that file declares and exports (`export const`, `export function`, `export class`, `export { x }`, or `default` for `export default`) stops there. Otherwise `export { x as a } from "…"` follows `x` into that module, and then each `export * from "…"`, which never passes on a default. Barrels of barrels are followed, up to 32 re-exports deep; a cycle of `export *`s ends, keeping what the rest of it found.
+- The importer depends on the file that declares the name and on each barrel on the way, for that barrel's own code. A change to a barrel, or to a file it imports for itself, selects every file that imports from it. A change that reaches a barrel only through what it re-exports goes on to the files that import all of it, and not to those whose names come from elsewhere.
+- `export * as ns from "…"` makes `ns` depend on all of that module. A name two `export *`s both give depends on both.
+
+What still depends on the whole barrel, as before:
+
+- a namespace import (`import * as x`), a default import, a side-effect import (`import "./x"`), `import()`, `require()`, and a mock (`vi.mock`, `jest.mock`); and a file that imports the same module by name and in one of these ways too;
+- a name the barrel doesn't visibly export, or one that could come from an `export *` of something that isn't a file in the repository (a package, or a specifier that didn't resolve), or from a module whose exports its syntax doesn't show (`export =`, CommonJS, a component's exports other than its default);
+- a re-export from a package outside the repository, a chain deeper than 32, and a file over 256 KB, which is scanned for import strings only.
+
+`graph why` and `test --explain` show the shorter chain, and `test --explain` says when a test reaches a change only through what a barrel re-exports.
+
+Importing a barrel still runs every module it re-exports. A module behind one that does something when it loads, such as registering a handler, can change a test that imports another name from the barrel, and that test isn't selected. `graph.reexports = false` makes each importer of a barrel depend on all of it again; [replay](replay.md) with it on and off shows what it costs in recall and in tests run.
 
 ## Edges the imports don't show
 
@@ -286,7 +318,7 @@ to cut the top hub, so a change below it stops there and a change to it still se
 ```
 
 - **Wide** names the file's own conservative edge (a dynamic import with no literal path, a local import that didn't resolve, a tsconfig that couldn't be applied, or a workspace import kept as a dependency on its whole package), else the nearest file feeding it that has one (`through`), else `plain edges only`. On a tie the file with the edge comes first, since a barrier there cuts the cause.
-- **What counts** is what the planner does: the same modules, test files and barriers. Barrier files and test files aren't listed, and only `unit` tests count, since the other classes don't run because a walk reached them. The product is an upper bound: a pair with another path around the file isn't cut by a barrier on it.
+- **What counts** is what the planner does: the same modules, test files and barriers. *Unreleased:* except for [re-exports](#named-imports-through-re-exports), which count as imports here, so a barrel ranks as if every file importing from it needed all of it; the planner's walk doesn't go from what a barrel re-exports to an import resolved past it. Barrier files and test files aren't listed, and only `unit` tests count, since the other classes don't run because a walk reached them. The product is an upper bound: a pair with another path around the file isn't cut by a barrier on it.
 - **A barrier can cost recall.** A wide hub sometimes catches failures by accident, such as a flaky test it selects on unrelated changes. Replay the config with the barrier before keeping it ([Replay](replay.md)).
 - `--top N` lists N files (10 by default), and `--json` prints the same list with `path`, `tests`, `feeders`, `score` and `why` (`kind`, `text`, and `through` when it names another file), the `barrier` line, and the seconds the graph and the count took.
 

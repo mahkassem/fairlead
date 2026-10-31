@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- A named import is followed through re-exports to the file that declares each name ([#221](https://github.com/mahkassem/fairlead/issues/221), ask 1). A barrel, such as a package's `index.ts` of `export *` lines, made every file importing from it depend on everything behind it, so one change behind it selected every test that imports the package. Now `import { money } from "core"` depends on the file that declares `money` and on each barrel on the way for its own code: a change to `money.ts` or to the barrel selects it, and a change to another module the barrel re-exports doesn't. `export *` chains, `export { a as b } from` renames and `import type` are followed, with a cycle guard and a depth bound of 32. A namespace, default or side-effect import, `import()`, `require()`, a mock, a name the barrel doesn't visibly export, and a re-export from a package outside the repository still depend on the whole barrel, as before. Plans get narrower, and `graph why` and `test --explain` show the shorter chain; `test --explain` says when a test reaches a change only through what a barrel re-exports. Importing a barrel still runs every module behind it, so a module whose loading does something another test relies on is the case to watch: `graph.reexports = false` restores the old edges, and replaying with it on and off shows the difference. `export … from` edges are labelled `re-export` (or `type re-export`) instead of `import`. Graph build time on a generated 2,041-file workspace was unchanged (0.28 to 0.34 s before, 0.27 to 0.31 s after), and on a barrel of 100 modules imported by name from 1,000 files 0.13 to 0.18 s before and 0.17 to 0.21 s after. See [Named imports through re-exports](https://mahkassem.github.io/fairlead/docs/graph.html#named-imports-through-re-exports).
+
 ## 0.13.0 (2026-10-26)
 
 ### New

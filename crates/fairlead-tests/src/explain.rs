@@ -103,6 +103,23 @@ fn barrier_between(scan: &Scan, deps: &HashMap<u32, u32>, test: u32, changed: u3
     path.into_iter().find(|&f| scan.graph.is_barrier(f))
 }
 
+/// The barrel a named import was resolved past on the way from `changed`
+/// to `test`: the walk doesn't go from what it re-exports to that import.
+fn resolved_past(scan: &Scan, deps: &HashMap<u32, u32>, test: u32, changed: u32) -> Option<u32> {
+    let mut at = changed;
+    while at != test {
+        let importer = *deps.get(&at)?;
+        let named = [EdgeKind::Import, EdgeKind::TypeImport]
+            .into_iter()
+            .any(|k| scan.graph.is_named(importer, at, k));
+        if named {
+            return Some(at);
+        }
+        at = importer;
+    }
+    None
+}
+
 pub fn explain(plan: &Plan, scan: &Scan, config: &Config, target: &str) -> Result<String, String> {
     let why = selection(plan, scan, config, target)?;
     Ok(why + &quarantine_note(plan, scan, config, target))
@@ -180,11 +197,24 @@ fn selection(plan: &Plan, scan: &Scan, config: &Config, target: &str) -> Result<
                     ))
                 })
             });
-            match stopped {
-                Some((changed, barrier)) => format!(
+            let past = id.filter(|_| stopped.is_none()).and_then(|id| {
+                plan.changed.iter().find_map(|c| {
+                    let c = scan.graph.id(&c.path).filter(|c| deps.contains_key(c))?;
+                    let b = resolved_past(scan, &deps, id, c)?;
+                    Some((
+                        scan.graph.files[c as usize].clone(),
+                        scan.graph.files[b as usize].clone(),
+                    ))
+                })
+            });
+            match (stopped, past) {
+                (Some((changed, barrier)), _) => format!(
                     "it depends on {changed}, but only through {barrier}, a graph.barrier file the walk doesn't go past"
                 ),
-                None => format!(
+                (None, Some((changed, barrel))) => format!(
+                    "it reaches {changed} only through what {barrel} re-exports, and none of the names it imports from {barrel} comes from there"
+                ),
+                (None, None) => format!(
                     "none of the {} changed files is among the {} files it depends on",
                     plan.changed.len(),
                     deps.len().saturating_sub(1)

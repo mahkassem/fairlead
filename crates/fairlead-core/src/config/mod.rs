@@ -194,6 +194,10 @@ pub struct Graph {
     pub tsconfig: String,
     /// Whether `import type` counts as an edge.
     pub type_imports: bool,
+    /// Whether a named import is followed through `export … from` to the
+    /// file that declares the name. Left out of the digest when on.
+    #[serde(skip_serializing_if = "is_true")]
+    pub reexports: bool,
     pub unresolved: Unresolved,
     /// Package `exports` conditions, in priority order.
     pub conditions: List<String>,
@@ -213,6 +217,10 @@ pub struct Graph {
     /// and left out of the digest when unset.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub coverage: Option<Coverage>,
+}
+
+fn is_true(b: &bool) -> bool {
+    *b
 }
 
 /// Where the coverage map is, and how old it may get before the plan warns.
@@ -286,6 +294,7 @@ impl Default for Graph {
         Graph {
             tsconfig: "auto".into(),
             type_imports: true,
+            reexports: true,
             unresolved: Unresolved::Warn,
             conditions: strings(&["import", "node", "default"]),
             cache: true,

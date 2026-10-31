@@ -7,6 +7,8 @@ use std::sync::OnceLock;
 use serde::{Deserialize, Serialize};
 use tree_sitter::{Language, Parser, Query, QueryCursor, StreamingIterator};
 
+use crate::exports::{Reader, Shape};
+
 /// Files larger than this are almost always generated; they get a lexical
 /// scan instead of a parse.
 pub const LEXICAL_ABOVE_BYTES: usize = 256 * 1024;
@@ -19,6 +21,9 @@ pub enum SpecKind {
     Dynamic,
     Require,
     Mock,
+    /// `export … from` at the top level.
+    ReExport,
+    TypeReExport,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
@@ -32,6 +37,10 @@ pub struct Extracted {
     /// name rather than by path.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub declares: Vec<String>,
+    /// A JavaScript or TypeScript module's names, for following named
+    /// imports through re-exports; none when it was scanned lexically.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub shape: Option<Shape>,
 }
 
 const COMMON: &str = r#"
@@ -218,7 +227,30 @@ fn component(ext: &str, source: &[u8]) -> Extracted {
         Grammar::JavaScript
     };
     let mut out = Extracted::default();
+    // A component's default export is the component; what else its
+    // scripts export isn't read.
+    let mut shape = Shape {
+        local: vec!["default".into()],
+        opaque: true,
+        ..Shape::default()
+    };
+    let mut whole = std::collections::BTreeSet::new();
     let mut add = |part: Extracted| {
+        let imports = part.shape.map(|s| s.imports).unwrap_or_default();
+        for (spec, kind) in &part.specs {
+            let type_only = match kind {
+                SpecKind::Import => false,
+                SpecKind::TypeImport => true,
+                _ => continue,
+            };
+            if !imports
+                .iter()
+                .any(|i| &i.spec == spec && i.type_only == type_only)
+            {
+                whole.insert((spec.clone(), type_only));
+            }
+        }
+        shape.imports.extend(imports);
         out.specs.extend(part.specs);
         out.literals.extend(part.literals);
         out.unknown_dynamic |= part.unknown_dynamic;
@@ -243,11 +275,41 @@ fn component(ext: &str, source: &[u8]) -> Extracted {
         };
         add(extract_as(g, body.as_bytes()));
     }
+    shape
+        .imports
+        .retain(|i| !whole.contains(&(i.spec.clone(), i.type_only)));
+    out.shape = Some(merged_imports(shape));
     out.specs.sort();
     out.specs.dedup();
     out.literals.sort();
     out.literals.dedup();
     out
+}
+
+/// One entry per specifier from the parts' named imports, its names
+/// unioned. A specifier that one part imports some other way isn't among
+/// them, so it's left out: that part's edge keeps the whole module.
+fn merged_imports(mut shape: Shape) -> Shape {
+    let mut by_spec: std::collections::BTreeMap<(String, bool), Vec<String>> = Default::default();
+    for import in shape.imports.drain(..) {
+        by_spec
+            .entry((import.spec, import.type_only))
+            .or_default()
+            .extend(import.names);
+    }
+    shape.imports = by_spec
+        .into_iter()
+        .map(|((spec, type_only), mut names)| {
+            names.sort();
+            names.dedup();
+            crate::exports::NamedImport {
+                spec,
+                names,
+                type_only,
+            }
+        })
+        .collect();
+    shape
 }
 
 /// Astro's leading `---` fence.
@@ -319,6 +381,7 @@ fn extract_as(g: Grammar, source: &[u8]) -> Extracted {
     let mut out = Extracted::default();
     let mut module_nodes = std::collections::HashSet::new();
     let mut literals: Vec<(usize, String)> = Vec::new();
+    let mut reader = Reader::default();
     let mut cursor = QueryCursor::new();
     let mut matches = cursor.matches(query, tree.root_node(), source);
     while let Some(m) = matches.next() {
@@ -329,8 +392,23 @@ fn extract_as(g: Grammar, source: &[u8]) -> Extracted {
                 continue;
             };
             let kind = match name {
-                "import" if is_type_only(node, source) => SpecKind::TypeImport,
-                "import" => SpecKind::Import,
+                "import" => {
+                    let statement = node.parent().and_then(|string| string.parent());
+                    let type_only = is_type_only(node, source);
+                    if let Some(statement) = statement {
+                        reader.statement(statement, source, type_only);
+                    }
+                    let top_level_export = statement.is_some_and(|s| {
+                        s.kind() == "export_statement"
+                            && s.parent().is_some_and(|p| p.kind() == "program")
+                    });
+                    match (top_level_export, type_only) {
+                        (true, true) => SpecKind::TypeReExport,
+                        (true, false) => SpecKind::ReExport,
+                        (false, true) => SpecKind::TypeImport,
+                        (false, false) => SpecKind::Import,
+                    }
+                }
                 "dynamic" => SpecKind::Dynamic,
                 "require" => SpecKind::Require,
                 "mock" => SpecKind::Mock,
@@ -348,6 +426,7 @@ fn extract_as(g: Grammar, source: &[u8]) -> Extracted {
             out.specs.push((text.to_string(), kind));
         }
     }
+    out.shape = Some(reader.finish(tree.root_node(), source));
     out.literals = literals
         .into_iter()
         .filter(|(id, text)| !module_nodes.contains(id) && looks_like_path(text))
@@ -475,10 +554,10 @@ import j = require("./j");
 "#;
         let found = specs("src/x.ts", src);
         let expect = [
-            ("../c", SpecKind::Import),
+            ("../c", SpecKind::ReExport),
             ("./a.js", SpecKind::Import),
             ("./b", SpecKind::TypeImport),
-            ("./d", SpecKind::Import),
+            ("./d", SpecKind::ReExport),
             ("./e", SpecKind::Dynamic),
             ("./f", SpecKind::Require),
             ("./g", SpecKind::Mock),

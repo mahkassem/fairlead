@@ -6,6 +6,7 @@ modules:
 graph:
   tsconfig: auto
   type_imports: false
+  reexports: false
   unresolved: fail
   conditions:
     replace: [source, import, default]
