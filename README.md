@@ -139,7 +139,7 @@ repositories are on the way
 
 ## What it does
 
-This README documents Fairlead 0.14.0. Each command, by what it's for:
+This README documents Fairlead 0.14.1. Each command, by what it's for:
 
 - **The test plan:** `plan`, `test --explain`, the import graph (`graph`) and
   coverage maps (`coverage import`). *Since 0.13.0:* `graph hubs` lists the
@@ -193,13 +193,13 @@ The [quick start](#quick-start) shows the first few, and the
 
 ## Status
 
-Pre-alpha. The latest release, v0.14.0, measures and uses Bun 1.4.4: `init`
-writes the parallel test runner and offers a per-change `bun fmt` check, and
-`fairlead test bench` times Bun's test modes on your own tests and says which
-to use. A named import through a barrel now depends on the file that declares
-the name, so a change behind a package's `index.ts` selects only the tests
-that use it. Fairlead installs with Composer too, and releases are ready to
-publish to crates.io and a Homebrew tap. What each earlier release added is
+Pre-alpha. The latest release, v0.14.1, ships 0.14.0's changes, whose
+release stopped before publishing: GitHub cancelled its Apple-silicon build
+on a retiring macOS image. 0.14 measures and uses Bun 1.4.4 (`init` writes the
+parallel test runner, and `fairlead test bench` says which test mode is
+fastest on your own tests), follows named imports through barrels to the
+file that declares them, and installs with Composer, from crates.io and
+from a Homebrew tap. What each earlier release added is
 in the [changelog](CHANGELOG.md), and what upgrading to it asks of you is in
 the [upgrade guide](https://mahkassem.github.io/fairlead/docs/migrate.html).
 Recall on real CI failures, with every miss and its cause, is in the

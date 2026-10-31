@@ -345,6 +345,13 @@ For you to decide:
 - Fairlead installs with Composer, and from the next release with
   `cargo install fairlead` and a Homebrew tap ([Install](install.md)).
 
+### To 0.14.1
+
+Migrate updates nothing in your files. 0.14.1 is 0.14.0 with its release
+fixed: 0.14.0 reached crates.io but has no GitHub release, npm package or
+Homebrew formula, so upgrade from 0.13 straight to 0.14.1 and read
+[To 0.14.0](#to-0140) for what changed.
+
 ## Going back to an older release
 
 Install the older release, then run its `hooks uninstall` and
