@@ -287,6 +287,10 @@ pub const RELEASES: &[(&str, &[Note])] = &[
         &[Note {
             text: "A runner runs `bun test` one file after another. Bun 1.4.4 adds `--parallel` and `--parallel --no-isolate`, which can be much faster or slower depending on the suite and tend to turn up order-dependent tests; `fairlead test bench` times the three on this repository's tests and says which to use. The runner is left as it is (see Measuring Bun's test modes).",
             applies: serial_bun_test,
+        },
+        Note {
+            text: "A named import through a barrel (`import { a } from \"./lib\"`) now depends on the file that declares `a` and the barrels on the way, not on everything the barrel re-exports, so plans get narrower; `graph why` and `test --explain` print `re-export` for those steps. A barrel with a module behind it that runs code when it loads keeps its importers on the whole barrel. `graph.reexports = false` turns this off (see Named imports through re-exports).",
+            applies: always,
         }],
     ),
 ];
@@ -298,6 +302,7 @@ pub const RELEASES: &[(&str, &[Note])] = &[
 pub const SINCE: &[(&str, &str)] = &[
     ("graph.edges", "0.3"),
     ("graph.barrier", "0.3"),
+    ("graph.reexports", "0.14"),
     ("guard", "0.4"),
     ("hooks", "0.4"),
     ("graph.providers", "0.5"),

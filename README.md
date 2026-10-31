@@ -104,7 +104,9 @@ of trying things like a stranger.
   tests of the files that import it, and nothing when nothing does.
   *Since 0.13.0:* a `plan.run_all` entry can name the kinds of change that run
   everything, so a new migration goes through the graph and an edited one
-  runs everything.
+  runs everything. *Unreleased:* a named import from a barrel depends on the
+  file that declares the name, so a change behind a package's `index.ts`
+  selects only the tests that import what it declares.
 - **No install needed to read your code.** The import graph comes from source
   alone, with tsconfig paths, `go.mod` and composer's autoload resolved and
   parsed files cached, so a plan takes a fraction of a second.

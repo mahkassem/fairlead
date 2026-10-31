@@ -99,3 +99,87 @@ fn a_two_thousand_file_workspace_builds_within_the_budget() {
         "rebuilt with rules in {ruled_seconds:.2} s, over the {RULES_BUDGET_SECONDS} s budget"
     );
 }
+
+const BARREL_MODULES: usize = 100;
+const NAMES_PER_MODULE: usize = 20;
+const IMPORTERS: usize = 1_000;
+
+/// A package whose root is a barrel of `export *` lines, imported by name
+/// from a thousand files: what following names through re-exports costs.
+#[test]
+#[ignore]
+fn a_barrel_imported_by_a_thousand_files_builds_within_the_budget() {
+    let dir = std::env::temp_dir().join(format!("fairlead-perf-barrel-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&dir);
+    fs::create_dir_all(dir.join(".git")).unwrap();
+    fs::write(
+        dir.join("package.json"),
+        r#"{ "workspaces": ["packages/*"] }"#,
+    )
+    .unwrap();
+    let core = dir.join("packages/core");
+    fs::create_dir_all(core.join("src")).unwrap();
+    fs::write(
+        core.join("package.json"),
+        r#"{ "name": "core", "exports": { ".": "./src/index.ts" } }"#,
+    )
+    .unwrap();
+    let mut index = String::new();
+    for m in 0..BARREL_MODULES {
+        writeln!(index, "export * from './m{m}';").unwrap();
+        let mut src = String::new();
+        for n in 0..NAMES_PER_MODULE {
+            writeln!(
+                src,
+                "export function m{m}n{n}(a: number): number {{ return a + {n}; }}"
+            )
+            .unwrap();
+        }
+        fs::write(core.join(format!("src/m{m}.ts")), src).unwrap();
+    }
+    fs::write(core.join("src/index.ts"), index).unwrap();
+    let app = dir.join("packages/app/src");
+    fs::create_dir_all(&app).unwrap();
+    fs::write(
+        dir.join("packages/app/package.json"),
+        r#"{ "name": "app" }"#,
+    )
+    .unwrap();
+    for i in 0..IMPORTERS {
+        let names: Vec<String> = (0..5)
+            .map(|k| {
+                format!(
+                    "m{}n{}",
+                    (i * 7 + k * 13) % BARREL_MODULES,
+                    (i + k) % NAMES_PER_MODULE
+                )
+            })
+            .collect();
+        let src = format!(
+            "import {{ {} }} from 'core';\nexport const v{i} = 1;\n",
+            names.join(", ")
+        );
+        fs::write(app.join(format!("f{i}.ts")), src).unwrap();
+    }
+    let started = Instant::now();
+    let scan = build(&dir, &Config::default()).unwrap();
+    let seconds = started.elapsed().as_secs_f64();
+    let stats = scan.graph.stats();
+    println!(
+        "barrel: {} files, {} edges, built in {seconds:.2} s",
+        stats.files, stats.edges
+    );
+    let started = Instant::now();
+    build(&dir, &Config::default()).unwrap();
+    let warm_seconds = started.elapsed().as_secs_f64();
+    println!("barrel: rebuilt from the parse cache in {warm_seconds:.2} s");
+    assert!(
+        seconds <= BUDGET_SECONDS,
+        "built in {seconds:.2} s, over the {BUDGET_SECONDS} s budget"
+    );
+    assert!(
+        warm_seconds <= WARM_BUDGET_SECONDS,
+        "rebuilt in {warm_seconds:.2} s, over the {WARM_BUDGET_SECONDS} s budget"
+    );
+    let _ = fs::remove_dir_all(&dir);
+}

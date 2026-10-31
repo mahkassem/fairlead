@@ -6,7 +6,9 @@
 //! needs. At the root, outside any module, that means every file. A
 //! `graph.barrier` file reached from another file is not expanded; one the
 //! walk starts at (a changed file, or one a changed manifest or a version
-//! bump stands for) is expanded like any other file.
+//! bump stands for) is expanded like any other file. A file reached only
+//! over re-export edges isn't followed to an importer whose named import
+//! was resolved past it (see `Graph::next`).
 
 use std::collections::{HashMap, HashSet, VecDeque};
 
@@ -21,24 +23,35 @@ use crate::modules::Modules;
 pub enum Via {
     Start,
     File(u32),
+    /// From a file that was itself reached only over re-export edges.
+    Through(u32),
     Path(String),
 }
 
 #[derive(Debug, Default)]
 pub struct Walk {
+    /// Every file reached, by how it was reached in its widest state.
     pub reached: HashMap<u32, Via>,
+    /// Files reached over re-export edges, by how, kept after one is
+    /// reached whole so a chain through that state can be followed.
+    through: HashMap<u32, Via>,
+    whole: HashSet<u32>,
 }
 
 impl Walk {
     /// The chain from the change that reached `id` to `id` itself.
     pub fn chain(&self, graph: &Graph, id: u32) -> Vec<String> {
         let mut chain = vec![graph.files[id as usize].clone()];
-        let mut at = id;
+        let mut via = self.reached.get(&id);
         loop {
-            match self.reached.get(&at) {
+            match via {
                 Some(Via::File(from)) => {
                     chain.push(graph.files[*from as usize].clone());
-                    at = *from;
+                    via = self.reached.get(from);
+                }
+                Some(Via::Through(from)) => {
+                    chain.push(graph.files[*from as usize].clone());
+                    via = self.through.get(from);
                 }
                 Some(Via::Path(path)) => {
                     chain.push(path.clone());
@@ -103,40 +116,63 @@ pub fn walk_until(
     let mut walk = Walk::default();
     let mut queue = VecDeque::new();
     for (id, via) in starts {
-        if let std::collections::hash_map::Entry::Vacant(slot) = walk.reached.entry(id) {
-            slot.insert(via);
+        if walk.whole.insert(id) {
+            walk.reached.insert(id, via);
             if stop(id) {
                 return (walk, true);
             }
-            queue.push_back(id);
+            queue.push_back((id, true));
         }
     }
     let mut widened: HashSet<Option<usize>> = HashSet::new();
     let mut root_widened = false;
-    while let Some(file) = queue.pop_front() {
+    while let Some((file, whole)) = queue.pop_front() {
         // Reached, but not gone past: a barrier's importers depend on it for
         // plumbing, not for what a change to the file under it does. A start
         // (any via but a file) is the change itself, so its importers count.
-        if graph.is_barrier(file) && matches!(walk.reached.get(&file), Some(Via::File(_))) {
+        let from_a_file = matches!(
+            walk.reached.get(&file),
+            Some(Via::File(_) | Via::Through(_))
+        );
+        if graph.is_barrier(file) && from_a_file {
             continue;
         }
-        let mut next: Vec<u32> = graph.importers(file).into_iter().map(|(f, _)| f).collect();
+        let mut next = graph.next(file, whole);
         let module = modules.of(&graph.files[file as usize]);
         if widened.insert(module) {
-            next.extend(dependents.get(&module).into_iter().flatten().copied());
+            next.extend(
+                dependents
+                    .get(&module)
+                    .into_iter()
+                    .flatten()
+                    .map(|&f| (f, true)),
+            );
         }
         if !root_widened {
             root_widened = true;
-            next.extend(root_dependents.iter().copied());
+            next.extend(root_dependents.iter().map(|&f| (f, true)));
         }
-        for importer in next {
-            if let std::collections::hash_map::Entry::Vacant(slot) = walk.reached.entry(importer) {
-                slot.insert(Via::File(file));
-                if stop(importer) {
-                    return (walk, true);
-                }
-                queue.push_back(importer);
+        let via = if whole {
+            Via::File(file)
+        } else {
+            Via::Through(file)
+        };
+        for (importer, reach_whole) in next {
+            if walk.whole.contains(&importer)
+                || (!reach_whole && walk.through.contains_key(&importer))
+            {
+                continue;
             }
+            if reach_whole {
+                walk.whole.insert(importer);
+            } else {
+                walk.through.insert(importer, via.clone());
+            }
+            let first = walk.reached.insert(importer, via.clone()).is_none();
+            if first && stop(importer) {
+                return (walk, true);
+            }
+            queue.push_back((importer, reach_whole));
         }
     }
     (walk, false)

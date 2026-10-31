@@ -53,9 +53,10 @@ fn a_change_selects_every_test_that_depends_on_it_with_the_chain() {
     assert_eq!(
         reason(&plan, "packages/billing/test/invoice.test.ts"),
         &Reason::Import {
+            // `money` is imported from the package's barrel, and followed
+            // to the file that declares it.
             chain: vec![
                 "packages/core/src/money.ts".into(),
-                "packages/core/src/index.ts".into(),
                 "packages/billing/src/invoice.ts".into(),
                 "packages/billing/test/invoice.test.ts".into(),
             ]

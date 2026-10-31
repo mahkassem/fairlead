@@ -4,10 +4,12 @@
 use std::collections::HashMap;
 use std::path::Path;
 
-use fairlead_core::config::Config;
+use fairlead_core::config::{Config, Graph as GraphConfig};
 use rayon::prelude::*;
 
+use crate::barrel::{Barrels, Found, Module};
 use crate::cache::{self, CacheStats, ParseCache};
+use crate::exports::Shape;
 use crate::extract::{extract, Extracted, SpecKind};
 use crate::golang;
 use crate::graph::{EdgeKind, Graph};
@@ -38,6 +40,13 @@ struct FileResult {
     /// read, and the names it declares.
     names: Vec<(String, SpecKind)>,
     declares: Vec<String>,
+    /// Named imports of a file, to follow through its re-exports once
+    /// every file is read: the file, the edge kind and the names.
+    named: Vec<(String, EdgeKind, Vec<String>)>,
+    /// The file's names, and the file each re-export's specifier resolved
+    /// to, by specifier and whether it's type-only.
+    shape: Option<Shape>,
+    targets: HashMap<(String, bool), String>,
 }
 
 /// A file's extraction, with its cache key when the cache is on.
@@ -103,13 +112,7 @@ fn build_with(root: &Path, config: &Config, cache_owner: Option<&Path>) -> std::
     let mut results: Vec<(String, FileResult)> = sources
         .par_iter()
         .map(|file| {
-            let result = scan_file(
-                &tree,
-                &resolver,
-                &parse_cache,
-                file,
-                config.graph.type_imports,
-            );
+            let result = scan_file(&tree, &resolver, &parse_cache, file, &config.graph);
             ((*file).clone(), result)
         })
         .collect();
@@ -149,7 +152,8 @@ fn build_with(root: &Path, config: &Config, cache_owner: Option<&Path>) -> std::
         ),
         roots: python::Roots::new(&tree),
     };
-    let edges = add_results(&tree, &named, &mut graph, results);
+    let barrels = barrels(&graph, &mut results);
+    let edges = add_results(&tree, &named, &barrels, &mut graph, results);
     let coverage = config
         .graph
         .coverage
@@ -243,11 +247,62 @@ impl Named {
     }
 }
 
+/// Every JavaScript and TypeScript module's names, with its re-exports
+/// resolved to files, taken out of the results.
+fn barrels(graph: &Graph, results: &mut [(String, FileResult)]) -> Barrels {
+    let mut modules = HashMap::new();
+    for (file, result) in results.iter_mut() {
+        let (Some(shape), Some(id)) = (result.shape.take(), graph.id(file)) else {
+            continue;
+        };
+        let targets = std::mem::take(&mut result.targets);
+        let module = Module::new(&shape, |spec, type_only| {
+            graph.id(targets.get(&(spec.to_string(), type_only))?)
+        });
+        modules.insert(id, module);
+    }
+    Barrels::new(modules)
+}
+
+/// Edges for a named import of `to`: to the files that declare the names
+/// and each barrel on the way, or to `to` itself, as any import, when one
+/// of the names can't be followed.
+fn add_named(
+    graph: &mut Graph,
+    barrels: &Barrels,
+    from: u32,
+    to: &str,
+    kind: EdgeKind,
+    names: &[String],
+) {
+    let Some(to) = graph.id(to) else {
+        return;
+    };
+    let mut files = Vec::new();
+    for name in names {
+        match barrels.lookup(to, name) {
+            Found::Files(found) => files.extend(found),
+            Found::Missing | Found::Unknown => {
+                graph.add_edge(from, to, kind);
+                return;
+            }
+        }
+    }
+    for (file, whole) in files {
+        if whole {
+            graph.add_edge(from, file, kind);
+        } else {
+            graph.add_named_edge(from, file, kind);
+        }
+    }
+}
+
 /// Adds each file's edges, resolving names now that every file is read;
 /// returns the edges added by each built-in scanner.
 fn add_results(
     tree: &Tree,
     named: &Named,
+    barrels: &Barrels,
     graph: &mut Graph,
     results: Vec<(String, FileResult)>,
 ) -> HashMap<&'static str, usize> {
@@ -259,6 +314,9 @@ fn add_results(
             if let Some(to) = graph.id(&to) {
                 graph.add_edge(from, to, kind);
             }
+        }
+        for (to, kind, names) in &result.named {
+            add_named(graph, barrels, from, to, *kind, names);
         }
         let mut reached = Vec::new();
         for (name, kind) in &result.names {
@@ -381,7 +439,7 @@ fn scan_file(
     resolver: &Resolver,
     cache: &ParseCache,
     file: &str,
-    type_imports: bool,
+    config: &GraphConfig,
 ) -> FileResult {
     let Ok(source) = std::fs::read(tree.abs(file)) else {
         return FileResult::default();
@@ -397,14 +455,34 @@ fn scan_file(
         result.names = extracted.specs.clone();
         result.declares = extracted.declares.clone();
     }
+    let shape = extracted.shape.as_ref().filter(|_| config.reexports);
+    let named = |spec: &str, type_only: bool| {
+        let imports = shape.map_or(&[][..], |s| s.imports.as_slice());
+        imports
+            .iter()
+            .find(|i| i.spec == spec && i.type_only == type_only)
+            .map(|i| i.names.clone())
+    };
     for (spec, kind) in extracted.specs.iter().filter(|_| !by_name) {
-        if *kind == SpecKind::TypeImport && !type_imports {
+        let type_only = matches!(kind, SpecKind::TypeImport | SpecKind::TypeReExport);
+        if type_only && !config.type_imports {
             continue;
         }
         let (target, fell_back) = resolver.resolve(tree, file, spec);
         result.fell_back |= fell_back;
         match target {
-            Target::File(to) => result.edges.push((to, (*kind).into())),
+            Target::File(to) => {
+                if matches!(kind, SpecKind::ReExport | SpecKind::TypeReExport) {
+                    result.targets.insert((spec.clone(), type_only), to.clone());
+                }
+                let names = matches!(kind, SpecKind::Import | SpecKind::TypeImport)
+                    .then(|| named(spec, type_only))
+                    .flatten();
+                match names {
+                    Some(names) => result.named.push((to, (*kind).into(), names)),
+                    None => result.edges.push((to, (*kind).into())),
+                }
+            }
             Target::Package(name) => result.packages.push(name),
             Target::External(installed) => {
                 let named = package_name(spec).map(str::to_string);
@@ -430,6 +508,7 @@ fn scan_file(
             None => result.dangling.extend(candidates),
         }
     }
+    result.shape = shape.cloned();
     result.parsed = Some(parsed);
     result
 }
