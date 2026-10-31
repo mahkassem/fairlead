@@ -175,7 +175,9 @@ This README documents Fairlead 0.13.0. Each command, by what it's for:
   rate of what routing offers against what agents load.
 - **Getting started:** `init` writes a first config from what the repository
   shows, and `init --blueprint` adds a starting point for a kind of project:
-  config, starter skills and the CI workflow.
+  config, starter skills and the CI workflow. *Unreleased:* on Bun 1.4.4 or
+  later, `init` runs `bun test` in parallel (`--parallel --no-isolate`) and
+  offers `bun fmt --check` on the changed files as a check.
 - **The config:** `config check`, `show` and `schema`.
 - **Upgrading:** `migrate`, which brings the hooks, the config's version
   floor and the version pins to the release you installed. *Since 0.7.0.*
