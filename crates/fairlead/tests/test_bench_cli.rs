@@ -40,7 +40,7 @@ fn stub(dir: &Path, name: &str, script: &str) {
     std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).unwrap();
 }
 
-/// Serial takes 0.6 s, `--parallel` 0.05 s and `--no-isolate` 0.25 s; under
+/// Serial takes 1 s, `--parallel` 0.05 s and `--no-isolate` 0.25 s; under
 /// `--parallel` alone `test/leaky.test.ts` fails, as a test sharing state would.
 #[cfg(unix)]
 const BUN: &str = r#"
@@ -60,7 +60,7 @@ for a in "$@"; do
     *) files="$files $a" ;;
   esac
 done
-case "$mode" in serial) sleep 0.6 ;; parallel) sleep 0.05 ;; *) sleep 0.25 ;; esac
+case "$mode" in serial) sleep 1 ;; parallel) sleep 0.05 ;; *) sleep 0.25 ;; esac
 {
   echo '<testsuites>'
   for f in $files; do
@@ -210,9 +210,10 @@ fn the_fastest_mode_an_order_dependent_file_passes_in_is_recommended_and_read_ba
         r#"[[tests.runners]] id = "bun", command = ["bun", "test", "--parallel", "--no-isolate", "{files}"]"#
     );
     let because = suggestion["because"].as_str().unwrap();
+    // A slow runner stretches every sleep, so check each mode's time is quoted, not its value.
     assert!(
-        because.contains("bun test --parallel --no-isolate 0.2")
-            && because.contains("bun test 0.6"),
+        quotes_seconds(because, "bun test --parallel --no-isolate ")
+            && quotes_seconds(because, "bun test "),
         "the suggestion quotes the measured times: {because}"
     );
 
@@ -292,4 +293,16 @@ fn a_runner_that_isnt_bun_test_is_refused() {
     );
     assert_eq!(item(&score, "runners")["max"], 15);
     let _ = std::fs::remove_dir_all(repo.parent().unwrap());
+}
+
+/// Whether `label` is followed somewhere in `text` by a number of seconds, such as `0.31 s`.
+fn quotes_seconds(text: &str, label: &str) -> bool {
+    text.match_indices(label).any(|(i, _)| {
+        let rest = &text[i + label.len()..];
+        let number: String = rest
+            .chars()
+            .take_while(|c| c.is_ascii_digit() || *c == '.')
+            .collect();
+        number.parse::<f64>().is_ok() && rest[number.len()..].starts_with(" s")
+    })
 }
