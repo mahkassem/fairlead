@@ -36,6 +36,29 @@ project or container image that never runs Fairlead still installs; running
 `fairlead` there exits 1 and prints the `cargo install` line that builds it
 from source ([#218](https://github.com/mahkassem/fairlead/issues/218)).
 
+## Homebrew (macOS and Linux)
+
+```sh
+brew install mahkassem/tap/fairlead
+```
+
+*Unreleased:* the formula lives in the
+[mahkassem/homebrew-tap](https://github.com/mahkassem/homebrew-tap) tap and
+installs the release's own build, checked against the release's checksums.
+`brew upgrade fairlead` moves to each new release once it is published.
+
+## Cargo (crates.io)
+
+```sh
+cargo install --locked fairlead
+```
+
+*Unreleased:* builds the release from crates.io with Rust 1.95 or later, on
+any platform Rust builds for, including one with no prebuilt build below.
+`--locked` uses the dependency versions the release was tested with. The
+`fairlead-*` library crates beside it on crates.io are its parts, published
+only so it builds; their APIs have no semver promise.
+
 ## Platforms
 
 Each release has a build for:
@@ -56,6 +79,9 @@ release you want:
 ```sh
 cargo install --locked --git https://github.com/mahkassem/fairlead --tag vX.Y.Z fairlead
 ```
+
+*Unreleased:* or from crates.io, `cargo install --locked fairlead --version X.Y.Z`
+([Cargo](#cargo-cratesio)).
 
 ## Check it
 

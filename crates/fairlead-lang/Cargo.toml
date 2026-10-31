@@ -7,10 +7,10 @@ license.workspace = true
 repository.workspace = true
 homepage.workspace = true
 description = "Source scanning and import resolution for Fairlead."
-publish = false
+readme = "README.md"
 
 [dependencies]
-fairlead-core = { version = "0.13.0", path = "../fairlead-core" }
+fairlead-core = { version = "=0.13.0", path = "../fairlead-core" }
 globset = "0.4"
 ignore = "0.4"
 oxc_resolver = "11.23"

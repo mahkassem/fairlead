@@ -7,7 +7,7 @@ license.workspace = true
 repository.workspace = true
 homepage.workspace = true
 description = "Config, module discovery and the plan model for Fairlead."
-publish = false
+readme = "README.md"
 
 [dependencies]
 regex = "1"

@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### New
+
+- Install with Homebrew, `brew install mahkassem/tap/fairlead`, or from crates.io, `cargo install --locked fairlead` ([#237](https://github.com/mahkassem/fairlead/issues/237), item 8). The formula installs the release's own build, checked against its checksums, on macOS and Linux; Cargo builds the release from source on any platform Rust builds for, which before meant naming the tag in a `cargo install --git` line. Both are published by the release after the same maintainer approval as npm: crates.io through trusted publishing, so there is no long-lived token, and the tap with a token that can write to the tap alone. The `fairlead-*` library crates published beside the CLI are its parts and make no semver promise. See [Install](https://mahkassem.github.io/fairlead/docs/install.html).
+
 ## 0.13.0 (2026-10-26)
 
 ### New
