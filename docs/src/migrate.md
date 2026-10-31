@@ -320,6 +320,31 @@ For you to decide:
   install, so `--ignore-scripts` is no longer needed in such images
   ([Install](install.md), [#218](https://github.com/mahkassem/fairlead/issues/218)).
 
+### To 0.14.0
+
+Migrate updates nothing in your files.
+
+For you to decide:
+
+- A named import through a barrel (`import { a } from "./lib"`) now depends on
+  the file that declares `a` and the barrels on the way, not on everything the
+  barrel re-exports, so plans get narrower and `graph why` and `test --explain`
+  print `re-export` for those steps. A barrel with a module behind it that runs
+  code when it loads keeps its importers on the whole barrel; code inside a
+  top-level initializer isn't seen, and `graph.reexports = false` turns this
+  off ([Named imports through re-exports](graph.md#named-imports-through-re-exports),
+  [#221](https://github.com/mahkassem/fairlead/issues/221)).
+- On Bun 1.4.4 or later, `fairlead test bench` times serial `bun test`,
+  `--parallel` and `--parallel --no-isolate` on your tests and says which to
+  run; `fairlead migrate` names a runner still on serial `bun test`, and
+  `doctor --score` gains a `bench` item for repositories with one
+  ([Measuring Bun's test modes](plan.md#measuring-buns-test-modes),
+  [#237](https://github.com/mahkassem/fairlead/issues/237)).
+- `init` on Bun 1.4.4 writes the parallel runner and offers a `bun-fmt` check
+  on the changed files; an existing config keeps its runner.
+- Fairlead installs with Composer, and from the next release with
+  `cargo install fairlead` and a Homebrew tap ([Install](install.md)).
+
 ## Going back to an older release
 
 Install the older release, then run its `hooks uninstall` and

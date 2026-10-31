@@ -212,7 +212,7 @@ The other conservative hops read `a dynamic import with no literal path` or `its
 
 ## Measuring Bun's test modes
 
-*Unreleased:* `fairlead test bench` times the three ways Bun 1.4.4 runs a suite on the repository's own tests and recommends one, with its numbers ([#237](https://github.com/mahkassem/fairlead/issues/237)). Which is fastest depends on the suite, so it's measured rather than assumed.
+*Since 0.14.0:* `fairlead test bench` times the three ways Bun 1.4.4 runs a suite on the repository's own tests and recommends one, with its numbers ([#237](https://github.com/mahkassem/fairlead/issues/237)). Which is fastest depends on the suite, so it's measured rather than assumed.
 
 ```sh
 fairlead test bench                # the first runner whose command is `bun test`

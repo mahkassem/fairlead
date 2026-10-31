@@ -69,7 +69,7 @@ fairlead.toml: tests.unreachd: unknown field `unreachd`, expected one of ...
 | `modules.define` | `[]` | Extra modules: `{ pattern = "services/{name}/src" }` |
 | `graph.tsconfig` | `"auto"` | The nearest tsconfig to each file, or a path |
 | `graph.type_imports` | `true` | Count `import type` as an edge |
-| `graph.reexports` | `true` | *Unreleased:* follow a named import through `export … from` to the file that declares the name, so a change behind a barrel selects only the tests that import what it declares. `false` makes every importer of a barrel depend on all of it. See [Named imports through re-exports](graph.md#named-imports-through-re-exports) |
+| `graph.reexports` | `true` | *Since 0.14.0:* follow a named import through `export … from` to the file that declares the name, so a change behind a barrel selects only the tests that import what it declares. `false` makes every importer of a barrel depend on all of it. See [Named imports through re-exports](graph.md#named-imports-through-re-exports) |
 | `graph.unresolved` | `"warn"` | `warn` or `fail` on imports that don't resolve |
 | `graph.conditions` | `["import", "node", "default"]` | Package `exports` conditions, in order |
 | `graph.cache` | `true` | Keep parse results under `.git/fairlead` so unchanged files aren't parsed again |
