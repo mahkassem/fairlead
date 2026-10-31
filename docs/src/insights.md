@@ -34,6 +34,7 @@ The event log is local, so the first five sections reflect the machine `insights
 | a `[[replay.quarantine]]` entry | a recurring test in the replay report | no: a person confirms it's flaky and gives the reason |
 | drop or narrow a skill route | offered in ten measured sessions and never used | no |
 | `guard.on_finding = "deny"` | twenty warned writes, and no finding reached a commit | yes |
+| a runner's `command` in another Bun test mode | *Unreleased:* the last [`fairlead test bench`](plan.md#measuring-buns-test-modes) recommended that mode for the runner, with each mode's mean time in the suggestion | no: the times are one machine's, so a person decides |
 
 `--write` applies only the guard change, because it's the one that changes a single key. It edits that line in `fairlead.toml`, or adds it under `[guard]`, so the file's comments and order stay as they were. The rest are printed for a person to judge. Nothing is committed.
 

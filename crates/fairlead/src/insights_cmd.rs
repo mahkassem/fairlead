@@ -284,8 +284,42 @@ fn gather(root: &Path, args: &InsightsArgs, cfg: &config::Config) -> Result<Insi
     }
     if args.suggest {
         suggest(&mut out, cfg, &rules);
+        out.suggestions.extend(bench_suggestion(root, cfg));
     }
     Ok(out)
+}
+
+/// The runner mode `fairlead test bench` last recommended, while the
+/// runner it measured runs another, with the times that back it.
+fn bench_suggestion(root: &Path, cfg: &config::Config) -> Option<Suggestion> {
+    let b = crate::test_bench::load(root)?;
+    let mode = b.recommended?;
+    let runner = cfg
+        .tests
+        .runners
+        .items()
+        .iter()
+        .find(|r| r.id == b.runner)?;
+    if crate::test_bench::Mode::of(&runner.command) == mode {
+        return None;
+    }
+    let command: Vec<String> = crate::test_bench::with_mode(&runner.command, mode)
+        .iter()
+        .map(|a| format!("{a:?}"))
+        .collect();
+    Some(Suggestion {
+        change: format!(
+            "[[tests.runners]] id = \"{}\", command = [{}]",
+            runner.id,
+            command.join(", ")
+        ),
+        because: format!(
+            "{}; it's {}. Run `fairlead test bench` again after the suite changes",
+            crate::test_bench::summary(&b),
+            b.reason
+        ),
+        writes: false,
+    })
 }
 
 fn suggest(out: &mut Insights, cfg: &config::Config, rules: &BTreeMap<String, usize>) {
