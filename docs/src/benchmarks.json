@@ -1,35 +1,35 @@
 {
-  "fairlead": "0.12.0",
-  "commit": "b6c5ad82b10e",
+  "fairlead": "0.13.0",
+  "commit": "081f41fc5e91",
   "repos": [
     {
       "repo": "Effect-TS/effect",
-      "from": "2026-06-01",
-      "until": "2026-08-29",
-      "recall": 0.9918088737201365,
-      "judged": 1465,
-      "raw_recall": 0.9769757311761046,
-      "raw_judged": 1607,
+      "from": "2026-06-08",
+      "until": "2026-09-05",
+      "recall": 0.9907894736842106,
+      "judged": 1520,
+      "raw_recall": 0.9747140276941602,
+      "raw_judged": 1661,
       "gate_met": true
     },
     {
       "repo": "pnpm/pnpm",
       "from": "2026-06-01",
       "until": "2026-08-29",
-      "recall": 0.9984126984126984,
-      "judged": 630,
-      "raw_recall": 0.9949874686716792,
-      "raw_judged": 798,
+      "recall": 0.9984962406015038,
+      "judged": 665,
+      "raw_recall": 0.9951980792316927,
+      "raw_judged": 833,
       "gate_met": true
     },
     {
       "repo": "vitest-dev/vitest",
-      "from": "2026-07-22",
-      "until": "2026-10-19",
-      "recall": 0.991304347826087,
-      "judged": 690,
-      "raw_recall": 0.9536807278742763,
-      "raw_judged": 1209,
+      "from": "2026-07-29",
+      "until": "2026-10-26",
+      "recall": 0.9921568627450981,
+      "judged": 765,
+      "raw_recall": 0.9562264150943396,
+      "raw_judged": 1325,
       "gate_met": true
     }
   ]
