@@ -26,6 +26,10 @@ pub struct Shape {
     /// rather than missing.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub opaque: bool,
+    /// A top-level statement runs something when the module loads, so
+    /// importing any name of a barrel that re-exports it runs it too.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub effects: bool,
 }
 
 /// `export * from "s"` (no names), `export { a as b } from "s"` (names as
@@ -196,6 +200,20 @@ fn bound(pattern: Node, source: &[u8], out: &mut Vec<String>) {
 
 /// An `export` with no `from`: the names it makes public, or `None` for
 /// `export = x`, which replaces the module's exports wholesale.
+/// A top-level statement that does something when the module loads: a
+/// call or assignment, or control flow around one. Declarations, imports,
+/// exports and directives such as `"use client"` don't count, nor does a
+/// call inside a declaration's initializer.
+fn effect(node: Node) -> bool {
+    match node.kind() {
+        "expression_statement" => node.named_child(0).is_none_or(|e| e.kind() != "string"),
+        "if_statement" | "for_statement" | "for_in_statement" | "while_statement"
+        | "do_statement" | "try_statement" | "switch_statement" | "statement_block"
+        | "labeled_statement" | "throw_statement" => true,
+        _ => false,
+    }
+}
+
 fn local_export(statement: Node, source: &[u8], out: &mut Vec<String>) -> Option<()> {
     if has_token(statement, "default") {
         out.push("default".into());
@@ -267,6 +285,7 @@ impl Reader {
         let mut exports_any = !self.out.reexports.is_empty();
         let mut cursor = root.walk();
         for node in root.named_children(&mut cursor) {
+            self.out.effects |= effect(node);
             if node.kind() != "export_statement" || node.child_by_field_name("source").is_some() {
                 continue;
             }
@@ -415,6 +434,26 @@ function hidden() {}
         assert!(shape_of("x.ts", "const a = 1;\n").opaque);
         assert!(!shape_of("x.ts", "export * from './a';\n").opaque);
         assert!(!shape_of("x.ts", "export {};\n").opaque);
+    }
+
+    #[test]
+    fn a_top_level_statement_that_runs_something_is_an_effect() {
+        for src in [
+            "dayjs.extend(utc);\nexport const a = 1;\n",
+            "registry.set('a', 1);\n",
+            "globalThis.ready = true;\n",
+            "if (typeof window !== 'undefined') { install(); }\n",
+        ] {
+            assert!(shape_of("x.ts", src).effects, "{src}");
+        }
+        for src in [
+            "'use client';\nexport const a = 1;\n",
+            "import { a } from './a';\nexport * from './b';\n",
+            "export const x = makeThing();\nfunction f() { g(); }\nclass C {}\n",
+            "export default app.use(x);\n",
+        ] {
+            assert!(!shape_of("x.ts", src).effects, "{src}");
+        }
     }
 
     #[test]

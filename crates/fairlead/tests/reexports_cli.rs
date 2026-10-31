@@ -166,3 +166,23 @@ fn turned_off_a_change_behind_a_barrel_selects_every_importer() {
         ]
     );
 }
+
+#[test]
+fn a_change_to_a_module_that_does_something_on_load_selects_every_importer() {
+    let dir = project("effects", "");
+    let effectful = "dayjs.extend(utc);\nexport const today = 1;\n";
+    write(&dir, "packages/core/src/dates.ts", effectful);
+    git(&dir, &["commit", "-q", "-am", "effect"]);
+    write(
+        &dir,
+        "packages/core/src/dates.ts",
+        &format!("{effectful}// edited\n"),
+    );
+    assert_eq!(
+        selected(&dir),
+        [
+            "packages/app/test/dates.test.ts",
+            "packages/app/test/money.test.ts"
+        ]
+    );
+}

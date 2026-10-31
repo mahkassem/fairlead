@@ -21,6 +21,10 @@ pub struct Module {
     pub named: Vec<(String, String, Option<u32>)>,
     pub stars: Vec<Option<u32>>,
     pub opaque: bool,
+    /// The module does something when it loads.
+    pub effects: bool,
+    /// The files its value re-exports load, which a type-only one doesn't.
+    pub loads: Vec<u32>,
 }
 
 impl Module {
@@ -29,10 +33,14 @@ impl Module {
         let mut module = Module {
             local: shape.local.iter().cloned().collect(),
             opaque: shape.opaque,
+            effects: shape.effects,
             ..Module::default()
         };
         for r in &shape.reexports {
             let to = target(&r.spec, r.type_only);
+            if let (Some(to), false) = (to, r.type_only) {
+                module.loads.push(to);
+            }
             match &r.names {
                 None => module.stars.push(to),
                 Some(names) => module.named.extend(
@@ -61,12 +69,16 @@ pub enum Found {
 #[derive(Debug, Default)]
 pub struct Barrels {
     modules: HashMap<u32, Module>,
+    /// Modules that re-export, directly or through other barrels, one that
+    /// does something when it loads.
+    effectful: HashSet<u32>,
     memo: Mutex<HashMap<(u32, String), Found>>,
 }
 
 impl Barrels {
     pub fn new(modules: HashMap<u32, Module>) -> Barrels {
         Barrels {
+            effectful: effectful(&modules),
             modules,
             memo: Mutex::default(),
         }
@@ -74,7 +86,12 @@ impl Barrels {
 
     /// The files `name`, imported from `file`, depends on: `file` first,
     /// then each barrel on the way, then the file that declares it.
+    /// Importing a name runs every module behind the barrel, so one with
+    /// an effect among them keeps the importer on the whole barrel.
     pub fn lookup(&self, file: u32, name: &str) -> Found {
+        if self.effectful.contains(&file) {
+            return Found::Unknown;
+        }
         self.find(file, name, 0, &mut HashSet::new()).0
     }
 
@@ -176,6 +193,32 @@ impl Barrels {
             (Found::Missing, cut)
         }
     }
+}
+
+/// Each module with an effect marks the modules that re-export it, and
+/// those the modules that re-export them: one pass backwards, so a cycle
+/// ends where it was already marked.
+fn effectful(modules: &HashMap<u32, Module>) -> HashSet<u32> {
+    let mut by: HashMap<u32, Vec<u32>> = HashMap::new();
+    for (&from, module) in modules {
+        for &to in &module.loads {
+            by.entry(to).or_default().push(from);
+        }
+    }
+    let mut marked = HashSet::new();
+    let mut queue: Vec<u32> = modules
+        .iter()
+        .filter(|(_, m)| m.effects)
+        .map(|(&id, _)| id)
+        .collect();
+    while let Some(at) = queue.pop() {
+        for &from in by.get(&at).into_iter().flatten() {
+            if marked.insert(from) {
+                queue.push(from);
+            }
+        }
+    }
+    marked
 }
 
 #[cfg(test)]
@@ -375,5 +418,75 @@ mod tests {
             (2, module(&["a"])),
         ]));
         assert_eq!(barrels.lookup(0, "a"), files(&[0, 1, 2]));
+    }
+
+    fn star_of(to: &[u32], effects: bool) -> Module {
+        Module {
+            stars: to.iter().map(|&t| Some(t)).collect(),
+            loads: to.to_vec(),
+            effects,
+            ..module(&[])
+        }
+    }
+
+    #[test]
+    fn a_barrel_with_an_effect_behind_it_keeps_its_importers_whole() {
+        // 0 -> 1 -> 2 (effect), 3 declares a; 4 -> 5 has no effect; 6 <-> 7
+        // cycle with 8 (effect) behind 7; 9 is an effect that re-exports 3.
+        let barrels = Barrels::new(HashMap::from([
+            (0, star_of(&[1, 3], false)),
+            (1, star_of(&[2], false)),
+            (
+                2,
+                Module {
+                    effects: true,
+                    ..module(&["b"])
+                },
+            ),
+            (3, module(&["a"])),
+            (4, star_of(&[5], false)),
+            (5, module(&["a"])),
+            (6, star_of(&[7, 3], false)),
+            (7, star_of(&[6, 8], false)),
+            (
+                8,
+                Module {
+                    effects: true,
+                    ..module(&[])
+                },
+            ),
+            (9, star_of(&[3], true)),
+        ]));
+        assert_eq!(barrels.lookup(0, "a"), Found::Unknown);
+        assert_eq!(barrels.lookup(1, "b"), Found::Unknown);
+        assert_eq!(barrels.lookup(4, "a"), files(&[4, 5]));
+        assert_eq!(barrels.lookup(6, "a"), Found::Unknown);
+        assert_eq!(barrels.lookup(7, "a"), Found::Unknown);
+        // Its own effect is its own code, which the importer depends on.
+        assert_eq!(barrels.lookup(9, "a"), files(&[3, 9]));
+        assert_eq!(barrels.lookup(2, "b"), files(&[2]));
+    }
+
+    #[test]
+    fn a_type_only_re_export_loads_nothing() {
+        let barrels = Barrels::new(HashMap::from([
+            (
+                0,
+                Module {
+                    stars: vec![Some(1), Some(2)],
+                    loads: vec![1],
+                    ..module(&[])
+                },
+            ),
+            (1, module(&["a"])),
+            (
+                2,
+                Module {
+                    effects: true,
+                    ..module(&["T"])
+                },
+            ),
+        ]));
+        assert_eq!(barrels.lookup(0, "a"), files(&[0, 1]));
     }
 }

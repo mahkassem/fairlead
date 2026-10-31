@@ -56,7 +56,9 @@ What still depends on the whole barrel, as before:
 
 `graph why` and `test --explain` show the shorter chain, and `test --explain` says when a test reaches a change only through what a barrel re-exports.
 
-Importing a barrel still runs every module it re-exports. A module behind one that does something when it loads, such as registering a handler, can change a test that imports another name from the barrel, and that test isn't selected. `graph.reexports = false` makes each importer of a barrel depend on all of it again; [replay](replay.md) with it on and off shows what it costs in recall and in tests run.
+Importing a barrel runs every module it re-exports, so a module behind one that does something when it loads can change a test that imports another name. A barrel with such a module behind it, directly or through other barrels (a cycle included), keeps every importer on all of it, as before; other barrels still narrow. A module does something when it loads when it has a top-level statement other than a declaration, an import, an export or a directive such as `"use client"`: a call or an assignment (`dayjs.extend(utc)`, `registry.set(…)`, `app.use(…)`, `globalThis.x = …`), or an `if`, loop, `try` or block around one. A type-only re-export loads nothing and doesn't count.
+
+What isn't counted is a known gap: a call inside a top-level declaration's initializer (`const x = makeThing()`, `export default app.use(x)`), and an effect in a module that a re-exported module imports rather than re-exports. `graph.reexports = false` makes each importer of a barrel depend on all of it again; [replay](replay.md) with it on and off shows what it costs in recall and in tests run.
 
 ## Edges the imports don't show
 

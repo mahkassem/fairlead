@@ -187,3 +187,43 @@ fn type_only_re_exports_left_out_keep_the_barrel() {
     assert_eq!(reached(&s, "v.ts"), ["a.test.ts", "index.ts"]);
     assert!(reached(&s, "t.ts").is_empty());
 }
+
+#[test]
+fn a_barrel_with_a_module_that_does_something_on_load_keeps_its_importers_whole() {
+    let dir = repo(
+        "effects",
+        &[
+            (
+                "lib/index.ts",
+                "export * from './money';\nexport * from './more';\n",
+            ),
+            ("lib/money.ts", "export const money = 1;\n"),
+            ("lib/more.ts", "export * from './plugins';\n"),
+            (
+                "lib/plugins.ts",
+                "registry.set('day', 1);\nexport const day = 1;\n",
+            ),
+            (
+                "pure/index.ts",
+                "export * from './x';\nexport * from './y';\n",
+            ),
+            ("pure/x.ts", "export const x = makeThing();\n"),
+            ("pure/y.ts", "export const y = 1;\n"),
+            ("cyc/a.ts", "export * from './b';\nexport const a = 1;\n"),
+            ("cyc/b.ts", "export * from './a';\nexport * from './fx';\n"),
+            ("cyc/fx.ts", "setup();\nexport const fx = 1;\n"),
+            ("money.test.ts", "import { money } from './lib';\n"),
+            ("x.test.ts", "import { x } from './pure';\n"),
+            ("a.test.ts", "import { a } from './cyc/a';\n"),
+        ],
+    );
+    let s = scan(&dir);
+    // Two barrels deep, the effect still reaches a test of another name.
+    assert!(reached(&s, "lib/plugins.ts").contains(&"money.test.ts".to_string()));
+    assert!(reached(&s, "lib/money.ts").contains(&"money.test.ts".to_string()));
+    // A call in an initializer isn't counted, so the barrel still narrows.
+    assert!(reached(&s, "pure/x.ts").contains(&"x.test.ts".to_string()));
+    assert_eq!(reached(&s, "pure/y.ts"), ["pure/index.ts"]);
+    // Round a cycle of re-exports.
+    assert!(reached(&s, "cyc/fx.ts").contains(&"a.test.ts".to_string()));
+}
