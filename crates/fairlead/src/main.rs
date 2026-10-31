@@ -6,6 +6,7 @@ mod agents_cmd;
 mod bench_cmd;
 mod blueprint;
 mod brief_cmd;
+mod bun;
 mod ci_cmd;
 mod ci_judge;
 mod ci_report;

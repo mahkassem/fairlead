@@ -91,10 +91,30 @@ each with a comment saying where it came from. A runner goes in only when its
 | It finds | It writes |
 |---|---|
 | `vitest`, `jest`, `ava` or `mocha` in `package.json`, or `bun test` or `node --test` in the test scripts, one `npm run` step deep | that runner, through the lockfile's package runner (`bun x`, `pnpm exec`, `yarn`, `npx`), on the standard test-file names, `ava.files` for AVA, and any other file that imports the runner (`from "vitest"`), such as a `test.ts` beside each function |
+| *Unreleased:* Bun 1.4.4 or later in `package.json`'s `packageManager` (`bun@1.4.4`) or in `.bun-version` | `bun test --parallel --no-isolate {files}` for the `bun test` runner, and a `bun-fmt` check, `bun fmt --check {files}` on the changed JavaScript and TypeScript files, commented out unless a script already runs `bun fmt` |
 | `go.mod` at the root | `go test {packages}` on `**/*_test.go` |
 | `pyproject.toml`, `setup.py`, `setup.cfg`, `pytest.ini` or `tox.ini` | pytest on `**/test_*.py` and `**/*_test.py`, through `uv run` or `poetry run` when their lockfile is there |
 | `composer.json` | `php artisan test`, Pest or PHPUnit on the test directories `phpunit.xml` or `phpunit.xml.dist` names, else `tests/**/*Test.php` |
 | `Cargo.toml`, `gradlew`, `pom.xml`, a `.csproj`, or a `Gemfile` with `spec/` (RSpec) or `test/*_test.rb` (minitest) | a `[[checks]]` entry that runs the whole suite on any change in that language, which the import graph doesn't read yet |
+
+*Unreleased:* on Bun 1.4.4 or later, the `bun test` runner runs its files
+in parallel workers. `--no-isolate` lets each worker run several files in one
+process: isolated `--parallel`, a process per file, can be slower than serial
+on suites of many small files (8.5 s against 3.1 s on one we measured), while
+`--parallel --no-isolate` was the fastest on every suite measured. A parallel
+run can turn up a test that depends on the order files run in. The gain
+differs by repository, and `fairlead test bench` measures it on yours: serial,
+`--parallel` and `--parallel --no-isolate`, each run twice. A version init
+can't read, such as `bun@latest` or a range, or none at all, keeps
+`bun test {files}`.
+
+The `bun-fmt` check gates formatting per change: only the files a change
+touches must be formatted, so a repository adopts the formatter a file at a
+time instead of in one reformat that touches most of its files. Init writes it
+commented out, since turning it on is the team's decision, and live when a
+script in `package.json` already runs `bun fmt`. A plan that runs everything
+checks every file it matches, as any check's `{files}` does
+([Planning](plan.md)).
 
 `[tests] match` is written as `{ replace = [...] }`, the runners' patterns and
 nothing else, so a test file no runner here covers (a JavaScript test in a

@@ -44,9 +44,17 @@ struct Check {
     command: Vec<&'static str>,
 }
 
+/// `bun fmt --check` on the changed files: written live when a script
+/// already runs `bun fmt`, else commented out for the team to turn on.
+struct Fmt {
+    why: String,
+    on: bool,
+}
+
 struct Found {
     runners: Vec<Runner>,
     checks: Vec<Check>,
+    fmt: Option<Fmt>,
     notes: Vec<String>,
 }
 
@@ -275,6 +283,15 @@ fn summary(found: &Found) {
     for c in &found.checks {
         println!("  {:<10} check     {}", c.id, c.command.join(" "));
     }
+    match &found.fmt {
+        Some(f) if f.on => println!("  {:<10} check     {}", "bun-fmt", FMT_COMMAND.join(" ")),
+        Some(_) => println!(
+            "  {:<10} offered   {}  (commented out: uncomment it to gate formatting per change)",
+            "bun-fmt",
+            FMT_COMMAND.join(" ")
+        ),
+        None => {}
+    }
     for note in &found.notes {
         println!("  note: {note}");
     }
@@ -288,11 +305,13 @@ fn detect(root: &Path, files: &[String]) -> Found {
     let mut found = Found {
         runners: Vec::new(),
         checks: Vec::new(),
+        fmt: None,
         notes: Vec::new(),
     };
     let has = |name: &str| files.iter().any(|f| f == name);
     if has("package.json") {
         javascript(root, files, &mut found);
+        found.fmt = bun_fmt(root);
     }
     if has("go.mod") {
         let matches = vec!["**/*_test.go".to_string()];
@@ -342,6 +361,7 @@ fn javascript(root: &Path, files: &[String], found: &mut Found) {
     let resolved = test_scripts(&manifest);
     let script = resolved.as_str();
     let exec = exec_prefix(files);
+    let (bun_why, bun_command) = bun_runner(root);
     let standard = vec!["**/*.{test,spec}.{ts,tsx,js,jsx,mjs,cjs,mts,cts}".to_string()];
     let with = |tool: &[&str]| {
         let mut argv: Vec<String> = exec.iter().map(|s| s.to_string()).collect();
@@ -363,12 +383,7 @@ fn javascript(root: &Path, files: &[String], found: &mut Found) {
             with(&["jest", "{files}"]),
         )
     } else if script.starts_with("bun test") {
-        (
-            "bun",
-            "`bun test` in scripts.test",
-            standard,
-            args(&["bun", "test", "{files}"]),
-        )
+        ("bun", bun_why.as_str(), standard, bun_command)
     } else if script.contains("node --test") {
         (
             "node",
@@ -444,6 +459,71 @@ fn javascript(root: &Path, files: &[String], found: &mut Found) {
                 .into(),
         );
     }
+}
+
+/// `bun test`, in parallel on a Bun that has it. `--no-isolate` keeps one
+/// process per worker, since a process per file can be slower than serial on
+/// many small files. A Bun version that can't be read keeps the serial run.
+fn bun_runner(root: &Path) -> (String, Vec<String>) {
+    match crate::bun::detect(root).filter(|(v, _)| v.at_least(crate::bun::PARALLEL)) {
+        Some((v, from)) => (
+            format!(
+                "`bun test` in scripts.test and Bun {v} in {from}; `--no-isolate`, as a process per file can be slower than serial on many small files"
+            ),
+            args(&["bun", "test", "--parallel", "--no-isolate", "{files}"]),
+        ),
+        None => (
+            "`bun test` in scripts.test".to_string(),
+            args(&["bun", "test", "{files}"]),
+        ),
+    }
+}
+
+/// Bun's formatter as a check on the changed files, on a Bun that has
+/// `bun fmt --check`: a repository adopts it a change at a time, where a
+/// one-shot reformat would touch most files at once.
+fn bun_fmt(root: &Path) -> Option<Fmt> {
+    let (v, from) = crate::bun::detect(root).filter(|(v, _)| v.at_least(crate::bun::PARALLEL))?;
+    let manifest: Value = std::fs::read_to_string(root.join("package.json"))
+        .ok()
+        .and_then(|t| serde_json::from_str(&t).ok())
+        .unwrap_or(Value::Null);
+    let on = manifest["scripts"].as_object().is_some_and(|scripts| {
+        scripts
+            .values()
+            .filter_map(Value::as_str)
+            .any(|s| s.contains("bun fmt"))
+    });
+    Some(Fmt {
+        why: format!("Bun {v} in {from}"),
+        on,
+    })
+}
+
+const FMT_PATHS: &[&str] = &["**/*.{ts,tsx,js,jsx,mjs,cjs,mts,cts}"];
+const FMT_COMMAND: &[&str] = &["bun", "fmt", "--check", "{files}"];
+
+/// The `bun-fmt` check, live or commented out.
+fn render_fmt(fmt: &Fmt) -> String {
+    let table = format!(
+        "[[checks]]\nid = \"bun-fmt\"\npaths = {}\ncommand = {}\n",
+        list(FMT_PATHS),
+        list(FMT_COMMAND)
+    );
+    if fmt.on {
+        return format!(
+            "\n# {}, and a script runs `bun fmt`: the files a change touches must be formatted.\n{table}",
+            fmt.why
+        );
+    }
+    let commented: String = table.lines().map(|l| format!("# {l}\n")).collect();
+    format!(
+        "\n# {} has `bun fmt --check`.\n\
+         # Uncomment this to gate formatting per change: only the files a change\n\
+         # touches must be formatted, so the formatter comes in without a one-shot\n\
+         # reformat. A plan that runs everything checks every file.\n{commented}",
+        fmt.why
+    )
 }
 
 /// Patterns for test files the runner's patterns miss but that import its
@@ -763,6 +843,9 @@ fn render(found: &Found) -> String {
             list(&c.paths),
             list(&c.command)
         ));
+    }
+    if let Some(f) = &found.fmt {
+        out.push_str(&render_fmt(f));
     }
     out
 }

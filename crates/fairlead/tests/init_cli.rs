@@ -474,3 +474,136 @@ fn a_pack_joins_the_extends_a_blueprint_wrote() {
         "{out}"
     );
 }
+
+/// A Bun project whose `scripts.test` runs `bun test`, with `extra` files.
+fn bun_repo(name: &str, manifest: &str, extra: &[(&str, &str)]) -> PathBuf {
+    let mut files = vec![
+        ("package.json", manifest),
+        ("bun.lock", "{}\n"),
+        ("src/a.ts", "export const a = 1;\n"),
+        ("src/a.test.ts", "import { a } from './a';\n"),
+    ];
+    files.extend_from_slice(extra);
+    repo(name, &files)
+}
+
+#[test]
+fn bun_1_4_4_gets_the_parallel_runner_and_a_commented_fmt_check_on_changed_files() {
+    let dir = bun_repo(
+        "bun144",
+        r#"{"packageManager": "bun@1.4.4+sha512.abc", "scripts": {"test": "bun test"}}"#,
+        &[("vite.config.ts", "export default {};\n")],
+    );
+    let (code, out) = fairlead(&dir, &["init"]);
+    assert_eq!(code, 0, "{out}");
+    assert!(
+        out.contains("bun-fmt    offered   bun fmt --check {files}"),
+        "{out}"
+    );
+    let toml = std::fs::read_to_string(dir.join("fairlead.toml")).unwrap();
+    assert!(
+        toml.contains(r#"command = ["bun", "test", "--parallel", "--no-isolate", "{files}"]"#),
+        "{toml}"
+    );
+    assert!(
+        toml.contains("and Bun 1.4.4 in packageManager; `--no-isolate`"),
+        "{toml}"
+    );
+    assert!(
+        toml.contains("# command = [\"bun\", \"fmt\", \"--check\", \"{files}\"]"),
+        "{toml}"
+    );
+    let (code, out) = fairlead(&dir, &["plan", "--files", "src/a.ts"]);
+    assert_eq!(code, 0, "{out}");
+    assert!(
+        !out.contains("bun-fmt"),
+        "commented out, so not planned: {out}"
+    );
+
+    // Uncommented, it's a valid check that formats only what changed.
+    let live: String = toml
+        .lines()
+        .map(|l| {
+            l.strip_prefix("# ")
+                .filter(|r| r.starts_with('[') || r.contains(" = "))
+                .unwrap_or(l)
+        })
+        .map(|l| format!("{l}\n"))
+        .collect();
+    assert!(live.contains("\n[[checks]]\nid = \"bun-fmt\""), "{live}");
+    std::fs::write(dir.join("fairlead.toml"), &live).unwrap();
+    let (code, out) = fairlead(&dir, &["config", "check"]);
+    assert_eq!(code, 0, "{out}");
+    let (code, out) = fairlead(&dir, &["plan", "--files", "src/a.ts"]);
+    assert_eq!(code, 0, "{out}");
+    assert!(out.contains("bun fmt --check src/a.ts\n"), "{out}");
+    assert!(
+        out.contains("bun test --parallel --no-isolate src/a.test.ts"),
+        "{out}"
+    );
+
+    // A blueprint carries no runner of its own, so it keeps the detected one.
+    let (code, out) = fairlead(&dir, &["init", "--blueprint", "vite-react", "--force"]);
+    assert_eq!(code, 0, "{out}");
+    let toml = std::fs::read_to_string(dir.join("fairlead.toml")).unwrap();
+    assert!(toml.contains("# From the vite-react blueprint."), "{toml}");
+    assert!(toml.contains(r#""--parallel", "--no-isolate""#), "{toml}");
+}
+
+#[test]
+fn bun_1_4_4_with_a_fmt_script_gets_the_fmt_check_live() {
+    let dir = bun_repo(
+        "bunfmt",
+        r#"{"scripts": {"test": "bun test", "format": "bun fmt ."}}"#,
+        &[(".bun-version", "1.4.4\n")],
+    );
+    let (code, out) = fairlead(&dir, &["init"]);
+    assert_eq!(code, 0, "{out}");
+    assert!(
+        out.contains("bun-fmt    check     bun fmt --check {files}"),
+        "{out}"
+    );
+    let toml = std::fs::read_to_string(dir.join("fairlead.toml")).unwrap();
+    assert!(toml.contains("and Bun 1.4.4 in .bun-version"), "{toml}");
+    assert!(
+        toml.contains("\n[[checks]]\nid = \"bun-fmt\"\npaths = [\"**/*.{ts,tsx,js,jsx,mjs,cjs,mts,cts}\"]\ncommand = [\"bun\", \"fmt\", \"--check\", \"{files}\"]\n"),
+        "{toml}"
+    );
+    let (code, out) = fairlead(&dir, &["plan", "--files", "src/a.ts"]);
+    assert_eq!(code, 0, "{out}");
+    assert!(out.contains("bun-fmt"), "{out}");
+}
+
+#[test]
+fn an_older_or_unpinned_bun_keeps_the_serial_runner_and_no_fmt_check() {
+    for (name, extra, manifest) in [
+        (
+            "bun139",
+            &[(".bun-version", "1.3.9\n")][..],
+            r#"{"scripts": {"test": "bun test"}}"#,
+        ),
+        (
+            "bunnone",
+            &[][..],
+            r#"{"scripts": {"test": "bun test", "format": "bun fmt ."}}"#,
+        ),
+        (
+            "bunrange",
+            &[][..],
+            r#"{"packageManager": "bun@latest", "scripts": {"test": "bun test"}}"#,
+        ),
+    ] {
+        let dir = bun_repo(name, manifest, extra);
+        let (code, out) = fairlead(&dir, &["init", "--dry-run"]);
+        assert_eq!(code, 0, "{name}: {out}");
+        assert!(
+            out.contains(r#"command = ["bun", "test", "{files}"]"#),
+            "{name}: {out}"
+        );
+        assert!(
+            out.contains("from `bun test` in scripts.test.\n"),
+            "{name}: {out}"
+        );
+        assert!(!out.contains("bun-fmt"), "{name}: {out}");
+    }
+}
