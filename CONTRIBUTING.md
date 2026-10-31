@@ -38,7 +38,8 @@ Thanks for helping. A few rules keep the project small and trustworthy.
   `*Unreleased:*` until it has one; a promise names a roadmap milestone
   (`*Coming in K4*`), and the roadmap's Status column says what has shipped.
   `scripts/docs_check.py` fails on a page that lags.
-- **Releasing:** one PR bumps every crate's version, dates the `Unreleased`
+- **Releasing:** one PR bumps every crate's version and the exact
+  `version = "=X.Y.Z"` pins between the `fairlead-*` crates, dates the `Unreleased`
   notes as the new version, and moves each `documents Fairlead X.Y.Z` line,
   `*Unreleased:*` label, the README's Status, the action pin in
   `docs/src/ci.md` and the Composer launcher's `STAMPED` version in
@@ -50,6 +51,27 @@ Thanks for helping. A few rules keep the project small and trustworthy.
   main. The tag goes on that commit.
   `release.yml` runs the same check before it builds anything, so a tag the
   docs lag builds nothing, releases nothing and publishes nothing.
+  After the approval, the release publishes to npm, crates.io (the six crates,
+  dependencies first, skipping any version already there, so a re-run is safe)
+  and the Homebrew tap.
+- **Publishing setup, once, by the owner,** while the first release that
+  publishes to crates.io and Homebrew waits for its approval:
+  1. From the tagged commit, `cargo publish` each crate by hand in dependency
+     order (`fairlead-core`, `fairlead-lang`, `fairlead-tests`,
+     `fairlead-guard`, `fairlead-replay`, `fairlead`) with a short-lived
+     crates.io token scoped to publishing new crates. crates.io sets up
+     trusted publishing only for a crate that exists.
+  2. On crates.io, give each of the six crates a trusted publisher: this
+     repository, workflow `release.yml`, environment `release`.
+  3. Revoke the token.
+  4. Create the `mahkassem/homebrew-tap` repository with a first commit (a
+     README), so it has a default branch to push to.
+  5. Mint a fine-grained token with Contents read and write on that repository
+     only, and store it as the `HOMEBREW_TAP_TOKEN` secret of the `release`
+     environment, not as a repository secret.
+  6. Approve the release. Its crates.io job finds the six versions already
+     published and skips them, so the next release is the first that
+     publishes through the trusted publishers.
 - **Dependencies:** say why in the PR. Every new crate must pass `cargo deny`.
 - **Commits** follow Conventional Commits in the imperative mood.
 

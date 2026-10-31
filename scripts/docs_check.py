@@ -15,6 +15,7 @@ import argparse
 import os
 import re
 import sys
+import tomllib
 from pathlib import Path
 
 VERSION = r"\d+\.\d+\.\d+"
@@ -69,6 +70,29 @@ def roadmap(root: Path) -> dict[str, str]:
         if len(cells) >= 2 and re.fullmatch(r"K\d+", cells[0]):
             rows[cells[0]] = cells[2] if len(cells) >= 3 else ""
     return rows
+
+
+def crate_pins(root: Path, version: str) -> list[str]:
+    """Each crate must require its siblings at exactly the workspace version.
+    They release together with no semver promise between them, so a caret
+    requirement would let `cargo install` pair crates from different releases."""
+    problems = []
+    want = f"={version}"
+    for manifest in [root / "Cargo.toml", *sorted(root.glob("crates/*/Cargo.toml"))]:
+        if not manifest.exists():
+            continue
+        data = tomllib.loads(manifest.read_text())
+        tables = [data, data.get("workspace", {}), *data.get("target", {}).values()]
+        for table in tables:
+            for kind in ("dependencies", "dev-dependencies", "build-dependencies"):
+                for name, spec in table.get(kind, {}).items():
+                    if not re.fullmatch(r"fairlead(-[a-z]+)?", name):
+                        continue
+                    got = spec.get("version") if isinstance(spec, dict) else spec
+                    if got != want:
+                        rel = manifest.relative_to(root)
+                        problems.append(f'{rel}: {name} is required as "{got}", not "{want}"; pin each sibling crate exactly')
+    return problems
 
 
 def lines_matching(text: str, pattern: str, flags: int = 0):
@@ -158,6 +182,8 @@ def check(root: Path, release: str | None = None) -> list[str]:
 
     if first and re.match(VERSION, first) and not first.startswith(f"{version} ("):
         problems.append(f"CHANGELOG.md: the top section is {first}, but Cargo.toml says {version}")
+
+    problems += crate_pins(root, version)
 
     if release is not None:
         problems += check_release(root, release, version, first)
