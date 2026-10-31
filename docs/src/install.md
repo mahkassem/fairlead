@@ -36,6 +36,66 @@ project or container image that never runs Fairlead still installs; running
 `fairlead` there exits 1 and prints the `cargo install` line that builds it
 from source ([#218](https://github.com/mahkassem/fairlead/issues/218)).
 
+## Composer
+
+*Unreleased:* for a PHP project, with no Node needed:
+
+```sh
+composer require --dev mahkassem/fairlead
+vendor/bin/fairlead --version
+```
+
+The package is a small PHP launcher, not the binary. Its first run downloads
+the release build for the platform from the repository's GitHub releases, the
+archives the shell installer uses, checks it against the release's `.sha256`
+file before unpacking it, and keeps it; later runs start the binary straight
+away, passing the arguments, input, output and exit code through. It runs the
+release Composer installed, so the lock file keeps everyone on the project on
+the same Fairlead. It picks the build as the npm package does: the musl build
+when `ldd --version` says musl, when glibc is older than 2.35, or when neither
+shows. It needs PHP 8.1 or later with the curl extension or `allow_url_fopen`,
+and `tar`, which Windows 10 and later ship (a zip is unpacked with PHP's zip
+extension when it's loaded).
+
+The binary is kept in the first of these it can write to:
+`FAIRLEAD_CACHE_DIR` when it's set, and then only there; the package's own
+folder, `vendor/mahkassem/fairlead/.cache`, so a cached `vendor/` carries it;
+`fairlead/` under `XDG_CACHE_HOME` (`~/.cache`) or `%LOCALAPPDATA%`; and a
+folder of the user's own in the system temp directory. Each release and
+platform gets its own folder, which nothing writes to once it's there, and
+two first runs at once each unpack on their own and use whichever finished
+first. To build an image or a CI cache that runs offline, run it once while
+the network is there:
+
+```dockerfile
+RUN composer install --no-interaction && vendor/bin/fairlead --version
+```
+
+A branch install, such as `dev-main`, has no release build, so the launcher
+refuses it unless `FAIRLEAD_VERSION` names a release (`FAIRLEAD_VERSION=0.14.0`),
+which also overrides the installed version. When the download fails or
+doesn't match its checksum, it names the URL, prints the `cargo install` line
+under [Platforms](#platforms) and exits 1. Packagist lists a tag as soon as
+it's pushed, before its release has built; a run in that window says
+`no build for vX.Y.Z yet`. A platform with no build gets the `cargo install`
+line too.
+
+To also check the build's GitHub attestation, set
+`FAIRLEAD_VERIFY_ATTESTATION=1` with the [GitHub CLI](https://cli.github.com)
+installed: the launcher runs
+`gh attestation verify <archive> --repo mahkassem/fairlead` before unpacking,
+and installs nothing when the check fails or `gh` is missing. The checksum
+proves the download is intact, not who built it
+([Security](https://github.com/mahkassem/fairlead/blob/main/SECURITY.md)).
+
+Listing the package on Packagist is a one-time step for the repository's
+owner. Until it's listed, `composer require` finds it only with the
+repository named in `composer.json`:
+
+```json
+"repositories": [{ "type": "vcs", "url": "https://github.com/mahkassem/fairlead" }]
+```
+
 ## Platforms
 
 Each release has a build for:

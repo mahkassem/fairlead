@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### New
+
+- Composer: `composer require --dev mahkassem/fairlead` installs Fairlead in a PHP project, with no Node needed ([#237](https://github.com/mahkassem/fairlead/issues/237), item 7). The package is a small PHP launcher. Its first run downloads the release build for the platform from GitHub, over HTTPS only, checks its sha256 before unpacking it and caches it in the package's folder, so a cached `vendor/` carries it, or in `FAIRLEAD_CACHE_DIR`; later runs start the binary directly, passing arguments and the exit code through. A branch install is refused unless `FAIRLEAD_VERSION` names a release, a tag whose release is still building says `no build for vX.Y.Z yet`, and `FAIRLEAD_VERIFY_ATTESTATION=1` also checks the build's GitHub attestation with `gh`. See [Composer](https://mahkassem.github.io/fairlead/docs/install.html#composer).
+
 ## 0.13.0 (2026-10-26)
 
 ### New

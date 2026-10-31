@@ -15,6 +15,7 @@ FILES = [
     "README.md",
     "site/index.html",
     "crates/fairlead/src/main.rs",
+    "src-php/Version.php",
 ]
 
 
@@ -131,6 +132,14 @@ class DocsCheck(unittest.TestCase):
         self.assertEqual(self.problems(), [])
         [p] = self.problems(tag)
         self.assertIn("pinned at v0.5.0", p)
+
+    def test_a_composer_launcher_stamped_with_another_release_fails(self):
+        tag = self.released()
+        self.edit("src-php/Version.php", f"const STAMPED = '{self.version}';", "const STAMPED = '0.1.0';")
+        [p] = self.problems()
+        self.assertIn("STAMPED version is 0.1.0, but Cargo.toml says", p)
+        problems = self.problems(tag)
+        self.assertTrue(any("STAMPED version is 0.1.0" in p for p in problems), problems)
 
 
 if __name__ == "__main__":
