@@ -91,7 +91,7 @@ each with a comment saying where it came from. A runner goes in only when its
 | It finds | It writes |
 |---|---|
 | `vitest`, `jest`, `ava` or `mocha` in `package.json`, or `bun test` or `node --test` in the test scripts, one `npm run` step deep | that runner, through the lockfile's package runner (`bun x`, `pnpm exec`, `yarn`, `npx`), on the standard test-file names, `ava.files` for AVA, and any other file that imports the runner (`from "vitest"`), such as a `test.ts` beside each function |
-| *Unreleased:* Bun 1.4.4 or later in `package.json`'s `packageManager` (`bun@1.4.4`) or in `.bun-version` | `bun test --parallel --no-isolate {files}` for the `bun test` runner, and a `bun-fmt` check, `bun fmt --check {files}` on the changed JavaScript and TypeScript files, commented out unless a script already runs `bun fmt` |
+| *Unreleased:* Bun 1.4.4 or later in `package.json`'s `packageManager` (`bun@1.4.4`) or in `.bun-version` | `bun test --parallel --no-isolate {files}` for the `bun test` runner, and a `bun-fmt` check, `bun fmt --no-script --check {files}` on the changed JavaScript and TypeScript files, commented out unless a script already runs `bun fmt` |
 | `go.mod` at the root | `go test {packages}` on `**/*_test.go` |
 | `pyproject.toml`, `setup.py`, `setup.cfg`, `pytest.ini` or `tox.ini` | pytest on `**/test_*.py` and `**/*_test.py`, through `uv run` or `poetry run` when their lockfile is there |
 | `composer.json` | `php artisan test`, Pest or PHPUnit on the test directories `phpunit.xml` or `phpunit.xml.dist` names, else `tests/**/*Test.php` |

@@ -501,7 +501,9 @@ fn bun_fmt(root: &Path) -> Option<Fmt> {
 }
 
 const FMT_PATHS: &[&str] = &["**/*.{ts,tsx,js,jsx,mjs,cjs,mts,cts}"];
-const FMT_COMMAND: &[&str] = &["bun", "fmt", "--check", "{files}"];
+// Without `--no-script`, `bun fmt` runs a `fmt` script in package.json instead,
+// with these arguments appended, so the check would run whatever that script is.
+const FMT_COMMAND: &[&str] = &["bun", "fmt", "--no-script", "--check", "{files}"];
 
 /// The `bun-fmt` check, live or commented out.
 fn render_fmt(fmt: &Fmt) -> String {

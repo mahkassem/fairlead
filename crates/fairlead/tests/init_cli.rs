@@ -497,7 +497,7 @@ fn bun_1_4_4_gets_the_parallel_runner_and_a_commented_fmt_check_on_changed_files
     let (code, out) = fairlead(&dir, &["init"]);
     assert_eq!(code, 0, "{out}");
     assert!(
-        out.contains("bun-fmt    offered   bun fmt --check {files}"),
+        out.contains("bun-fmt    offered   bun fmt --no-script --check {files}"),
         "{out}"
     );
     let toml = std::fs::read_to_string(dir.join("fairlead.toml")).unwrap();
@@ -510,7 +510,7 @@ fn bun_1_4_4_gets_the_parallel_runner_and_a_commented_fmt_check_on_changed_files
         "{toml}"
     );
     assert!(
-        toml.contains("# command = [\"bun\", \"fmt\", \"--check\", \"{files}\"]"),
+        toml.contains("# command = [\"bun\", \"fmt\", \"--no-script\", \"--check\", \"{files}\"]"),
         "{toml}"
     );
     let (code, out) = fairlead(&dir, &["plan", "--files", "src/a.ts"]);
@@ -536,7 +536,10 @@ fn bun_1_4_4_gets_the_parallel_runner_and_a_commented_fmt_check_on_changed_files
     assert_eq!(code, 0, "{out}");
     let (code, out) = fairlead(&dir, &["plan", "--files", "src/a.ts"]);
     assert_eq!(code, 0, "{out}");
-    assert!(out.contains("bun fmt --check src/a.ts\n"), "{out}");
+    assert!(
+        out.contains("bun fmt --no-script --check src/a.ts\n"),
+        "{out}"
+    );
     assert!(
         out.contains("bun test --parallel --no-isolate src/a.test.ts"),
         "{out}"
@@ -554,19 +557,19 @@ fn bun_1_4_4_gets_the_parallel_runner_and_a_commented_fmt_check_on_changed_files
 fn bun_1_4_4_with_a_fmt_script_gets_the_fmt_check_live() {
     let dir = bun_repo(
         "bunfmt",
-        r#"{"scripts": {"test": "bun test", "format": "bun fmt ."}}"#,
+        r#"{"scripts": {"test": "bun test", "format": "bun fmt .", "fmt": "prettier --write ."}}"#,
         &[(".bun-version", "1.4.4\n")],
     );
     let (code, out) = fairlead(&dir, &["init"]);
     assert_eq!(code, 0, "{out}");
     assert!(
-        out.contains("bun-fmt    check     bun fmt --check {files}"),
+        out.contains("bun-fmt    check     bun fmt --no-script --check {files}"),
         "{out}"
     );
     let toml = std::fs::read_to_string(dir.join("fairlead.toml")).unwrap();
     assert!(toml.contains("and Bun 1.4.4 in .bun-version"), "{toml}");
     assert!(
-        toml.contains("\n[[checks]]\nid = \"bun-fmt\"\npaths = [\"**/*.{ts,tsx,js,jsx,mjs,cjs,mts,cts}\"]\ncommand = [\"bun\", \"fmt\", \"--check\", \"{files}\"]\n"),
+        toml.contains("\n[[checks]]\nid = \"bun-fmt\"\npaths = [\"**/*.{ts,tsx,js,jsx,mjs,cjs,mts,cts}\"]\ncommand = [\"bun\", \"fmt\", \"--no-script\", \"--check\", \"{files}\"]\n"),
         "{toml}"
     );
     let (code, out) = fairlead(&dir, &["plan", "--files", "src/a.ts"]);
@@ -585,7 +588,7 @@ fn an_older_or_unpinned_bun_keeps_the_serial_runner_and_no_fmt_check() {
         (
             "bunnone",
             &[][..],
-            r#"{"scripts": {"test": "bun test", "format": "bun fmt ."}}"#,
+            r#"{"scripts": {"test": "bun test", "format": "bun fmt .", "fmt": "prettier --write ."}}"#,
         ),
         (
             "bunrange",
