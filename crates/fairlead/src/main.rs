@@ -34,6 +34,7 @@ mod mcp_cmd;
 mod mcp_tools;
 mod migrate_cmd;
 mod migrate_notes;
+mod needs;
 mod plan_cmd;
 mod receipt_cmd;
 mod replay_cmd;
@@ -332,6 +333,7 @@ fn doctor_report(dir: &Path, opts: &LoadOptions) -> String {
             hooks.push_str(&line);
         }
         agents = agents_cmd::doctor_lines(&root, &l.config);
+        hooks.push_str(&needs::doctor_lines(&root, &l.config));
     }
     let config = match loaded {
         Ok(loaded) if loaded.files.is_empty() => "none found; defaults apply".to_string(),
