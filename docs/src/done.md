@@ -56,7 +56,7 @@ on_stop = "ask"   # off | ask | require
 
 ## Needs
 
-*Unreleased:* some tests need something the machine may not have ([#259](https://github.com/mahkassem/fairlead/issues/259), its first step), such as a mail catcher on a port, a database, a browser, or a container runtime for tests that start their own containers. A `[[needs]]` entry says what, which tests and checks need it, and how to check for it. Fairlead checks the need itself, never whether it runs in a container: a container can have every service beside it, and a laptop can have none.
+*Since 0.15.0:* some tests need something the machine may not have ([#259](https://github.com/mahkassem/fairlead/issues/259), its first step), such as a mail catcher on a port, a database, a browser, or a container runtime for tests that start their own containers. A `[[needs]]` entry says what, which tests and checks need it, and how to check for it. Fairlead checks the need itself, never whether it runs in a container: a container can have every service beside it, and a laptop can have none.
 
 ```toml
 [[needs]]
