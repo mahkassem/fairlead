@@ -352,6 +352,11 @@ fixed: 0.14.0 reached crates.io but has no GitHub release, npm package or
 Homebrew formula, so upgrade from 0.13 straight to 0.14.1 and read
 [To 0.14.0](#to-0140) for what changed.
 
+### To 0.14.2
+
+Migrate updates nothing in your files. 0.14.2 fixes the npm install on
+Windows when a path has a space in it.
+
 ## Going back to an older release
 
 Install the older release, then run its `hooks uninstall` and
