@@ -37,6 +37,9 @@ jobs:
       - run: cargo fmt --check
       - run: cargo clippy --all-targets -- -D warnings
       - run: cargo test
+      # The npm install unzips with PowerShell, so that part runs on Windows too.
+      - if: runner.os == 'Windows'
+        run: node --test npm/unzip.test.js
 
   # The release build and its budgets, beside the tests rather than after them: fat LTO is
   # the slowest step of the run, and it doesn't need the tests' result.
