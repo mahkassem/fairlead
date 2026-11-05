@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.14.2 (2026-11-05)
+
+### Fixed
+
+- The npm package installs on Windows when a path has a space in it, such as a user folder like `C:\Users\First Last` ([#257](https://github.com/mahkassem/fairlead/pull/257)). The install unzips the release with PowerShell's `Expand-Archive`, and PowerShell reads every argument after `-Command` as command text, so the paths went in unquoted and split at the space; the install failed with `Access to the path ... is denied`. The paths now reach `Expand-Archive` through the environment, and CI unzips into a folder with a space on Windows.
+
 ## 0.14.1 (2026-10-31)
 
 ### Fixed

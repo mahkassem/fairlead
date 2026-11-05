@@ -294,6 +294,7 @@ pub const RELEASES: &[(&str, &[Note])] = &[
         }],
     ),
     ("0.14.1", &[]),
+    ("0.14.2", &[]),
 ];
 
 /// Config tables and keys by the release that added them. The top-level
