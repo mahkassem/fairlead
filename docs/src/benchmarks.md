@@ -2,28 +2,28 @@
 
 Replay results on public repositories, written by the `bench` workflow. See [Replay](replay.md) for what each measure means; the configs are in `bench/`.
 
-Planned with Fairlead 0.13.0 at `081f41fc5e91`.
+Planned with Fairlead 0.14.1 at `da5cb1e243b4`.
 
 ## Effect-TS/effect
 
-Window 2026-06-08 to 2026-09-05; dataset `bench/data/Effect-TS_effect.jsonl`, 3075 run attempts from 2026-06-22 to 2026-09-05. Fetch: `fetch partial: 300 new rows in out/data.jsonl; run again to continue`.
+Window 2026-06-08 to 2026-09-05; dataset `bench/data/Effect-TS_effect.jsonl`, 3375 run attempts from 2026-06-22 to 2026-09-05. Fetch: `fetch partial: 300 new rows in out/data.jsonl; run again to continue`.
 
 | Measure | Value |
 | --- | --- |
-| Runs replayed | 558 |
-| Attributed failures (gate 30) | 1520 (met) |
-| Recall | 99.1% |
-| Recall with quarantined tests counted (raw) | 97.5% (n=1661) |
-| Recall with them left out (adjusted) | 99.1% (n=1520) |
-| Strict recall (unconfirmed as misses) | 98.9% |
-| Hits: selected, run everything, checks | 511, 705, 290 |
-| Misses | 14 |
-| Flaky, unconfirmed, unattributed | 68, 3, 67 |
-| Unavailable, errors, ignored | 0, 0, 8 |
-| Test files selected: median, p90 | 6.9%, 100.0% |
+| Runs replayed | 591 |
+| Attributed failures (gate 30) | 1537 (met) |
+| Recall | 99.0% |
+| Recall with quarantined tests counted (raw) | 97.4% (n=1688) |
+| Recall with them left out (adjusted) | 99.0% (n=1537) |
+| Strict recall (unconfirmed as misses) | 98.8% |
+| Hits: selected, run everything, checks | 515, 708, 299 |
+| Misses | 15 |
+| Flaky, unconfirmed, unattributed | 81, 3, 67 |
+| Unavailable, errors, ignored | 0, 0, 12 |
+| Test files selected: median, p90 | 6.3%, 100.0% |
 | Plans that selected everything | 18.9% |
-| Plan time: first (cold), median, p90 | 1.70 s, 0.15 s, 0.53 s |
-| Recall on `pull_request` runs (strict) | 99.1% (98.9%) |
+| Plan time: first (cold), median, p90 | 1.74 s, 0.16 s, 0.49 s |
+| Recall on `pull_request` runs (strict) | 99.0% (98.8%) |
 
 Quarantined tests (declared in the bench config, applied only while the data bears them out):
 
@@ -40,11 +40,11 @@ Plans that selected everything, by cause:
 - `run-all tsconfig.base.json`: 18
 - `run-all tsconfig.packages.json`: 18
 - `run-all package.json`: 16
-- `run-all .github/**`: 10
+- `run-all .github/**`: 13
 - `run-all packages/**`: 5
+- `run-all vitest.config.ts`: 5
 - `unreached .agents/**`: 4
 - `run-all pnpm-workspace.yaml`: 2
-- `run-all vitest.config.ts`: 2
 - `unreached .vscode/**`: 2
 
 Failed jobs no rule watches:
@@ -52,6 +52,7 @@ Failed jobs no rule watches:
 - `AI Documentation Generation`: 7
 - `Circular Dependencies`: 8
 - `Test on Bun`: 8
+- `Types (Deno)`: 2
 
 Misses:
 
@@ -67,39 +68,40 @@ Misses:
 - run 30955200961 attempt 1: `packages/platform-deno/test/cluster/SocketRunner.test.ts`, changed `.changeset/good-cups-reply.md, packages/sql/mssql/src/MssqlClient.ts, packages/sql/mssql/test/Client.test.ts`
 - run 31047937195 attempt 1: `packages/platform-node/test/cluster/SqlMessageStorage.integration.test.ts`, changed `packages/ai/openai/test/OpenAiSchema.test.ts`
 - run 31654685741 attempt 1: `packages/sql/mssql/test/Persistence.integration.test.ts`, changed `.changeset/scope-message-storage-clear-address.md, packages/effect/src/unstable/cluster/MessageStorage.ts, packages/effect/src/unstable/cluster/SqlMessageStorage.ts, packages/effect/test/cluster/MessageStorage.test.ts, packages/platform/node/test/cluster/MessageStorageTest.ts`
+- run 33759154055 attempt 1: `packages/sql/pg/test/PgPool.integration.test.ts`, changed `.changeset/entity-proxy-client-codec-services.md, packages/effect/src/unstable/cluster/EntityProxyServer.ts, packages/effect/test/cluster/EntityProxyServices.test.ts, packages/effect/typetest/unstable/cluster/EntityProxyServices.tst.ts`
 - run 33872621422 attempt 1: `packages/sql/d1/test/Resolver.test.ts`, changed `.changeset/docgen-class-property-examples.md, packages/tools/docgen/src/Core.ts, packages/tools/docgen/test/Core.propertyExamples.fixtures.ts, packages/tools/docgen/test/Core.propertyExamples.test.ts`
 - run 33872655573 attempt 1: `packages/tools/openapi-generator/test/OpenApiGenerator.test.ts`, changed `packages/tools/api-diff/src/MigrationDoc.ts, packages/tools/api-diff/test/MigrationDoc.fence.test.ts`
 
 ## pnpm/pnpm
 
-Window 2026-06-01 to 2026-08-29; dataset `bench/data/pnpm_pnpm.jsonl`, 3700 run attempts from 2026-06-25 to 2026-08-29. Fetch: `fetch partial: 300 new rows in out/data.jsonl; run again to continue`.
+Window 2026-06-08 to 2026-09-05; dataset `bench/data/pnpm_pnpm.jsonl`, 4000 run attempts from 2026-06-25 to 2026-09-05. Fetch: `fetch partial: 300 new rows in out/data.jsonl; run again to continue`.
 
 | Measure | Value |
 | --- | --- |
-| Runs replayed | 511 |
-| Attributed failures (gate 30) | 665 (met) |
-| Recall | 99.8% |
-| Strict recall (unconfirmed as misses) | 99.8% |
-| Hits: selected, run everything, checks | 96, 568, 0 |
+| Runs replayed | 540 |
+| Attributed failures (gate 30) | 708 (met) |
+| Recall | 99.9% |
+| Strict recall (unconfirmed as misses) | 99.9% |
+| Hits: selected, run everything, checks | 97, 610, 0 |
 | Misses | 1 |
-| Flaky, unconfirmed, unattributed | 15, 0, 257 |
-| Unavailable, errors, ignored | 0, 0, 555 |
+| Flaky, unconfirmed, unattributed | 28, 0, 261 |
+| Unavailable, errors, ignored | 0, 0, 586 |
 | Test files selected: median, p90 | 100.0%, 100.0% |
-| Plans that selected everything | 83.9% |
-| Plan time: first (cold), median, p90 | 1.33 s, 0.47 s, 0.58 s |
-| Recall on `pull_request` runs (strict) | 99.8% (99.8%) |
+| Plans that selected everything | 84.6% |
+| Plan time: first (cold), median, p90 | 1.09 s, 0.39 s, 0.46 s |
+| Recall on `pull_request` runs (strict) | 99.9% (99.9%) |
 
 Plans that selected everything, by cause:
 
-- `unreached pnpm/**`: 161
-- `run-all pnpm-lock.yaml`: 120
-- `unreached Cargo.lock`: 31
+- `unreached pnpm/**`: 175
+- `run-all pnpm-lock.yaml`: 129
+- `unreached Cargo.lock`: 33
 - `run-all .github/**`: 29
 - `unreached pacquet/**`: 19
 - `unreached .gitignore`: 14
-- `unreached cspell.json`: 12
+- `unreached cspell.json`: 14
 - `run-all package.json`: 9
-- `run-all pnpm-workspace.yaml`: 4
+- `run-all pnpm-workspace.yaml`: 5
 - `unreached .typos.toml`: 1
 
 Misses:
@@ -108,37 +110,37 @@ Misses:
 
 ## vitest-dev/vitest
 
-Window 2026-07-29 to 2026-10-26; dataset `bench/data/vitest-dev_vitest.jsonl`, 2253 run attempts from 2026-06-21 to 2026-10-26. Fetch: `fetch complete: 134 new rows in out/data.jsonl`.
+Window 2026-08-05 to 2026-11-02; dataset `bench/data/vitest-dev_vitest.jsonl`, 2408 run attempts from 2026-06-21 to 2026-11-02. Fetch: `fetch complete: 155 new rows in out/data.jsonl`.
 
 | Measure | Value |
 | --- | --- |
-| Runs replayed | 1032 |
-| Attributed failures (gate 30) | 765 (met) |
-| Recall | 99.2% |
-| Recall with quarantined tests counted (raw) | 95.6% (n=1325) |
-| Recall with them left out (adjusted) | 99.2% (n=765) |
-| Strict recall (unconfirmed as misses) | 99.0% |
-| Hits: selected, run everything, checks | 570, 100, 89 |
+| Runs replayed | 1075 |
+| Attributed failures (gate 30) | 817 (met) |
+| Recall | 99.3% |
+| Recall with quarantined tests counted (raw) | 95.9% (n=1425) |
+| Recall with them left out (adjusted) | 99.3% (n=817) |
+| Strict recall (unconfirmed as misses) | 99.1% |
+| Hits: selected, run everything, checks | 609, 107, 95 |
 | Misses | 6 |
-| Flaky, unconfirmed, unattributed | 35, 2, 1515 |
-| Unavailable, errors, ignored | 0, 0, 1576 |
+| Flaky, unconfirmed, unattributed | 43, 1, 1511 |
+| Unavailable, errors, ignored | 0, 0, 1628 |
 | Test files selected: median, p90 | 98.5%, 100.0% |
-| Plans that selected everything | 25.5% |
-| Plan time: first (cold), median, p90 | 0.69 s, 0.18 s, 0.54 s |
-| Recall on `pull_request` runs (strict) | 99.2% (99.0%) |
+| Plans that selected everything | 25.9% |
+| Plan time: first (cold), median, p90 | 0.70 s, 0.14 s, 0.26 s |
+| Recall on `pull_request` runs (strict) | 99.3% (99.1%) |
 
 Quarantined tests (declared in the bench config, applied only while the data bears them out):
 
-- `test/typescript/test/typechecker.test.ts` in jobs `^Test: unit, node-24, windows-latest$`: active, 88 failures absorbed (72 would-be hits, 15 would-be misses), 44 pull requests, until 2026-12-31. Fails only on the Windows unit job (its out-of-memory crash and missing-command cases): 60 failures across 36 pull requests from June to August 2026, while the same job passed 356 times and no other job ever failed it.
+- `test/typescript/test/typechecker.test.ts` in jobs `^Test: unit, node-24, windows-latest$`: active, 55 failures absorbed (42 would-be hits, 13 would-be misses), 31 pull requests, until 2026-12-31. Fails only on the Windows unit job (its out-of-memory crash and missing-command cases): 60 failures across 36 pull requests from June to August 2026, while the same job passed 356 times and no other job ever failed it.
   - Absorbed in: `Test: unit, node-24, windows-latest`
 
 Plans that selected everything, by cause:
 
-- `run-all .github/**`: 118
-- `run-all package.json`: 47
-- `run-all pnpm-lock.yaml`: 30
-- `run-all pnpm-workspace.yaml`: 19
-- `unreached .gitattributes`: 12
+- `run-all .github/**`: 124
+- `run-all package.json`: 50
+- `run-all pnpm-lock.yaml`: 31
+- `run-all pnpm-workspace.yaml`: 21
+- `unreached .gitattributes`: 14
 - `run-all test/**`: 8
 - `unreached .dockerignore`: 8
 - `unreached eslint.config.js`: 4
