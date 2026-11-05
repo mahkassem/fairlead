@@ -271,17 +271,8 @@ class Package {
                 if (this.platform.artifactName.includes("windows")) {
                   // Windows does not have "unzip" by default on many installations, instead
                   // we use Expand-Archive from powershell
-                  result = spawnSync("powershell.exe", [
-                    "-NoProfile",
-                    "-NonInteractive",
-                    "-Command",
-                    `& {
-                        param([string]$LiteralPath, [string]$DestinationPath)
-                        Expand-Archive -LiteralPath $LiteralPath -DestinationPath $DestinationPath -Force
-                    }`,
-                    tempFile,
-                    staging,
-                  ]);
+                  const unzip = expandArchive(tempFile, staging);
+                  result = spawnSync(unzip.file, unzip.args, unzip.options);
                 } else {
                   result = spawnSync("unzip", [
                     "-q",
@@ -374,4 +365,21 @@ class Package {
   }
 }
 
+// Fairlead: PowerShell joins every argument after -Command into the command
+// text, so a path with a space in it, such as a user folder, split in two and
+// the install failed. The paths go in the environment instead.
+function expandArchive(zip, dest) {
+  return {
+    file: "powershell.exe",
+    args: [
+      "-NoProfile",
+      "-NonInteractive",
+      "-Command",
+      "Expand-Archive -LiteralPath $env:FAIRLEAD_ZIP -DestinationPath $env:FAIRLEAD_DEST -Force",
+    ],
+    options: { env: { ...process.env, FAIRLEAD_ZIP: zip, FAIRLEAD_DEST: dest } },
+  };
+}
+
 module.exports.Package = Package;
+module.exports.expandArchive = expandArchive;
