@@ -357,6 +357,12 @@ Homebrew formula, so upgrade from 0.13 straight to 0.14.1 and read
 Migrate updates nothing in your files. 0.14.2 fixes the npm install on
 Windows when a path has a space in it.
 
+### To 0.15.0
+
+Migrate updates nothing in your files. 0.15.0 adds `[[needs]]`, which
+`fairlead doctor` checks; the done gate doesn't read it yet
+([Needs](done.md#needs)).
+
 ## Going back to an older release
 
 Install the older release, then run its `hooks uninstall` and
