@@ -231,6 +231,13 @@ mod tests {
 
     #[test]
     fn a_listening_port_is_met_and_a_closed_one_is_refused() {
+        // Windows tries a refused connection again for about a second, so
+        // within the timeout a closed port reads as timed out there.
+        let closed_reads = if cfg!(windows) {
+            "timed out"
+        } else {
+            "refused"
+        };
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
         let open = listener.local_addr().unwrap().port();
         let closed = {
@@ -242,11 +249,11 @@ mod tests {
         ));
         let (met, saw) = check(&n, Path::new("."), &none);
         assert!(met, "{saw}");
-        assert!(saw.contains("refused") && saw.contains("up"), "{saw}");
+        assert!(saw.contains(closed_reads) && saw.contains("up"), "{saw}");
         let n = need(&format!("id = \"s\"\ntcp = [\"127.0.0.1:{closed}\"]"));
         assert_eq!(
             check(&n, Path::new("."), &none),
-            (false, format!("127.0.0.1:{closed} refused"))
+            (false, format!("127.0.0.1:{closed} {closed_reads}"))
         );
     }
 

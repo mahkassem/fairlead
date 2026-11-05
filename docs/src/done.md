@@ -80,6 +80,7 @@ checks = ["e2e"]
 - Each entry has exactly one of `tcp`, `command` and `env`, and at least one of `tests` (globs) and `checks` (`[[checks]]` ids).
 - In `tcp`, `{env:NAME}` is replaced by that variable, and an address naming an unset one is skipped. A lookup or connection takes at most `timeout_ms`, 300 by default; a `command` takes at most 2000 by default and is stopped after.
 - A need that isn't met is tried once more after 200 ms, for a service that's still starting.
+- On Windows, a connection to a closed port is tried again by the system for about a second before it's refused, so within the timeout it reads as `timed out` and costs the whole timeout. The need is missing either way.
 - `[[needs]]` never changes a plan, so it's left out of the plan's config digest.
 
 `fairlead doctor` checks every need at once and prints what it found:
