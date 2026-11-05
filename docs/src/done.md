@@ -54,3 +54,44 @@ Every run appends a `done` event to `.git/fairlead/events.jsonl`: the plan's tre
 on_stop = "ask"   # off | ask | require
 ```
 
+## Needs
+
+*Unreleased:* some tests need something the machine may not have ([#259](https://github.com/mahkassem/fairlead/issues/259), its first step), such as a mail catcher on a port, a database, a browser, or a container runtime for tests that start their own containers. A `[[needs]]` entry says what, which tests and checks need it, and how to check for it. Fairlead checks the need itself, never whether it runs in a container: a container can have every service beside it, and a laptop can have none.
+
+```toml
+[[needs]]
+id = "smtp"
+tcp = ["localhost:1025", "{env:MAIL_HOST}:1025"]  # met when any one accepts a connection
+tests = ["tests/Feature/Mail/**"]
+proved_in = "CI (services job)"
+hint = "Start a local SMTP catcher on port 1025"
+
+[[needs]]
+id = "containers"
+command = ["docker", "info"]                     # met when it exits 0
+tests = ["tests/Integration/**"]
+
+[[needs]]
+id = "browser"
+env = "BROWSER_PATH"                             # met when set and not empty
+checks = ["e2e"]
+```
+
+- Each entry has exactly one of `tcp`, `command` and `env`, and at least one of `tests` (globs) and `checks` (`[[checks]]` ids).
+- In `tcp`, `{env:NAME}` is replaced by that variable, and an address naming an unset one is skipped. A lookup or connection takes at most `timeout_ms`, 300 by default; a `command` takes at most 2000 by default and is stopped after.
+- A need that isn't met is tried once more after 200 ms, for a service that's still starting.
+- On Windows, a connection to a closed port is tried again by the system for about a second before it's refused, so within the timeout it reads as `timed out` and costs the whole timeout. The need is missing either way.
+- `[[needs]]` never changes a plan, so it's left out of the plan's config digest.
+
+`fairlead doctor` checks every need at once and prints what it found:
+
+```text
+needs: 3 checked in 628 ms
+  smtp: missing: localhost:1025 refused, {env:MAIL_HOST}:1025 skipped, MAIL_HOST unset (208 ms, 2 tries)
+    to meet it: Start a local SMTP catcher on port 1025
+    proved in: CI (services job)
+  containers: missing: `docker info` exit 1 (628 ms, 2 tries)
+  browser: met: BROWSER_PATH is set (0 ms)
+```
+
+A `command` need runs a command from the config, as `[[checks]]` do, so `doctor` runs it too. The done gate doesn't read `[[needs]]` yet: a test that needs a missing service still fails `fairlead done`. What the gate will do with a need that isn't met is in #259.

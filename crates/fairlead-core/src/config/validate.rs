@@ -93,6 +93,7 @@ pub fn validate(config: &Config) -> Vec<Problem> {
     skills(config, &mut problems);
     super::stages::validate(config, &mut problems);
     super::tracker::validate(config, &mut problems);
+    super::needs::validate(config, &mut problems);
     super::planning::validate(config, &mut problems);
     agents(config, &mut problems);
     problems
@@ -138,7 +139,7 @@ pub fn plan_globs(config: &Config) -> Vec<Problem> {
     std::mem::take(problems)
 }
 
-fn globs(key: &str, globs: &[String], problems: &mut Vec<Problem>) {
+pub(super) fn globs(key: &str, globs: &[String], problems: &mut Vec<Problem>) {
     for (i, glob) in globs.iter().enumerate() {
         if let Err(e) = crate::pattern::Pattern::new(glob) {
             problems.push(problem(format!("{key}[{i}]"), e));

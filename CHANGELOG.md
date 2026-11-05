@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### New
+
+- `[[needs]]` declares what some tests need from the machine, such as a service on a port or a container runtime, and how to check for it: `tcp` (any listed `host:port` accepts a connection, with `{env:NAME}` filled in), `command` (exits 0) or `env` (set and not empty) ([#259](https://github.com/mahkassem/fairlead/issues/259)). `fairlead doctor` checks each one and says whether it's met, what the check saw and how long it took, and `config check` validates the entries. This is the first step of #259: the done gate doesn't read `[[needs]]` yet, so a test that needs a missing service still fails `fairlead done` as before. See [Needs](https://mahkassem.github.io/fairlead/docs/done.html#needs).
+
 ## 0.14.2 (2026-11-05)
 
 ### Fixed

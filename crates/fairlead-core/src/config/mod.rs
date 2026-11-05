@@ -4,6 +4,7 @@
 mod agents;
 mod knowledge;
 mod load;
+mod needs;
 pub mod packs;
 mod planning;
 mod quarantine;
@@ -18,6 +19,7 @@ pub use load::{
     find_config, load, load_file, read_layer, ConfigError, LoadOptions, Loaded, ENV_NAME,
     LOCAL_NAMES, PROJECT_NAMES,
 };
+pub use needs::{env_names, Need};
 pub use planning::{Globs, LockfileMode, Plan, RunAll, RunAllKinds};
 pub use quarantine::{Condition, Os, PlatformQuarantine};
 pub use stages::{CiStage, Stages};
@@ -98,6 +100,10 @@ pub struct Config {
     /// configs without them keep their plan ids.
     #[serde(skip_serializing_if = "List::is_empty")]
     pub quarantine: List<PlatformQuarantine>,
+    /// What some tests need from the machine, and how to check for it. Never
+    /// changes a plan, so it's left out of the digest.
+    #[serde(skip_serializing_if = "List::is_empty")]
+    pub needs: List<Need>,
     pub plan: Plan,
     pub replay: Replay,
     pub guard: Guard,
