@@ -273,3 +273,31 @@ fn a_scheduled_run_runs_the_whole_suite_and_a_pull_request_doesnt() {
     );
     std::fs::remove_dir_all(&dir).unwrap();
 }
+
+#[test]
+fn explain_plan_and_done_agree_on_a_spec_a_graph_edge_reaches() {
+    let config = format!(
+        "{RUNNERS}all_from = \"full\"\n\n[[graph.edges]]\nfrom = \"e2e/*.spec.ts\"\nto = [\"src/a.ts\"]\n"
+    );
+    let dir = repo("edge", &config, &[("src/a.ts", "export const a = 2;\n")]);
+    let plan = plan_json(&dir, &[]);
+    assert!(specs(&plan).is_empty(), "{plan}");
+    assert_eq!(whole(&plan)[0]["reached"], 3, "{plan}");
+    assert_eq!(whole(&plan)[0]["by_rule"], 2, "{plan}");
+    let share = "e2e: this change reaches 3 of 3 test files (100%), 2 through a `[[graph.edges]]` rule, `plan.whole_share` or more, so the whole suite waits for the full stage";
+    let (_, text) = fairlead(&dir, &["plan", "--base", "main"]);
+    assert!(text.contains(share), "{text}");
+    let (_, done) = fairlead(&dir, &["done", "--dry-run"]);
+    assert!(!done.contains("e2e/b.spec.ts"), "{done}");
+    let (code, why) = fairlead(
+        &dir,
+        &["test", "--base", "main", "--explain", "e2e/b.spec.ts"],
+    );
+    assert_eq!(code, 0, "{why}");
+    assert!(
+        why.starts_with("e2e/b.spec.ts is reached, but not run in this plan: its whole suite waits\nsrc/a.ts\n  -> e2e/b.spec.ts  ([[graph.edges]] rule)\n"),
+        "{why}"
+    );
+    assert!(why.contains(share), "{why}");
+    std::fs::remove_dir_all(&dir).unwrap();
+}

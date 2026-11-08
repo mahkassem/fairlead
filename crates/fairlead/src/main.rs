@@ -126,7 +126,8 @@ enum Command {
         /// Explain the plan of this commit, from a temporary checkout of it.
         #[arg(long, value_name = "REV")]
         head: Option<String>,
-        /// Why this test file or check is in the plan, or why it isn't.
+        /// Why this test file or check is in the plan, or why it isn't, a test
+        /// the change reaches whose whole suite waits included.
         #[arg(long, value_name = "FILE_OR_CHECK", required = true)]
         explain: Option<String>,
     },

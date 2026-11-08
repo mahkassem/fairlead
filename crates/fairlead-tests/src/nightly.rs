@@ -10,6 +10,8 @@ use fairlead_core::plan::{
     CheckSelection, DeferWhy, Deferred, InvocationKind, Reason, TestSelection,
 };
 
+use fairlead_lang::{EdgeKind, Graph};
+
 use crate::planner::Context;
 use crate::select::{runs_by_default, select};
 use crate::walk::Walk;
@@ -58,7 +60,25 @@ fn whole(
         selected,
         why: DeferWhy::Whole,
         reached,
+        by_rule: 0,
     }
+}
+
+/// Whether a test's chain from the change takes a `[[graph.edges]]` hop.
+fn through_rule(graph: &Graph, reason: &Reason) -> bool {
+    let Reason::Import { chain } = reason else {
+        return false;
+    };
+    chain.windows(2).any(|pair| {
+        let (Some(from), Some(to)) = (graph.id(&pair[0]), graph.id(&pair[1])) else {
+            return false;
+        };
+        graph
+            .importers(from)
+            .into_iter()
+            .find(|(i, _)| *i == to)
+            .is_some_and(|(_, kind)| kind == Some(EdgeKind::Rule))
+    })
 }
 
 pub fn apply(
@@ -113,7 +133,12 @@ pub fn apply(
         out.tests.retain(|t| !mine(t));
         moved = true;
         if most && !reached.is_empty() {
-            let deferred = whole(id, InvocationKind::Runner, from, suite, reached.len());
+            let mut deferred = whole(id, InvocationKind::Runner, from, suite, reached.len());
+            let graph = &cx.scan.graph;
+            deferred.by_rule = reached
+                .iter()
+                .filter(|t| through_rule(graph, &t.reason))
+                .count();
             out.deferred.push(deferred);
             continue;
         }

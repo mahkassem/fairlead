@@ -161,6 +161,10 @@ pub struct Deferred {
     /// it before merging.
     #[serde(default, skip_serializing_if = "is_zero")]
     pub reached: usize,
+    /// How many of `reached` the change reaches through a `[[graph.edges]]`
+    /// rule, so a share no import explains names its cause.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub by_rule: usize,
 }
 
 fn is_zero(n: &usize) -> bool {
@@ -199,11 +203,15 @@ impl Deferred {
                 self.id, self.from
             ),
             DeferWhy::Whole => format!(
-                "{}: this change reaches {} of {} test files ({}%), so the whole suite waits for the {} stage; run `fairlead done --full` here before merging",
+                "{}: this change reaches {} of {} test files ({}%){}, `plan.whole_share` or more, so the whole suite waits for the {} stage; run `fairlead done --full` here before merging",
                 self.id,
                 self.reached,
                 self.selected,
                 self.reached * 100 / self.selected.max(1),
+                match self.by_rule {
+                    0 => String::new(),
+                    n => format!(", {n} through a `[[graph.edges]]` rule"),
+                },
                 self.from
             ),
         }

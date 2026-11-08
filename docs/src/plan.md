@@ -153,11 +153,11 @@ At an earlier stage, and in a local `fairlead plan` or `fairlead done`, which co
 - **A change that reaches none of it**, such as a lockfile bump alone, runs none of it.
 - **A change that reaches `plan.whole_share` (0.5) or more of the suite** waits whole too, since naming most of a suite costs what running it does. The plan says how much it reaches, and `fairlead done` asks for a run here with `--full` before merging (below).
 
-What waits is listed in the plan's `deferred` with `"why": "whole"`, the stage, how many test files it leaves out, and `reached` when the change reaches most of it. `fairlead plan`, `ci plan`, the CI report and the brief each print one line for it:
+What waits is listed in the plan's `deferred` with `"why": "whole"`, the stage, how many test files it leaves out, and `reached` when the change reaches most of it. *Unreleased:* `by_rule` counts the reached files whose chain from the change takes a `[[graph.edges]]` hop, and the line names it, since no import explains such a share. `fairlead test --explain` on one of those specs says it's reached but waits with its suite, prints the chain with the `[[graph.edges]] rule` hop, and the same line; before, it said the spec wasn't selected because no changed file was among its dependencies. `fairlead plan`, `ci plan`, the CI report and the brief each print one line for it:
 
 ```text
 e2e: the whole suite runs at the full stage; this plan leaves out 41 test file(s), and `fairlead done --full` runs them here
-e2e: this change reaches 31 of 44 test files (70%), so the whole suite waits for the full stage; run `fairlead done --full` here before merging
+e2e: this change reaches 31 of 44 test files (70%), 12 through a `[[graph.edges]]` rule, `plan.whole_share` or more, so the whole suite waits for the full stage; run `fairlead done --full` here before merging
 ```
 
 `fairlead plan --full` and `fairlead done --full` plan every whole suite as before. At the full stage (a scheduled or manual run, or a pull request carrying `stages.full_label`) everything runs, and `fairlead ci workflow --write` adds a schedule to the workflow once any step waits for it: `stages.nightly`, weekdays at 19:17 UTC unless you set another cron line. `fairlead doctor` says when nothing scheduled runs `fairlead ci plan`.

@@ -127,6 +127,22 @@ fn resolved_past(scan: &Scan, deps: &HashMap<u32, u32>, test: u32, changed: u32)
     None
 }
 
+/// For a test the plan leaves out because its whole suite waits, though the
+/// change reaches it: the chain from `full`, the same change planned with
+/// `--full`, and what waits.
+pub fn deferred(plan: &Plan, full: &Plan, scan: &Scan, target: &str) -> Option<String> {
+    let test = full.tests.iter().find(|t| t.path == target)?;
+    let waits = plan
+        .deferred
+        .iter()
+        .find(|d| !d.why.is_stage() && d.reached > 0 && test.runner.as_ref() == Some(&d.id))?;
+    Some(format!(
+        "{target} is reached, but not run in this plan: its whole suite waits\n{}\n{}",
+        chain(&test.reason, &scan.graph),
+        waits.advice()
+    ))
+}
+
 pub fn explain(plan: &Plan, scan: &Scan, config: &Config, target: &str) -> Result<String, String> {
     let why = selection(plan, scan, config, target)?;
     Ok(why + &quarantine_note(plan, scan, config, target))

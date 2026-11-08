@@ -311,6 +311,10 @@ pub fn run_explain(cwd: &Path, changes: Changes, head: Option<&str>, target: &st
     let abs = std::fs::canonicalize(cwd.join(target)).unwrap_or_else(|_| cwd.join(target));
     let rel =
         fairlead_lang::tree::relative(&root, &abs).unwrap_or_else(|| target.replace('\\', "/"));
+    if let Some(text) = waiting_whole(cwd, &changes, head, &planned, &rel) {
+        println!("{text}");
+        return ExitCode::SUCCESS;
+    }
     match explain(&planned.plan, &planned.scan, &planned.config, &rel) {
         Ok(text) => {
             println!("{text}");
@@ -321,4 +325,28 @@ pub fn run_explain(cwd: &Path, changes: Changes, head: Option<&str>, target: &st
             ExitCode::from(2)
         }
     }
+}
+
+/// The explanation for a test the change reaches whose whole suite waits,
+/// from the same change planned with `--full`, so `explain` agrees with the
+/// share `plan` and `done` print.
+fn waiting_whole(
+    cwd: &Path,
+    changes: &Changes,
+    head: Option<&str>,
+    planned: &Planned,
+    target: &str,
+) -> Option<String> {
+    let plan = &planned.plan;
+    let waits = plan
+        .deferred
+        .iter()
+        .any(|d| !d.why.is_stage() && d.reached > 0);
+    if !waits || plan.tests.iter().any(|t| t.path == target) {
+        return None;
+    }
+    let mut all = changes.clone();
+    all.full_suites = true;
+    let (full, _checkout) = make_at(cwd, &all, head).ok()?;
+    fairlead_tests::explain::deferred(plan, &full.plan, &full.scan, target)
 }
