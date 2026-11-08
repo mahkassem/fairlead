@@ -345,7 +345,24 @@ pub fn render(config: &Config) -> Result<String, String> {
             },
         );
     }
+    let jobs: Vec<&str> = std::iter::once("checks")
+        .chain(gated.iter().map(|g| g.job.as_str()))
+        .collect();
+    ledger_job(&mut out, &jobs);
     Ok(out)
+}
+
+/// A job that runs only when one of `jobs` failed and says, in the run's
+/// summary, whether each failure is the change's own, inherited from the
+/// base branch, flaky or the platform's.
+fn ledger_job(out: &mut String, jobs: &[&str]) {
+    let _ = write!(
+        out,
+        "\n  ledger:\n    name: ledger\n    needs: [{}]\n    if: failure()\n    runs-on: ubuntu-latest\n    permissions:\n      contents: read   # the config that names each job's test runner\n      actions: read    # this run's and the base branch's runs and logs\n      checks: read     # the annotations that name a failing test\n    steps:\n      - uses: {CHECKOUT}\n        with:\n          persist-credentials: false\n",
+        jobs.join(", ")
+    );
+    install(out);
+    out.push_str("      - name: Is this red mine?\n        env:\n          GITHUB_TOKEN: ${{ github.token }}\n        run: |\n          fairlead ci ledger --summary\n");
 }
 
 /// Where `--insights` writes the weekly job, apart from the test workflow so

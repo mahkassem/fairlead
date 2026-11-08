@@ -137,3 +137,27 @@ jobs:
       - name: Run
         run: |
           fairlead ci run --plan "$RUNNER_TEMP/fairlead-plan.json" --only desktop-build
+
+  ledger:
+    name: ledger
+    needs: [checks, e2e, desktop-build]
+    if: failure()
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read   # the config that names each job's test runner
+      actions: read    # this run's and the base branch's runs and logs
+      checks: read     # the annotations that name a failing test
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install fairlead
+        uses: mahkassem/fairlead@3a251540c5c8bfec080a5bdd953d4030ba5f3c26 # v0.7.1
+        with:
+          version: vX.Y.Z
+          command: --version
+      - name: Is this red mine?
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          fairlead ci ledger --summary
