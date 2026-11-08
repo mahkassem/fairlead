@@ -51,7 +51,14 @@ fn hop(graph: &Graph, from: &str, to: &str) -> Option<String> {
                 None => format!("depends on package {package}"),
             })
         }
-        None => whole_module(graph, t),
+        None => {
+            let why = whole_module(graph, t)?;
+            if fairlead_lang::tree::Tree::is_source(from) {
+                return Some(why);
+            }
+            // Build output reaching a test this way reads as a bug; say how to keep it out.
+            Some(format!("{why}, which takes in {from} too though it isn't source; if it's build output, list it in .gitignore or tag its folder with a CACHEDIR.TAG"))
+        }
     }
 }
 

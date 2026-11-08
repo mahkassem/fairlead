@@ -65,7 +65,8 @@ pub fn default_base(root: &Path) -> Result<String, String> {
         .ok_or_else(|| "no base branch found; pass --base".to_string())
 }
 
-/// Changes from `base` (a commit) to the working tree, untracked files included.
+/// Changes from `base` (a commit) to the working tree, untracked files
+/// included, except those in an untracked cache directory (`CACHEDIR.TAG`).
 pub fn changes(root: &Path, base: &str) -> Result<Vec<Change>, String> {
     let diff = git(
         root,
@@ -81,10 +82,17 @@ pub fn changes(root: &Path, base: &str) -> Result<Vec<Change>, String> {
     )?;
     let mut changes = parse_name_status(&diff);
     let untracked = git(root, &["ls-files", "--others", "--exclude-standard", "-z"])?;
+    let mut cache = std::collections::HashMap::new();
     changes.extend(
         untracked
             .split('\0')
             .filter(|p| !p.is_empty())
+            .filter(|p| {
+                let dir = fairlead_lang::tree::parent(p).to_string();
+                !*cache
+                    .entry(dir)
+                    .or_insert_with_key(|d| fairlead_lang::tree::in_cache_dir(root, d))
+            })
             .map(|p| Change {
                 path: p.to_string(),
                 status: Status::Added,
@@ -140,10 +148,14 @@ pub fn config_true(root: &Path, key: &str) -> bool {
 }
 
 /// The tree the plan was made from: HEAD's tree id when the working tree
-/// matches it, else `None`.
+/// matches it, untracked cache directories aside, else `None`.
 pub fn clean_tree_id(root: &Path) -> Option<String> {
     let status = git(root, &["status", "--porcelain", "-z"]).ok()?;
-    if !status.is_empty() {
+    let clean = status.split('\0').filter(|r| !r.is_empty()).all(|r| {
+        r.strip_prefix("?? ")
+            .is_some_and(|p| fairlead_lang::tree::in_cache_dir(root, p))
+    });
+    if !clean {
         return None;
     }
     git(root, &["rev-parse", "HEAD^{tree}"])

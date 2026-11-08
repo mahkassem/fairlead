@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- An untracked folder holding a `CACHEDIR.TAG` file (the Cache Directory Tagging spec's signature), such as a build tool's output, no longer joins a plan's changed paths, the graph or the tree hash `fairlead done` records ([#282](https://github.com/mahkassem/fairlead/issues/282)). Its files selected tests through a dynamic import's whole module, and another tool writing into it made a passing `done` stale though no source had changed. `test --explain` now says when a file that isn't source reaches a test only through a whole module, and how to keep build output out.
+
 ## 0.15.1 (2026-11-08)
 
 ### Fixed
