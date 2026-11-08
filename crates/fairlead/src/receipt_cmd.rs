@@ -191,9 +191,13 @@ fn gate(log: &str, tree: &str) -> Gate {
         };
     };
     let steps = e["steps"].as_array().cloned().unwrap_or_default();
-    let passed = e["decision"] == "pass";
+    let state = match e["decision"].as_str() {
+        Some("pass") => "passed",
+        Some("deferred") => "passed, with a whole suite still to run (`fairlead done --full`)",
+        _ => "failed",
+    };
     Gate {
-        state: if passed { "passed" } else { "failed" }.into(),
+        state: state.into(),
         at: e["at"].as_str().map(String::from),
         failed_step: steps
             .iter()

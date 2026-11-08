@@ -246,12 +246,25 @@ fn targets(
 
 fn in_plan(plan: &Plan, target: &Target) -> Option<HitBy> {
     match target {
-        // A plan that selects everything also lists every test.
-        Target::Test(_) if plan.all => Some(HitBy::RunAll),
+        // A plan that selects everything also lists every test, but for a
+        // suite whose whole run waits for a later stage.
+        Target::Test(path) if plan.all && (!waits_whole(plan) || listed(plan, path)) => {
+            Some(HitBy::RunAll)
+        }
         Target::Test(path) if plan.tests.iter().any(|t| &t.path == path) => Some(HitBy::Selected),
         Target::Check(id) if plan.checks.iter().any(|c| &c.id == id) => Some(HitBy::Check),
         _ => None,
     }
+}
+
+fn waits_whole(plan: &Plan) -> bool {
+    plan.deferred
+        .iter()
+        .any(|d| !d.why.is_stage() && d.kind == fairlead_core::plan::InvocationKind::Runner)
+}
+
+fn listed(plan: &Plan, path: &str) -> bool {
+    plan.tests.iter().any(|t| t.path == path)
 }
 
 /// A plan at a commit, with the test files the tree had.
@@ -295,6 +308,8 @@ impl Replayer<'_> {
         let input = Input {
             base_files: fairlead_tests::planner::base_files(&self.worktree.path, base, &changes),
             everything: None,
+            full_suites: false,
+            stage: None,
             changes,
             base: Some(base.to_string()),
             head: head.to_string(),

@@ -135,6 +135,47 @@ overrides_run_all = true
 
 Don't set it for a file something outside the rule's tests reads, such as a config another package's config imports or a script names with `--config`. When the rule claims no test for the path, it runs everything as before.
 
+## Whole suites at a later stage
+
+*Since 0.15.0:* a slow suite, such as end-to-end, browser or a full API suite, doesn't have to run whole on every pull request. A runner or check with `all_from` names the earliest [CI stage](ci.md#stages) at which its whole suite runs; before it, the step runs only what the change reaches:
+
+```toml
+[[tests.runners]]
+id = "e2e"
+match = ["e2e/**"]
+command = ["npx", "playwright", "test", "{files}"]
+all_from = "full"   # the whole suite runs on the schedule, or by hand
+```
+
+At an earlier stage, and in a local `fairlead plan` or `fairlead done`, which count as `ready`:
+
+- **A change that reaches some of the suite** runs those specs by name, even when a `plan.run_all` path makes the rest of the plan run everything. A lockfile bump plus an edit to `src/cart.ts` runs every unit test and the specs that import the cart, not the whole end-to-end suite.
+- **A change that reaches none of it**, such as a lockfile bump alone, runs none of it.
+- **A change that reaches `plan.whole_share` (0.5) or more of the suite** waits whole too, since naming most of a suite costs what running it does. The plan says how much it reaches, and `fairlead done` asks for a run here with `--full` before merging (below).
+
+What waits is listed in the plan's `deferred` with `"why": "whole"`, the stage, how many test files it leaves out, and `reached` when the change reaches most of it. `fairlead plan`, `ci plan`, the CI report and the brief each print one line for it:
+
+```text
+e2e: the whole suite runs at the full stage; this plan leaves out 41 test file(s), and `fairlead done --full` runs them here
+e2e: this change reaches 31 of 44 test files (70%), so the whole suite waits for the full stage; run `fairlead done --full` here before merging
+```
+
+`fairlead plan --full` and `fairlead done --full` plan every whole suite as before. At the full stage (a scheduled or manual run, or a pull request carrying `stages.full_label`) everything runs, and `fairlead ci workflow --write` adds a schedule to the workflow once any step waits for it: `stages.nightly`, weekdays at 19:17 UTC unless you set another cron line. `fairlead doctor` says when nothing scheduled runs `fairlead ci plan`.
+
+The trade-off: a change the import graph can't follow, such as a dependency bump that breaks the browser suite, merges without that suite having run, and the scheduled run finds it within a day. [Replay](replay.md) measures how often that happens on your history. A plan made when a graph provider failed runs every suite whole, since there's nothing to narrow by.
+
+### The project's phase
+
+`phase` says where the project is in its life, so a team doesn't set `all_from` on every step:
+
+| `phase` | Steps with no `all_from` | `fairlead done` when a change reaches most of a waiting suite |
+| --- | --- | --- |
+| `early`: nothing is deployed | every whole suite waits for the full stage | passes; the scheduled run proves it |
+| `testing`: testers use it, nothing is live | every whole suite waits for the full stage | passes the steps it ran, records `deferred`, and `done --check` stays false until a `done --full` passes on the same tree |
+| `live`, or not set | run as each step says | as for `testing` |
+
+A step's own `all_from` wins over the phase: `all_from = "ready"` keeps a fast unit suite whole on every pull request in an early project. The brief prints the phase and what it asks of the change, and `fairlead doctor` reads the workflows for a deploy to people (a `production` environment, `helm upgrade`, `kubectl apply` and the like) and says when it disagrees with `phase`. It never changes the config.
+
 ## Unreached files
 
 A changed file that isn't a test and has no test anywhere among the files depending on it is *unreached* (a deleted test file and a package manifest aren't, since there's nothing left to run for one and the other already stands for its package): something the graph can't see uses it, like a setup file named only in a runner config. It's always listed under `unreached` with a warning, so you can write the owner rule that covers it. Unless one already claims a test for it, `tests.unreached` decides what it selects. An owner rule whose `match` names no test file in this config, as can happen when a layer replaces `tests.match`, doesn't count as covering the path, and `config check` warns about it:

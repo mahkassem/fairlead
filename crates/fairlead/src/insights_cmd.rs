@@ -170,7 +170,7 @@ fn gather(root: &Path, args: &InsightsArgs, cfg: &config::Config) -> Result<Insi
     {
         match v["stage"].as_str() {
             Some("done") => {
-                if v["decision"] == "pass" {
+                if v["decision"] == "pass" || v["decision"] == "deferred" {
                     out.done.passed += 1;
                 } else {
                     out.done.failed += 1;

@@ -187,6 +187,13 @@ fn header(out: &mut String, config: &Config) {
     for branch in config.stages_or_default().environments.items() {
         let _ = writeln!(out, "      - {}", scalar(branch));
     }
+    if config.has_all_from() {
+        let _ = writeln!(
+            out,
+            "  schedule:\n    - cron: {}   # the full stage: every whole suite, in UTC",
+            scalar(&config.stages_or_default().nightly)
+        );
+    }
     out.push_str("  workflow_dispatch:\n\npermissions:\n  contents: read   # each job widens only what it needs\n\njobs:\n");
 }
 

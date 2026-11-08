@@ -108,6 +108,8 @@ The plan still decides which tests run; the stage decides whether a runner or ch
 
 A config with no `[stages]` and no `from` plans exactly as before, with no stage and the same plan ids. So does `--stage none`.
 
+*Since 0.15.0:* a step's `all_from` is the earliest stage its whole suite runs at. Before it, the step runs only the tests or files the change reaches, and the rest is listed in `deferred` with `"why": "whole"` ([Whole suites at a later stage](plan.md#whole-suites-at-a-later-stage)). A pull request never runs such a suite whole unless it carries `stages.full_label`; the schedule does.
+
 ### Reuse at merge
 
 With `stages.reuse` (on by default once `[stages]` is set), a merge doesn't run again what its pull request already passed on the same bytes:
@@ -139,7 +141,7 @@ At any other stage the flag is ignored with a one-line note, so one plan command
 
 *Since 0.8.0:* `fairlead ci workflow` prints a GitHub Actions workflow made from the config, and `fairlead ci workflow --write` writes it to `.github/workflows/fairlead.yml`. For the config above it has:
 
-- **Triggers:** `pull_request` (opened, synchronize, reopened, ready_for_review, converted_to_draft, labeled and unlabeled, so the stage follows the pull request), `push` to `stages.environments`, and `workflow_dispatch`.
+- **Triggers:** `pull_request` (opened, synchronize, reopened, ready_for_review, converted_to_draft, labeled and unlabeled, so the stage follows the pull request), `push` to `stages.environments`, and `workflow_dispatch`. *Since 0.15.0:* and `schedule`, at `stages.nightly`, once a step's whole suite waits for the full stage.
 - **`plan`:** checks out the whole history, installs Fairlead with the action at this release, runs `fairlead ci plan --format github` with `--since-green` for each job of its own, and uploads the plan as the `fairlead-plan` artifact. Its outputs are `stage` and every `run_<id>`.
 - **`checks`:** runs the plan with `--except` for each step that has a job of its own. A newer push to the same pull request or branch cancels it.
 - **A job per runner or check whose `from` is `merge` or `full`,** here `e2e` and `desktop-build`: it runs only when `needs.plan.outputs.run_<id> == 'true'`, with `fairlead ci run --only <id>`. Its concurrency group is per workflow, job and branch, with `cancel-in-progress: false`, which is GitHub's own batching: one run at a time and only the newest waiting. A waiting run a newer push replaces is covered by the newer run's plan, since both plan from the last green run.

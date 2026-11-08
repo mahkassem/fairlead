@@ -255,6 +255,7 @@ pub fn markdown(plan: &Plan, results: Option<&Results>, receipt: Option<&str>) -
         let later: Vec<String> = plan
             .deferred
             .iter()
+            .filter(|d| d.why.is_stage())
             .map(|d| format!("`{}` (from {}, {} selected)", d.id, d.from, d.selected))
             .collect();
         out.push_str(&format!("Stage: {stage}."));
@@ -265,6 +266,17 @@ pub fn markdown(plan: &Plan, results: Option<&Results>, receipt: Option<&str>) -
             ));
         }
         out.push_str("\n\n");
+    }
+    let whole: Vec<String> = plan
+        .deferred
+        .iter()
+        .filter(|d| !d.why.is_stage())
+        .map(|d| format!("- {}\n", d.advice()))
+        .collect();
+    if !whole.is_empty() {
+        out.push_str("Left for a later stage:\n\n");
+        out.push_str(&whole.concat());
+        out.push('\n');
     }
     if let Some(shards) = &plan.shards {
         let by = match shards.by {

@@ -158,10 +158,11 @@ pub fn from_of(config: &Config, id: &str, kind: &InvocationKind) -> CiStage {
 /// tests and checks move to `deferred`, and the plan gets an id of its own.
 pub fn apply(plan: &mut Plan, config: &Config, stage: CiStage) {
     let later = |id: &str, kind: &InvocationKind| from_of(config, id, kind) > stage;
-    let mut deferred: Vec<Deferred> = Vec::new();
+    // Whole suites the planner left out stay listed beside the stage's own.
+    let mut deferred: Vec<Deferred> = std::mem::take(&mut plan.deferred);
     let mut defer = |id: &str, kind: InvocationKind, count: usize| match deferred
         .iter_mut()
-        .find(|d| d.id == id && d.kind == kind)
+        .find(|d| d.id == id && d.kind == kind && d.why.is_stage())
     {
         Some(d) => d.selected += count,
         None => deferred.push(Deferred {
@@ -169,6 +170,8 @@ pub fn apply(plan: &mut Plan, config: &Config, stage: CiStage) {
             from: from_of(config, id, &kind),
             kind,
             selected: count,
+            why: Default::default(),
+            reached: 0,
         }),
     };
     plan.tests.retain(|t| match &t.runner {
@@ -366,6 +369,7 @@ mod tests {
             modules: Vec::new(),
             files: None,
             from: None,
+            all_from: None,
         };
         config.checks = vec![check("e2e-web"), check("e2e_web")].into();
         let plan: Plan = serde_json::from_value(json!({

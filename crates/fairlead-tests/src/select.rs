@@ -25,7 +25,7 @@ pub fn selection(cx: &Context, test: &TestFile, reason: Reason) -> TestSelection
     }
 }
 
-fn runs_by_default(cx: &Context, test: &TestFile) -> bool {
+pub(crate) fn runs_by_default(cx: &Context, test: &TestFile) -> bool {
     test.class != TestClass::Demand || cx.changed.contains(&test.path)
 }
 

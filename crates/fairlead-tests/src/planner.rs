@@ -5,7 +5,9 @@
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 
 use fairlead_core::config::{Config, LockfileMode, TestClass, Unresolved};
-use fairlead_core::plan::{Change, Plan, Reason, Status, Warning, VERSION};
+use fairlead_core::plan::{
+    Change, CheckSelection, Plan, Reason, Status, TestSelection, Warning, VERSION,
+};
 use fairlead_lang::deleted::attach_deleted;
 use fairlead_lang::tree::parent;
 use fairlead_lang::Scan;
@@ -33,6 +35,10 @@ pub struct Input {
     /// Run everything whatever changed, named as the reason, such as a
     /// full CI stage.
     pub everything: Option<String>,
+    /// Run whole suites that wait for a later stage, as `--full` asks.
+    pub full_suites: bool,
+    /// The CI stage the plan is made for; a local plan counts as `ready`.
+    pub stage: Option<fairlead_core::config::CiStage>,
 }
 
 /// The one lockfile the planner can scope, at the repository root.
@@ -224,16 +230,20 @@ pub fn plan(scan: &mut Scan, config: &Config, input: Input) -> Result<Plan, Stri
         });
     }
     warnings.extend(coverage_warning(scan, config));
+    // A provider that failed leaves nothing to narrow by, so every suite runs.
+    let mut doubt = false;
     if trigger.is_none() {
         if let Some((path, warning)) = provider_failed(scan, &cx.changed) {
             warnings.push(warning);
             trigger = Some((path, None));
+            doubt = true;
         }
     }
     if trigger.is_none() {
         trigger = input.everything.clone().map(|why| (why, None));
     }
     let walked = start_walk(&cx);
+    let triggered = trigger.is_some();
     let (tests, unreached, all_reason) = match trigger {
         Some((path, change)) => {
             let reason = Reason::RunAll { path, change };
@@ -243,6 +253,9 @@ pub fn plan(scan: &mut Scan, config: &Config, input: Input) -> Result<Plan, Stri
     };
     let all = all_reason.is_some();
     let checks = checks(&cx, &walked, all_reason.as_ref())?;
+    let wide = (all_reason.as_ref(), triggered);
+    let narrowed = narrow(&cx, &walked, (tests, checks), &input, wide, doubt)?;
+    let (tests, checks) = (narrowed.tests, narrowed.checks);
     warn_unresolved(&cx, &walked, &mut warnings);
     // An empty universe is almost always a config that doesn't fit the
     // repository yet, which reads as a plan that found nothing to run.
@@ -265,7 +278,7 @@ pub fn plan(scan: &mut Scan, config: &Config, input: Input) -> Result<Plan, Stri
     if all {
         warnings.extend(crate::quarantine::narrowed(&cx, &tests, &quarantined));
     }
-    let invocations = invocations(&cx, &tests, &checks, all, &quarantined);
+    let invocations = invocations(&cx, &tests, &checks, all, &narrowed.named, &quarantined);
     let plan_id = crate::digest::plan_id(
         &input.config_digest,
         &input.tree_hash,
@@ -295,10 +308,33 @@ pub fn plan(scan: &mut Scan, config: &Config, input: Input) -> Result<Plan, Stri
         warnings,
         quarantined,
         stage: None,
-        deferred: Vec::new(),
+        deferred: narrowed.deferred,
+        named: narrowed.named.into_iter().collect(),
         reused: None,
         shards: None,
     })
+}
+
+/// The plan's tests and checks with whole suites a later stage runs taken
+/// out, unless `--full` asks for them or a failed provider leaves nothing to
+/// narrow by.
+fn narrow(
+    cx: &Context,
+    walked: &Walk,
+    (tests, checks): (Vec<TestSelection>, Vec<CheckSelection>),
+    input: &Input,
+    (all_reason, triggered): (Option<&Reason>, bool),
+    doubt: bool,
+) -> Result<crate::nightly::Narrowed, String> {
+    if input.full_suites || doubt {
+        return Ok(crate::nightly::Narrowed::unchanged(tests, checks));
+    }
+    let scope = crate::nightly::Scope {
+        stage: input.stage.unwrap_or(fairlead_core::config::CiStage::Ready),
+        all_reason,
+        triggered,
+    };
+    crate::nightly::apply(cx, walked, tests, checks, &scope)
 }
 
 /// The packages a changed root pnpm lockfile reaches, or `None` to treat it

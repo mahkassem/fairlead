@@ -94,6 +94,13 @@ pub fn text(plan: &Plan) -> String {
             let _ = writeln!(out, "  ({}) {}{held}", inv.cwd, inv.argv.join(" "));
         }
     }
+    let whole: Vec<_> = plan.deferred.iter().filter(|d| !d.why.is_stage()).collect();
+    if !whole.is_empty() {
+        let _ = writeln!(out, "\nleft for later:");
+        for d in whole {
+            let _ = writeln!(out, "  {}", d.advice());
+        }
+    }
     let other: Vec<_> = plan
         .warnings
         .iter()

@@ -22,7 +22,7 @@ pub use load::{
 pub use needs::{env_names, Need};
 pub use planning::{Globs, LockfileMode, Plan, RunAll, RunAllKinds};
 pub use quarantine::{Condition, Os, PlatformQuarantine};
-pub use stages::{CiStage, Stages};
+pub use stages::{CiStage, Phase, Stages};
 pub use tracker::{Tracker, TrackerKind};
 pub use validate::{is_date, plan_globs, validate, Problem, GUARD_RULES};
 
@@ -86,6 +86,10 @@ pub struct Config {
     /// The oldest Fairlead version this config needs, such as "0.2".
     #[serde(skip_serializing_if = "Option::is_none")]
     pub fairlead: Option<String>,
+    /// Where the project is in its life: before a live deployment, whole
+    /// suites wait for the full stage unless a step says otherwise.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub phase: Option<Phase>,
     /// Framework packs layered under this config: a built-in pack's name,
     /// such as "laravel", or a pack file's path from the project root. Left
     /// out of the digest when empty; a pack's rules count through the merge.
@@ -381,6 +385,10 @@ pub struct Runner {
     /// The earliest CI stage this runner runs at; `ready` when unset.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub from: Option<CiStage>,
+    /// The earliest stage its whole suite runs at; earlier, it runs only
+    /// the tests a change reaches. Unset, the project's `phase` decides.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub all_from: Option<CiStage>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, JsonSchema)]
@@ -437,6 +445,10 @@ pub struct Check {
     /// The earliest CI stage this check runs at; `draft` when unset.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub from: Option<CiStage>,
+    /// The earliest stage it runs over every file it matches; earlier, only
+    /// on changed files. Unset, the project's `phase` decides.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub all_from: Option<CiStage>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]

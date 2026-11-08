@@ -222,6 +222,7 @@ fn plan(cwd: &Path, mut changes: Changes, opts: &PlanOpts) -> Result<ExitCode, S
     let config = crate::plan_cmd::config_for(cwd, &changes)?;
     let event = stage::Event::from_env();
     let resolved = stage::resolve(opts.stage, &config, event.as_ref());
+    changes.stage = resolved.stage;
     if let Some(s) = resolved.stage {
         println!("stage: {s} ({})", resolved.why);
         if s == fairlead_core::config::CiStage::Full {
@@ -267,10 +268,7 @@ fn plan(cwd: &Path, mut changes: Changes, opts: &PlanOpts) -> Result<ExitCode, S
         path.display()
     );
     for d in &planned.plan.deferred {
-        println!(
-            "  {} waits for the {} stage ({} selected)",
-            d.id, d.from, d.selected
-        );
+        println!("  {}", d.advice());
     }
     Ok(ExitCode::SUCCESS)
 }

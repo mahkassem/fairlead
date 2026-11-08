@@ -363,6 +363,13 @@ Migrate updates nothing in your files. 0.15.0 adds `[[needs]]`, which
 `fairlead doctor` checks; the done gate doesn't read it yet
 ([Needs](done.md#needs)).
 
+0.15.0 also adds `all_from` on runners and checks and the top-level
+`phase`, which leave slow suites to a scheduled run. A config that sets
+neither plans exactly as before. To use them, set `phase = "early"` while
+nothing is deployed, or `all_from = "full"` on a slow runner, then run
+`fairlead ci workflow --write` again so the workflow gets its schedule
+([Whole suites at a later stage](plan.md#whole-suites-at-a-later-stage)).
+
 ## Going back to an older release
 
 Install the older release, then run its `hooks uninstall` and

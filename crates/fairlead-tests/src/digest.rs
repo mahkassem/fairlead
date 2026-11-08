@@ -124,6 +124,7 @@ mod tests {
             all_command: None,
             exclude_arg: None,
             from,
+            all_from: None,
         };
         let mut config = Config::default();
         config.tests.runners = vec![runner(None)].into();

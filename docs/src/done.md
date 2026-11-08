@@ -33,6 +33,8 @@ guard  = true
 
 A check `done.always` names needs no `paths` or `modules`, since it always runs.
 
+*Since 0.15.0:* a suite whose whole run waits for a later stage ([Whole suites](plan.md#whole-suites-at-a-later-stage)) runs only the tests the change reaches, and the gate prints one line for what it left out. When the change reaches most of such a suite, the gate passes the steps it ran but isn't finished: the record says `deferred`, `done --check` stays false and the Stop hook sends the agent back, until `fairlead done --full`, which runs every whole suite, passes on the same tree. In a project whose `phase` is `early`, nothing is deployed, so the gate passes and the scheduled run proves the suite.
+
 ## The record
 
 Every run appends a `done` event to `.git/fairlead/events.jsonl`: the plan's tree hash, whether it passed, and each step's id, outcome and seconds, never its output. A step that wasn't provable here is recorded with `"quarantined": true`. A result belongs to one tree. The tree hash is HEAD's tree when the working tree is clean, else a hash of every file's path and blob id, so any edit after a pass makes it stale, and `--check` says so. Nothing needs clearing by hand, and switching branches or rebasing can't make an old result look current.
