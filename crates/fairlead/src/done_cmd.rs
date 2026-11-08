@@ -7,7 +7,7 @@ use std::path::Path;
 use std::process::ExitCode;
 use std::time::Instant;
 
-use fairlead_core::config::{DoneTests, OnStop};
+use fairlead_core::config::{DoneTests, OnStop, Profile};
 use fairlead_core::plan::{Invocation, InvocationKind, Quarantined};
 use fairlead_guard::events::{Event, EventLog, Step};
 use fairlead_tests::{git, quarantine};
@@ -115,7 +115,12 @@ fn gate(args: &DoneArgs, cwd: &Path) -> Result<ExitCode, String> {
         // The log is a record; failing to write it never changes the outcome.
         let _ = log.append(&event);
     }
-    for d in planned.plan.deferred.iter().filter(|d| !d.why.is_stage()) {
+    let deferred = planned
+        .plan
+        .deferred
+        .iter()
+        .filter(|_| !guard_only(&planned));
+    for d in deferred.filter(|d| !d.why.is_stage()) {
         println!("done: {}", d.advice());
     }
     if passed && !waiting.is_empty() {
@@ -145,7 +150,7 @@ fn gate(args: &DoneArgs, cwd: &Path) -> Result<ExitCode, String> {
 /// run is enough.
 fn waiting(planned: &crate::plan_cmd::Planned) -> Vec<String> {
     let early = planned.config.phase == Some(fairlead_core::config::Phase::Early);
-    if early {
+    if early || guard_only(planned) {
         return Vec::new();
     }
     planned
@@ -157,9 +162,48 @@ fn waiting(planned: &crate::plan_cmd::Planned) -> Vec<String> {
         .collect()
 }
 
+fn guard_only(planned: &crate::plan_cmd::Planned) -> bool {
+    planned.config.profile == Profile::Guard
+}
+
 /// The planned tests and checks `[done]` asks for, then `done.always`
-/// checks the plan didn't select, then the guard.
+/// checks the plan didn't select, then the guard and the `[pr]` rules. The
+/// guard-only profile runs only the last two.
 pub fn steps(planned: &crate::plan_cmd::Planned) -> Result<Vec<Invocation>, String> {
+    let mut out = if guard_only(planned) {
+        Vec::new()
+    } else {
+        planned_steps(planned)?
+    };
+    let me = || -> Result<String, String> {
+        std::env::current_exe()
+            .map(|p| p.to_string_lossy().into_owned())
+            .map_err(|e| format!("can't find this binary: {e}"))
+    };
+    let mut fairlead = |id: &str, args: &[&str]| -> Result<(), String> {
+        let mut argv = vec![me()?];
+        argv.extend(args.iter().map(|a| a.to_string()));
+        out.push(Invocation {
+            id: id.into(),
+            kind: InvocationKind::Check,
+            cwd: ".".into(),
+            argv,
+            quarantined: None,
+        });
+        Ok(())
+    };
+    if planned.config.done.guard || guard_only(planned) {
+        fairlead("guard", &["guard", "check"])?;
+    }
+    if planned.config.pr.is_some() {
+        fairlead("pr", &["pr", "check", "--local"])?;
+    }
+    Ok(out)
+}
+
+/// The planned tests and checks `[done]` asks for, then `done.always`
+/// checks the plan didn't select.
+fn planned_steps(planned: &crate::plan_cmd::Planned) -> Result<Vec<Invocation>, String> {
     let done = &planned.config.done;
     let mut out: Vec<Invocation> = planned
         .plan
@@ -212,20 +256,6 @@ pub fn steps(planned: &crate::plan_cmd::Planned) -> Result<Vec<Invocation>, Stri
             cwd: ".".into(),
             argv,
             quarantined: held,
-        });
-    }
-    if done.guard {
-        let me = std::env::current_exe().map_err(|e| format!("can't find this binary: {e}"))?;
-        out.push(Invocation {
-            id: "guard".into(),
-            kind: InvocationKind::Check,
-            cwd: ".".into(),
-            argv: vec![
-                me.to_string_lossy().into_owned(),
-                "guard".into(),
-                "check".into(),
-            ],
-            quarantined: None,
         });
     }
     Ok(out)

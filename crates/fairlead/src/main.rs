@@ -27,6 +27,7 @@ mod hooks_cmd;
 mod import_cmd;
 mod import_rules_cmd;
 mod init_cmd;
+mod init_guard;
 mod insights_cmd;
 mod knowledge;
 mod lessons_cmd;
@@ -37,6 +38,7 @@ mod migrate_notes;
 mod needs;
 mod phase;
 mod plan_cmd;
+mod pr_cmd;
 mod receipt_cmd;
 mod replay_cmd;
 mod resume_cmd;
@@ -159,6 +161,12 @@ enum Command {
         /// Override a config value for this run.
         #[arg(long = "set", value_name = "KEY=VALUE", global = true)]
         sets: Vec<String>,
+    },
+    /// The rules a change meets before review, from `[pr]`: in CI from the
+    /// pull request's event, elsewhere from git and `gh`.
+    Pr {
+        #[command(subcommand)]
+        action: pr_cmd::PrAction,
     },
     /// Run the gate a change passes before it's finished: its planned tests
     /// and checks, `done.always` and the guard, recorded against the tree.
@@ -584,6 +592,7 @@ fn main() -> ExitCode {
         Some(Command::Hooks { action }) => hooks_cmd::run(action, &cwd()),
         Some(Command::Migrate { args }) => migrate_cmd::run(args, &cwd()),
         Some(Command::Done { args }) => done_cmd::run(args, &cwd()),
+        Some(Command::Pr { action }) => pr_cmd::run(action, &cwd()),
         Some(Command::Brief { args }) => brief_cmd::run(args, &cwd()),
         Some(Command::Context { args }) => context_cmd::run(args, &cwd()),
         Some(Command::Resume { args }) => resume_cmd::run(args, &cwd()),

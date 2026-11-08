@@ -57,6 +57,7 @@ pub fn run() -> ExitCode {
     let Ok(loaded) = config::load(&dir, &LoadOptions::from_process(Vec::new())) else {
         return ExitCode::SUCCESS;
     };
+    let loaded_in = start.elapsed();
     let settings = loaded.config.guard.clone();
     let root = if loaded.files.is_empty() {
         crate::graph_cmd::repo_root(&dir)
@@ -82,6 +83,8 @@ pub fn run() -> ExitCode {
     let record = |decision: &'static str, outcome: Option<&Outcome>| {
         let Some(log) = &log else { return };
         let mut event = Event::new("write", decision, start.elapsed());
+        event.load_ms = Some((loaded_in.as_secs_f64() * 10_000.0).round() / 10.0);
+        event.budget_ms = Some(settings.budget_ms);
         event.event = Some("PreToolUse".into());
         event.tool = tool.clone();
         // So `skills report` can tell an agent whose use it can't see by its tools.

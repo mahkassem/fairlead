@@ -4,7 +4,30 @@
 
 /// The command lefthook runs before each commit.
 pub const RUN: &str = "fairlead guard check --staged";
-const NAME: &str = "fairlead-guard";
+/// The command lefthook runs before each push.
+pub const PUSH_RUN: &str = "fairlead guard check --push";
+
+/// One of Fairlead's entries: the git hook it runs at, its name and command.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Entry {
+    pub hook: &'static str,
+    pub name: &'static str,
+    pub run: &'static str,
+}
+
+/// The commit stage, run before each commit.
+pub const COMMIT: Entry = Entry {
+    hook: "pre-commit",
+    name: "fairlead-guard",
+    run: RUN,
+};
+
+/// Migration numbers against a fresh base and the `[pr]` rules, before a push.
+pub const PUSH: Entry = Entry {
+    hook: "pre-push",
+    name: "fairlead-push",
+    run: PUSH_RUN,
+};
 /// The config names lefthook reads, in the order it looks for them.
 pub const FILES: [&str; 4] = [
     "lefthook.yml",
@@ -105,12 +128,21 @@ fn child_indent(lines: &[String], at: usize) -> Option<usize> {
 }
 
 pub fn present(text: &str) -> bool {
-    text.lines().any(runs_stage)
+    present_entry(text, &COMMIT)
 }
 
-/// Whether a line is a `run:` of the commit stage, called by name, by path
-/// or through a package runner (`npx`, `bun x`, `pnpm exec`).
+pub fn present_entry(text: &str, entry: &Entry) -> bool {
+    text.lines().any(|l| runs(l, entry))
+}
+
+#[cfg(test)]
 fn runs_stage(line: &str) -> bool {
+    runs(line, &COMMIT)
+}
+
+/// Whether a line is a `run:` of the entry, called by name, by path or
+/// through a package runner (`npx`, `bun x`, `pnpm exec`).
+fn runs(line: &str, entry: &Entry) -> bool {
     let line = line.trim();
     let line = line.strip_prefix("- ").unwrap_or(line);
     let Some(value) = line.strip_prefix("run:") else {
@@ -118,38 +150,42 @@ fn runs_stage(line: &str) -> bool {
     };
     let value = value.trim().trim_matches(|c| c == '"' || c == '\'');
     value
-        .strip_suffix(RUN)
+        .strip_suffix(entry.run)
         .is_some_and(|before| before.is_empty() || before.ends_with([' ', '/']))
 }
 
 /// The config with the entry added: under `pre-commit` `commands`, as a
 /// `jobs` item where the config uses jobs, or as a new block at the end.
 pub fn insert(text: &str, run: &str) -> Insert {
-    if present(text) {
+    insert_entry(text, &COMMIT, run)
+}
+
+/// `insert` for any entry, under its own hook.
+pub fn insert_entry(text: &str, entry: &Entry, run: &str) -> Insert {
+    let (hook, name) = (entry.hook, entry.name);
+    if present_entry(text, entry) {
         return Insert::Already;
     }
     let mut doc = Lines::parse(text);
     let lines = &doc.lines;
     let pre = lines
         .iter()
-        .position(|l| indent(l) == 0 && (is_header(l, "pre-commit") || is_inline(l, "pre-commit")));
+        .position(|l| indent(l) == 0 && (is_header(l, hook) || is_inline(l, hook)));
     let Some(pre) = pre else {
         if !doc.lines.is_empty() && !doc.trailing {
             doc.trailing = true;
         }
         doc.lines.extend([
-            "pre-commit:".to_string(),
+            format!("{hook}:"),
             "  commands:".to_string(),
-            format!("    {NAME}:"),
+            format!("    {name}:"),
             format!("      run: {run}"),
         ]);
         doc.trailing = true;
         return Insert::Text(doc.join());
     };
-    if is_inline(&lines[pre], "pre-commit") {
-        return Insert::Refused(
-            "`pre-commit` is written on one line; add the command to it by hand",
-        );
+    if is_inline(&lines[pre], hook) {
+        return Insert::Refused("the hook is written on one line; add the command to it by hand");
     }
     let end = block_end(lines, pre);
     let child = child_indent(lines, pre).unwrap_or(2);
@@ -172,7 +208,7 @@ pub fn insert(text: &str, run: &str) -> Insert {
         (
             c + 1,
             vec![
-                format!("{}{NAME}:", " ".repeat(inner)),
+                format!("{}{name}:", " ".repeat(inner)),
                 format!("{}run: {run}", " ".repeat(deeper)),
             ],
         )
@@ -184,7 +220,7 @@ pub fn insert(text: &str, run: &str) -> Insert {
         let pad = " ".repeat(item);
         (
             j + 1,
-            vec![format!("{pad}- name: {NAME}"), format!("{pad}  run: {run}")],
+            vec![format!("{pad}- name: {name}"), format!("{pad}  run: {run}")],
         )
     } else {
         let pad = |n: usize| " ".repeat(n);
@@ -192,7 +228,7 @@ pub fn insert(text: &str, run: &str) -> Insert {
             pre + 1,
             vec![
                 format!("{}commands:", pad(child)),
-                format!("{}{NAME}:", pad(child + step)),
+                format!("{}{name}:", pad(child + step)),
                 format!("{}run: {run}", pad(child + 2 * step)),
             ],
         )
@@ -204,18 +240,24 @@ pub fn insert(text: &str, run: &str) -> Insert {
 /// The config without the entry, and without any `commands`, `jobs` or
 /// `pre-commit` it leaves empty; None when the entry isn't there.
 pub fn remove(text: &str) -> Option<String> {
+    remove_entry(text, &COMMIT)
+}
+
+/// `remove` for any entry, and the hook it leaves empty.
+pub fn remove_entry(text: &str, entry: &Entry) -> Option<String> {
+    let name = entry.name;
     let mut doc = Lines::parse(text);
     let at = (0..doc.lines.len().saturating_sub(1)).find(|&i| {
         let head = doc.lines[i].trim();
-        (head == format!("{NAME}:") || head == format!("- name: {NAME}"))
-            && runs_stage(&doc.lines[i + 1])
+        (head == format!("{name}:") || head == format!("- name: {name}"))
+            && runs(&doc.lines[i + 1], entry)
     })?;
     doc.lines.drain(at..at + 2);
     let mut i = at;
     while i > 0 {
         let header = i - 1;
         let line = &doc.lines[header];
-        if !["commands", "jobs", "pre-commit"]
+        if !["commands", "jobs", entry.hook]
             .iter()
             .any(|k| is_header(line, k))
         {
@@ -239,7 +281,11 @@ pub fn remove(text: &str) -> Option<String> {
 
 /// The command the commit stage's `run:` line holds, unquoted.
 pub fn current_run(text: &str) -> Option<String> {
-    let line = text.lines().find(|l| runs_stage(l))?;
+    current_run_of(text, &COMMIT)
+}
+
+pub fn current_run_of(text: &str, entry: &Entry) -> Option<String> {
+    let line = text.lines().find(|l| runs(l, entry))?;
     let value = line.trim().trim_start_matches("- ").strip_prefix("run:")?;
     Some(
         value
@@ -252,8 +298,12 @@ pub fn current_run(text: &str) -> Option<String> {
 /// The config with the commit stage's `run:` line holding `run`, its
 /// indentation and quotes kept; None when the entry isn't there.
 pub fn set_run(text: &str, run: &str) -> Option<String> {
+    set_run_of(text, &COMMIT, run)
+}
+
+pub fn set_run_of(text: &str, entry: &Entry, run: &str) -> Option<String> {
     let mut doc = Lines::parse(text);
-    let at = doc.lines.iter().position(|l| runs_stage(l))?;
+    let at = doc.lines.iter().position(|l| runs(l, entry))?;
     let line = &doc.lines[at];
     let key = line.find("run:").expect("a stage line has `run:`") + "run:".len();
     let value = line[key..].trim();
@@ -360,6 +410,28 @@ mod tests {
             remove("pre-commit:\n  commands:\n    lint:\n      run: x\n"),
             None
         );
+    }
+
+    #[test]
+    fn the_push_entry_goes_under_pre_push_beside_the_commit_entry_and_comes_out_alone() {
+        let commit = text(insert("", RUN));
+        let both = text(insert_entry(&commit, &PUSH, PUSH_RUN));
+        assert_eq!(
+            both,
+            format!("{commit}pre-push:\n  commands:\n    fairlead-push:\n      run: {PUSH_RUN}\n")
+        );
+        assert!(present_entry(&both, &PUSH) && present(&both));
+        assert_eq!(insert_entry(&both, &PUSH, PUSH_RUN), Insert::Already);
+        assert_eq!(remove_entry(&both, &PUSH).unwrap(), commit);
+        let theirs = "pre-push:\n  commands:\n    test:\n      run: make test\n";
+        let added = text(insert_entry(theirs, &PUSH, PUSH_RUN));
+        assert!(
+            added.starts_with("pre-push:\n  commands:\n    fairlead-push:\n"),
+            "{added}"
+        );
+        assert_eq!(remove_entry(&added, &PUSH).unwrap(), theirs);
+        assert_eq!(remove(&added), None, "the commit entry isn't there");
+        assert_eq!(current_run_of(&added, &PUSH).as_deref(), Some(PUSH_RUN));
     }
 
     #[test]

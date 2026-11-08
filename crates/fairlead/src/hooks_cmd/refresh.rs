@@ -173,7 +173,7 @@ pub fn stale_git(root: &Path, git_dir: &Path) -> Result<Option<Refresh>, String>
     let Some(text) = read(&file)? else {
         return Ok(None);
     };
-    let want = git_run(package_runner(root));
+    let want = git_run(package_runner(root), lefthook::RUN);
     match lefthook::current_run(&text) {
         Some(run) if run != want => {
             let after = lefthook::set_run(&text, &want).expect("the stage line was found");

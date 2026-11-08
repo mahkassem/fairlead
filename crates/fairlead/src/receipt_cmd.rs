@@ -106,6 +106,11 @@ pub fn run_next(args: NextArgs, cwd: &Path) -> ExitCode {
     match state(cwd, args.base.clone(), session.as_deref()) {
         Ok(s) => {
             println!("{}", next_line(&s));
+            if !s.changed.is_empty() {
+                if let Some(line) = pr_line(cwd) {
+                    println!("{line}");
+                }
+            }
             ExitCode::SUCCESS
         }
         Err(e) => {
@@ -113,6 +118,23 @@ pub fn run_next(args: NextArgs, cwd: &Path) -> ExitCode {
             ExitCode::from(2)
         }
     }
+}
+
+/// The `[pr]` rules, so the branch, title and ticket are right before the
+/// pull request is opened rather than after CI reads them.
+fn pr_line(cwd: &Path) -> Option<String> {
+    let loaded = fairlead_core::config::load(
+        cwd,
+        &fairlead_core::config::LoadOptions::from_process(Vec::new()),
+    )
+    .ok()?;
+    let rules = crate::pr_cmd::summary(loaded.config.pr.as_ref()?);
+    (!rules.is_empty()).then(|| {
+        format!(
+            "  pull request: {}; `fairlead pr check` checks them",
+            rules.join("; ")
+        )
+    })
 }
 
 fn session(given: Option<String>) -> Option<String> {

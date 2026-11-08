@@ -34,6 +34,8 @@ pub fn tracked(root: &Path) -> Result<Vec<String>, String> {
 /// A staged file: where it was at HEAD, if anywhere, and where it is now.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Staged {
+    /// `A`, `C`, `M` or `R`; everything staged before the first commit is `A`.
+    pub status: char,
     pub before: Option<String>,
     pub path: String,
 }
@@ -99,6 +101,7 @@ pub fn staged(root: &Path) -> Result<Vec<Staged>, String> {
                 _ => None,
             };
             Staged {
+                status: if has_head { c.status } else { 'A' },
                 before,
                 path: c.path,
             }

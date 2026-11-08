@@ -25,6 +25,16 @@ pub struct InitArgs {
     /// repeatable. Without it, init names the packs the manifests point to.
     #[arg(long, value_name = "NAME")]
     pack: Vec<String>,
+    /// `guard`: only the guard and the git hook, with no test planner, for
+    /// a stack the planner doesn't read.
+    #[arg(long, value_enum, default_value_t = InitProfile::Full, conflicts_with_all = ["blueprint", "pack"])]
+    profile: InitProfile,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
+pub enum InitProfile {
+    Full,
+    Guard,
 }
 
 /// A test runner the repository shows, with the test files its `match` finds.
@@ -68,6 +78,9 @@ pub fn run(args: InitArgs, cwd: &Path) -> ExitCode {
         );
         return ExitCode::from(2);
     }
+    if args.profile == InitProfile::Guard {
+        return crate::init_guard::run(&root, args.dry_run);
+    }
     let files = fairlead_lang::tree::Tree::scan(&fairlead_lang::tree::plain(&root)).files;
     let blueprint = match args
         .blueprint
@@ -83,7 +96,7 @@ pub fn run(args: InitArgs, cwd: &Path) -> ExitCode {
     };
     let found = detect(&root, &files);
     if found.runners.is_empty() && found.checks.is_empty() {
-        eprintln!("fairlead: found no test runner init knows here; the book's Configuration page shows how to add one");
+        eprintln!("fairlead: found no test runner init knows here; the book's Configuration page shows how to add one, and `fairlead init --profile guard` sets up only the guard");
         for note in &found.notes {
             eprintln!("  note: {note}");
         }

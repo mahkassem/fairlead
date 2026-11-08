@@ -36,6 +36,12 @@ pub struct Event {
     pub rules: Vec<&'static str>,
     pub added: usize,
     pub ms: f64,
+    /// The write hook's: how much of `ms` loading the config took, and the
+    /// budget it ran under, so a `timed_out` reads against both.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub load_ms: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub budget_ms: Option<u32>,
     pub fairlead: &'static str,
     #[serde(skip_serializing_if = "std::ops::Not::not")]
     pub truncated: bool,
@@ -92,6 +98,8 @@ impl Event {
             rules: Vec::new(),
             added: 0,
             ms: (elapsed.as_secs_f64() * 10_000.0).round() / 10.0,
+            load_ms: None,
+            budget_ms: None,
             fairlead: env!("CARGO_PKG_VERSION"),
             truncated: false,
             tree: None,

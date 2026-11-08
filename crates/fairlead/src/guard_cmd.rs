@@ -30,6 +30,10 @@ pub enum GuardAction {
         /// over `guard.migrations.base`.
         #[arg(long, value_name = "REV", conflicts_with = "staged")]
         base: Option<String>,
+        /// Before a push: the branch's new migrations against the base
+        /// fetched now, and the `[pr]` rules this machine can check.
+        #[arg(long, conflicts_with_all = ["staged", "write_baseline", "base"])]
+        push: bool,
     },
     /// The write stage: read a Claude Code PreToolUse call on stdin and deny
     /// it, or add a note, when it breaks a rule. `fairlead hooks install` runs it.
@@ -109,7 +113,15 @@ pub fn run(action: GuardAction, sets: Vec<String>, cwd: &Path) -> ExitCode {
         Ok(guard) => guard,
         Err(e) => return fail(e),
     };
-    if guard.is_empty() {
+    // The built-in secret-path rule alone runs only where it can fail: at a commit.
+    let staged_only = matches!(action, GuardAction::Check { staged: true, .. });
+    let push = matches!(action, GuardAction::Check { push: true, .. });
+    let nothing = if push {
+        guard.migrations.as_ref().is_none_or(|m| !m.fetches()) && loaded.config.pr.is_none()
+    } else {
+        guard.is_empty() && !(staged_only && guard.paths.is_some())
+    };
+    if nothing {
         println!("guard: no rules configured");
         return ExitCode::SUCCESS;
     }
@@ -121,10 +133,14 @@ pub fn run(action: GuardAction, sets: Vec<String>, cwd: &Path) -> ExitCode {
         list,
         write_baseline,
         base,
+        push,
     } = action
     else {
         unreachable!("the other actions returned above");
     };
+    if push {
+        return check_push(&root, &guard, &loaded.config);
+    }
     if staged {
         return check_staged(&root, &guard, &loaded.config.guard, list);
     }
@@ -150,6 +166,15 @@ pub fn tree_findings(
     guard: &Guard,
     base: Option<&str>,
 ) -> Result<Vec<Finding>, String> {
+    tree_and_warnings(root, guard, base).map(|(found, _)| found)
+}
+
+/// The check stage's findings and its warnings, which never fail it.
+fn tree_and_warnings(
+    root: &Path,
+    guard: &Guard,
+    base: Option<&str>,
+) -> Result<(Vec<Finding>, Vec<Finding>), String> {
     let files = git::tracked(root)?;
     // In parallel, and still in path order, since collect keeps it.
     let mut findings: Vec<Finding> = files
@@ -170,15 +195,23 @@ pub fn tree_findings(
         eprintln!("guard: {note}");
     }
     fairlead_guard::sort(&mut findings);
-    Ok(findings)
+    Ok((findings, more.warnings))
+}
+
+/// Warnings go to stderr, one line each, and never change the exit code.
+fn warn_all(warnings: &[Finding]) {
+    for w in warnings {
+        eprintln!("warning: {w}");
+    }
 }
 
 fn check_tree(root: &Path, guard: &Guard, baseline_path: &Path, how: Tree<'_>) -> ExitCode {
     let Tree { list, write, base } = how;
-    let findings = match tree_findings(root, guard, base) {
-        Ok(findings) => findings,
+    let (findings, warnings) = match tree_and_warnings(root, guard, base) {
+        Ok(found) => found,
         Err(e) => return fail(e),
     };
+    warn_all(&warnings);
     if list {
         for f in &findings {
             println!("{f}");
@@ -301,9 +334,14 @@ fn check_staged(root: &Path, guard: &Guard, settings: &config::Guard, list: bool
             .unwrap_or_default();
         new.extend(added::added(&before, &now));
     }
-    let paths: Vec<String> = staged.iter().map(|s| s.path.clone()).collect();
-    match stages::staged(guard, root, &paths) {
-        Ok(more) => new.extend(more),
+    match stages::staged(guard, root, &staged) {
+        Ok(more) => {
+            new.extend(more.findings);
+            for note in more.notes {
+                eprintln!("guard: {note}");
+            }
+            warn_all(&more.warnings);
+        }
         Err(e) => return fail(e),
     }
     fairlead_guard::sort(&mut new);
@@ -354,5 +392,34 @@ fn check_staged(root: &Path, guard: &Guard, settings: &config::Guard, list: bool
         ExitCode::SUCCESS
     } else {
         ExitCode::FAILURE
+    }
+}
+
+/// `guard check --push`, the pre-push hook: migration numbers against the
+/// base fetched now, then the `[pr]` rules this machine can check.
+fn check_push(root: &Path, guard: &Guard, config: &config::Config) -> ExitCode {
+    let found = stages::push(guard, root);
+    for note in &found.notes {
+        eprintln!("guard: {note}");
+    }
+    let mut failed = !found.findings.is_empty();
+    if failed {
+        eprintln!(
+            "guard: {} migration number(s) already taken on the base:",
+            found.findings.len()
+        );
+        for f in &found.findings {
+            eprintln!("{f}");
+        }
+    }
+    if let Some(pr) = &config.pr {
+        failed |= !crate::pr_cmd::local(root, pr);
+    } else if !failed {
+        println!("guard: the branch's migration numbers are free on the base");
+    }
+    if failed {
+        ExitCode::FAILURE
+    } else {
+        ExitCode::SUCCESS
     }
 }

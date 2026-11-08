@@ -14,8 +14,9 @@ fn hex(bytes: &[u8]) -> String {
 
 /// Sections that never change a plan, left out of its digest altogether, so
 /// adding one doesn't change the digest of every plan made before it.
-const NOT_PLANNED: [&str; 10] = [
-    "guard", "hooks", "done", "brief", "ci", "memory", "skills", "agents", "stages", "needs",
+const NOT_PLANNED: [&str; 12] = [
+    "guard", "hooks", "done", "brief", "ci", "memory", "skills", "agents", "stages", "needs", "pr",
+    "profile",
 ];
 
 pub fn config_digest(config: &Config) -> String {

@@ -161,9 +161,13 @@ pub fn run(action: HooksAction, cwd: &Path) -> ExitCode {
     }
     if git && result.is_ok() {
         result = match action {
-            HooksAction::Install { .. } => {
-                git_install(&lefthook, &lefthook_manifest, &git_dir, runner)
-            }
+            HooksAction::Install { .. } => git_install(
+                &lefthook,
+                &lefthook_manifest,
+                &git_dir,
+                runner,
+                wants_push(&loaded.config),
+            ),
             HooksAction::Status { .. } => git_status(&lefthook, &lefthook_manifest, &git_dir),
             HooksAction::Uninstall { .. } => git_uninstall(&lefthook, &lefthook_manifest),
         };
@@ -201,10 +205,20 @@ pub fn describe(root: &Path, config: &fairlead_core::config::Config) -> Vec<Stri
     let git = match read(&lefthook).ok().flatten() {
         Some(text) if lefthook::present(&text) => {
             let active = fairlead_guard::git::git_dir(root).is_some_and(|d| lefthook_active(&d));
+            let push = match (
+                lefthook::present_entry(&text, &lefthook::PUSH),
+                wants_push(config),
+            ) {
+                (true, _) => " (and the push stage)",
+                (false, true) => {
+                    " (not the push stage `[pr]` asks for; `fairlead hooks install --git` adds it)"
+                }
+                (false, false) => "",
+            };
             if active {
-                format!("git hook: installed in {shown}, and lefthook runs it")
+                format!("git hook: installed in {shown}{push}, and lefthook runs it")
             } else {
-                format!("git hook: installed in {shown}, but lefthook isn't in .git/hooks; run `lefthook install`")
+                format!("git hook: installed in {shown}{push}, but lefthook isn't in .git/hooks; run `lefthook install`")
             }
         }
         _ => "git hook: not installed; `fairlead hooks install --git` adds it through lefthook"
@@ -313,22 +327,62 @@ fn keep_manifest(manifest: &Path, record: &Manifest) -> Result<(), String> {
     )
 }
 
+/// The git hooks through lefthook, as `hooks install --git` adds them.
+pub fn install_git(root: &Path, config: &fairlead_core::config::Config) -> Result<(), String> {
+    let git_dir = fairlead_guard::git::git_dir(root).ok_or("not inside a git repository")?;
+    let lefthook = lefthook_file(root);
+    let manifest = lefthook_manifest(&git_dir, &lefthook);
+    git_install(
+        &lefthook,
+        &manifest,
+        &git_dir,
+        package_runner(root),
+        wants_push(config),
+    )
+}
+
+/// Whether the config asks for the pre-push entry: `[pr]` rules, or
+/// migration numbers compared with a freshly fetched base.
+pub fn wants_push(config: &fairlead_core::config::Config) -> bool {
+    config.pr.is_some()
+        || config
+            .guard
+            .migrations
+            .as_ref()
+            .is_some_and(|m| m.fetch && m.unique_prefix.is_some())
+}
+
 fn git_install(
     file: &Path,
     manifest: &Path,
     git_dir: &Path,
     runner: Option<&str>,
+    push: bool,
 ) -> Result<(), String> {
     let original = read(file)?;
-    let run = git_run(runner);
-    let written = match lefthook::insert(original.as_deref().unwrap_or(""), &run) {
-        lefthook::Insert::Already => {
-            println!("hooks: already in {}", file.display());
-            return Ok(());
+    let mut entries = vec![(lefthook::COMMIT, git_run(runner, lefthook::RUN))];
+    if push {
+        entries.push((lefthook::PUSH, git_run(runner, lefthook::PUSH_RUN)));
+    }
+    let mut text = original.clone().unwrap_or_default();
+    let mut added = Vec::new();
+    for (entry, run) in &entries {
+        match lefthook::insert_entry(&text, entry, run) {
+            lefthook::Insert::Already => {}
+            lefthook::Insert::Refused(why) => {
+                return Err(format!("{} ({}): {why}", file.display(), entry.hook))
+            }
+            lefthook::Insert::Text(t) => {
+                text = t;
+                added.push(entry.hook);
+            }
         }
-        lefthook::Insert::Refused(why) => return Err(format!("{}: {why}", file.display())),
-        lefthook::Insert::Text(text) => text,
-    };
+    }
+    if added.is_empty() {
+        println!("hooks: already in {}", file.display());
+        return Ok(());
+    }
+    let written = text;
     keep_manifest(
         manifest,
         &Manifest {
@@ -338,7 +392,19 @@ fn git_install(
         },
     )?;
     write(file, &written)?;
-    println!("hooks: added the commit stage to {}", file.display());
+    println!(
+        "hooks: added {} to {}",
+        added
+            .iter()
+            .map(|h| if *h == "pre-push" {
+                "the push stage"
+            } else {
+                "the commit stage"
+            })
+            .collect::<Vec<_>>()
+            .join(" and "),
+        file.display()
+    );
     if !lefthook_active(git_dir) {
         println!("hooks: lefthook isn't in .git/hooks yet; run `lefthook install` so it runs");
     }
@@ -398,7 +464,9 @@ fn git_uninstall(file: &Path, manifest_path: &Path) -> Result<(), String> {
         println!("hooks: no lefthook config, so no commit stage");
         return Ok(());
     };
-    match lefthook::remove(&text) {
+    let commit = lefthook::remove(&text);
+    let push = lefthook::remove_entry(commit.as_deref().unwrap_or(&text), &lefthook::PUSH);
+    match push.or(commit) {
         Some(left) => {
             write(file, &left)?;
             println!(
@@ -542,11 +610,11 @@ fn lefthook_manifest(git_dir: &Path, lefthook: &Path) -> PathBuf {
         .join(format!("lefthook-{name}"))
 }
 
-/// The commit stage's command, through the project's package runner when it has one.
-fn git_run(runner: Option<&str>) -> String {
+/// A stage's command, through the project's package runner when it has one.
+fn git_run(runner: Option<&str>, run: &str) -> String {
     match runner {
-        Some(runner) => format!("{runner} {}", lefthook::RUN),
-        None => lefthook::RUN.to_string(),
+        Some(runner) => format!("{runner} {run}"),
+        None => run.to_string(),
     }
 }
 

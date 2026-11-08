@@ -13,6 +13,7 @@ use crate::external::External;
 use crate::finding::{self, Finding};
 use crate::migrations::Migrations;
 use crate::names::Names;
+use crate::secret_paths::SecretPaths;
 use crate::size::Size;
 
 /// A file as the presets read it: its path from the project root, its text,
@@ -86,6 +87,10 @@ pub struct Guard {
     pub migrations: Option<Migrations>,
     pub commands: Commands,
     pub external: Vec<External>,
+    /// `[guard.paths]`, read by the commit and check stages only.
+    pub paths: Option<SecretPaths>,
+    /// The paths rule is on only by default, which alone isn't a rule set.
+    paths_built_in: bool,
 }
 
 impl Guard {
@@ -115,14 +120,27 @@ impl Guard {
                 .transpose()?,
             commands: Commands::new(config.commands.items())?,
             external: config.external.items().iter().map(External::new).collect(),
+            paths: config
+                .paths
+                .rules()
+                .map(|p| SecretPaths::new(&p))
+                .transpose()?,
+            paths_built_in: config.paths.built_in(),
         })
     }
 
+    /// No rule the project configured; the built-in paths rule doesn't count.
     pub fn is_empty(&self) -> bool {
         self.presets.is_empty()
             && self.migrations.is_none()
             && self.commands.is_empty()
             && self.external.is_empty()
+            && (self.paths.is_none() || self.paths_built_in)
+    }
+
+    /// Whether `guard.exclude` keeps every rule from this path.
+    pub fn excluded(&self, path: &str) -> bool {
+        self.exclude.iter().any(|p| p.is_match(path))
     }
 
     /// Appends each rule's `cite` note to its findings' messages.
@@ -160,10 +178,16 @@ impl Guard {
 
     pub fn ratcheted(&self) -> BTreeSet<&'static str> {
         let external = self.external.iter().filter(|e| e.ratchet).map(|e| e.id);
+        let paths = self
+            .paths
+            .as_ref()
+            .filter(|p| p.ratchet == Some(true))
+            .map(|_| crate::secret_paths::RULE);
         self.presets
             .iter()
             .flat_map(|p| p.ratcheted())
             .chain(external)
+            .chain(paths)
             .collect()
     }
 
@@ -203,9 +227,26 @@ mod tests {
 
     #[test]
     fn a_preset_that_is_not_configured_adds_nothing() {
-        assert!(Guard::new(&config::Guard::default(), Path::new("."))
-            .unwrap()
-            .is_empty());
+        let guard = Guard::new(&config::Guard::default(), Path::new(".")).unwrap();
+        assert!(
+            guard.is_empty(),
+            "the built-in paths rule alone is no rule set"
+        );
+        assert!(guard.paths.is_some());
+        let off = config::Guard {
+            paths: config::PathsSetting::Switch(false),
+            ..config::Guard::default()
+        };
+        assert!(Guard::new(&off, Path::new(".")).unwrap().paths.is_none());
+        let strict = config::Guard {
+            paths: config::PathsSetting::Rules(config::SecretPaths {
+                ratchet: Some(true),
+                ..config::SecretPaths::default()
+            }),
+            ..config::Guard::default()
+        };
+        let strict = Guard::new(&strict, Path::new(".")).unwrap();
+        assert!(!strict.is_empty() && strict.ratcheted().contains("secret-path"));
     }
 
     #[test]
