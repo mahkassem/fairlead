@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.15.1 (2026-11-08)
+
+### Fixed
+
+- `fairlead doctor` sees a production deploy whose workflow names the environment on its own line (`environment:` then `name: production`), as well as `environment: production`. It said no workflow deployed to people for such a repository, and so suggested `phase = "early"` for one that is live.
+
 ## 0.15.0 (2026-11-08)
 
 ### New

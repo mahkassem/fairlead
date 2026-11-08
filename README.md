@@ -139,7 +139,7 @@ repositories are on the way
 
 ## What it does
 
-This README documents Fairlead 0.15.0. Each command, by what it's for:
+This README documents Fairlead 0.15.1. Each command, by what it's for:
 
 - **The test plan:** `plan`, `test --explain`, the import graph (`graph`) and
   coverage maps (`coverage import`). *Since 0.13.0:* `graph hubs` lists the
@@ -196,7 +196,9 @@ The [quick start](#quick-start) shows the first few, and the
 
 ## Status
 
-Pre-alpha. The latest release, v0.15.0, leaves slow suites, such as
+Pre-alpha. The latest release, v0.15.1, fixes `fairlead doctor` missing a
+production deploy whose workflow names the environment on its own line.
+0.15.0 left slow suites, such as
 end-to-end and browser tests, to a scheduled run: a pull request runs only
 what the change reaches (`all_from`, or the project's `phase` before a live
 deployment). It also adds `[[needs]]`: a repository declares what some
