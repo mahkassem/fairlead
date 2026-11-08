@@ -57,7 +57,11 @@ fn the_summary_leads_with_the_inherited_share_and_its_evidence() {
     let own = ledger(vec![failure("a", Verdict::Own, "x")]);
     assert_eq!(summary(&own), "all 1 failure own");
     let flaky = ledger(vec![
-        failure("a", Verdict::Flaky, "it timed out with no assertion failing"),
+        failure(
+            "a",
+            Verdict::Flaky,
+            "it timed out with no assertion failing",
+        ),
         failure("b", Verdict::Infra, "out of memory (exit 137)"),
     ]);
     assert_eq!(
@@ -107,7 +111,11 @@ fn a_streak_says_how_long_whether_ever_green_and_any_drift() {
 
 #[test]
 fn the_markdown_says_the_verdicts_once_with_proposals_to_confirm() {
-    let mut l = ledger(vec![failure("a|b", Verdict::Flaky, "another attempt on the same commit passed the job")]);
+    let mut l = ledger(vec![failure(
+        "a|b",
+        Verdict::Flaky,
+        "another attempt on the same commit passed the job",
+    )]);
     l.proposals.push(Proposal {
         path: "src/a.test.ts".into(),
         job: "^unit$".into(),
@@ -117,6 +125,9 @@ fn the_markdown_says_the_verdicts_once_with_proposals_to_confirm() {
     let md = markdown(&l);
     assert_eq!(md.matches("#### Is this red mine?").count(), 1);
     assert!(md.contains("| flaky | `unit` | `a\\|b` |"), "{md}");
-    assert!(md.contains("[[replay.quarantine]]\npath = \"src/a.test.ts\"\njob = \"^unit$\""), "{md}");
+    assert!(
+        md.contains("[[replay.quarantine]]\npath = \"src/a.test.ts\"\njob = \"^unit$\""),
+        "{md}"
+    );
     assert!(text(&l).contains("propose [[replay.quarantine]] path = \"src/a.test.ts\", job = \"^unit$\", reason = \"flaky\", until = \"2026-11-22\""));
 }

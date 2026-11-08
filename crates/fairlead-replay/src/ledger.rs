@@ -128,7 +128,10 @@ pub fn found_in(job: &Job, extractors: &Extractors) -> Vec<Found> {
     let log = job.log.join("\n");
     for (_, extractor) in extractors.iter().filter(|(re, _)| re.is_match(&job.name)) {
         for p in extract(extractor, &log) {
-            if !printed.iter().any(|q| q.path == p.path && q.title == p.title) {
+            if !printed
+                .iter()
+                .any(|q| q.path == p.path && q.title == p.title)
+            {
                 printed.push(p);
             }
         }
@@ -203,9 +206,11 @@ fn base_failures<'a>(ev: &'a Evidence, job: &str) -> Vec<(&'a Row, Option<Vec<Fo
 /// The inherited reading of `f`, when the base runs bear it out.
 fn inherited(f: &Found, ev: &Evidence) -> Option<(String, At)> {
     let runs = base_failures(ev, &f.job);
-    let first = runs
-        .iter()
-        .position(|(_, found)| found.as_ref().is_some_and(|fs| fs.iter().any(|b| same(f, b))))?;
+    let first = runs.iter().position(|(_, found)| {
+        found
+            .as_ref()
+            .is_some_and(|fs| fs.iter().any(|b| same(f, b)))
+    })?;
     let mut oldest = first;
     while oldest + 1 < runs.len()
         && runs[oldest + 1]
@@ -247,8 +252,7 @@ fn passed_on_same_tree(row: &Row, job: &str, ev: &Evidence) -> bool {
             o.run_id != row.run_id
                 && o.head_sha == row.head_sha
                 && o.workflow == row.workflow
-                && o
-                    .jobs
+                && o.jobs
                     .iter()
                     .any(|j| j.name == job.name && j.conclusion == "success")
         })
@@ -274,7 +278,9 @@ pub fn judge(row: &Row, ev: &Evidence) -> Vec<Failure> {
                 )
             } else if let Some((why, since)) = inherited(&f, ev) {
                 (Verdict::Inherited, why, Some(since))
-            } else if timed_out || signals::is_timeout(&f.message) && !signals::is_assertion(&f.message) {
+            } else if timed_out
+                || signals::is_timeout(&f.message) && !signals::is_assertion(&f.message)
+            {
                 (
                     Verdict::Flaky,
                     "it timed out with no assertion failing".to_string(),

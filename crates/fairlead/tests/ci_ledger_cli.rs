@@ -106,7 +106,15 @@ fn fake_api(route: fn(&str) -> Answer) -> String {
     url
 }
 
-fn run(id: u64, workflow_id: u64, name: &str, event: &str, sha: &str, day: u32, conclusion: &str) -> Value {
+fn run(
+    id: u64,
+    workflow_id: u64,
+    name: &str,
+    event: &str,
+    sha: &str,
+    day: u32,
+    conclusion: &str,
+) -> Value {
     json!({"id": id, "workflow_id": workflow_id, "name": name, "event": event, "head_sha": sha,
            "run_attempt": 1, "created_at": format!("2026-11-{day:02}T10:00:00Z"),
            "conclusion": conclusion, "status": "completed",
@@ -131,7 +139,10 @@ fn history(path: &str) -> Answer {
     let query = path.split('?').nth(1).unwrap_or("");
     match key {
         "/repos/o/r/actions/runs" => {
-            let sha = query.split('&').find_map(|p| p.strip_prefix("head_sha=")).unwrap_or("");
+            let sha = query
+                .split('&')
+                .find_map(|p| p.strip_prefix("head_sha="))
+                .unwrap_or("");
             ok(json!({"workflow_runs": [run(100, 7, "ci", "pull_request", sha, 8, "failure")]}))
         }
         "/repos/o/r" => ok(json!({"default_branch": "main"})),
@@ -141,8 +152,12 @@ fn history(path: &str) -> Answer {
             job(901, "unit", "failure"), job(902, "e2e", "success")]})),
         "/repos/o/r/actions/runs/80/attempts/1/jobs" => ok(json!({"jobs": [
             job(801, "unit", "success"), job(802, "e2e", "success")]})),
-        "/repos/o/r/actions/runs/70/attempts/1/jobs" => ok(json!({"jobs": [job(701, "e2e", "failure")]})),
-        "/repos/o/r/actions/runs/60/attempts/1/jobs" => ok(json!({"jobs": [job(601, "e2e", "failure")]})),
+        "/repos/o/r/actions/runs/70/attempts/1/jobs" => {
+            ok(json!({"jobs": [job(701, "e2e", "failure")]}))
+        }
+        "/repos/o/r/actions/runs/60/attempts/1/jobs" => {
+            ok(json!({"jobs": [job(601, "e2e", "failure")]}))
+        }
         "/repos/o/r/actions/workflows" => ok(json!({"workflows": [
             {"id": 7, "name": "ci", "state": "active"}, {"id": 8, "name": "nightly", "state": "active"}]})),
         "/repos/o/r/actions/workflows/7/runs" => ok(json!({"total_count": 40, "workflow_runs": [
@@ -153,8 +168,10 @@ fn history(path: &str) -> Answer {
             run(70, 8, "nightly", "schedule", "b90c0ffee", 7, "failure"),
             run(60, 8, "nightly", "schedule", "b80c0ffee", 6, "failure")]})),
         "/repos/o/r/actions/jobs/1001/logs" => text(&format!("{A}{B}")),
-        "/repos/o/r/actions/jobs/1002/logs" => text(" FAIL  test/c.test.ts > waits\nError: Test timed out in 5000ms.\n"),
-        "/repos/o/r/actions/jobs/901/logs" => text(&format!("{B}")),
+        "/repos/o/r/actions/jobs/1002/logs" => {
+            text(" FAIL  test/c.test.ts > waits\nError: Test timed out in 5000ms.\n")
+        }
+        "/repos/o/r/actions/jobs/901/logs" => text(B),
         "/repos/o/r/actions/jobs/701/logs" => text(" FAIL  test/c.test.ts > waits\nError: y\n"),
         "/repos/o/r/actions/jobs/601/logs" => text(" FAIL  test/b.test.ts > subtracts\nError: x\n"),
         k if k.ends_with("/annotations") => ok(json!([])),
@@ -181,13 +198,25 @@ fn each_failure_gets_a_verdict_and_the_cache_speaks_for_head_offline() {
     assert_eq!(code, 0, "{out}");
     let first = out.lines().next().unwrap();
     assert!(
-        first.ends_with("1 of 3 failures inherited: red on main since b90c0ff (2026-11-07); 1 flaky; 1 own"),
+        first.ends_with(
+            "1 of 3 failures inherited: red on main since b90c0ff (2026-11-07); 1 flaky; 1 own"
+        ),
         "{out}"
     );
-    assert!(out.contains("  own       unit  test/a.test.ts > adds: not failing on main"), "{out}");
-    assert!(out.contains("  flaky     e2e  test/c.test.ts > waits: it timed out with no assertion failing"), "{out}");
     assert!(
-        out.contains("streak  nightly (schedule) red on main for 2 runs since b80c0ff (2026-11-06)"),
+        out.contains("  own       unit  test/a.test.ts > adds: not failing on main"),
+        "{out}"
+    );
+    assert!(
+        out.contains(
+            "  flaky     e2e  test/c.test.ts > waits: it timed out with no assertion failing"
+        ),
+        "{out}"
+    );
+    assert!(
+        out.contains(
+            "streak  nightly (schedule) red on main for 2 runs since b80c0ff (2026-11-06)"
+        ),
         "{out}"
     );
     assert!(out.contains("never green since it was added"), "{out}");
@@ -197,21 +226,35 @@ fn each_failure_gets_a_verdict_and_the_cache_speaks_for_head_offline() {
         "{out}"
     );
     let head = git(&dir, &["rev-parse", "HEAD"]);
-    assert!(dir.join(format!(".git/fairlead/ledger/{head}.json")).is_file());
+    assert!(dir
+        .join(format!(".git/fairlead/ledger/{head}.json"))
+        .is_file());
     // With the API gone, `next` and `doctor` still read the cache.
     let (_, next) = output(&mut bin(&dir, &["next"]));
     assert!(next.contains("ci: 1 of 3 failures inherited"), "{next}");
     assert!(next.contains("min old"), "{next}");
     let (_, doctor) = output(&mut bin(&dir, &["doctor"]));
     assert!(doctor.contains("streaks: 2 red"), "{doctor}");
-    assert!(doctor.contains("nightly (schedule) red on main for 2 runs"), "{doctor}");
+    assert!(
+        doctor.contains("nightly (schedule) red on main for 2 runs"),
+        "{doctor}"
+    );
     let (_, brief) = output(&mut bin(&dir, &["brief", "test/a.test.ts"]));
-    assert!(brief.contains("ci       1 of 3 failures inherited"), "{brief}");
-    assert!(brief.contains("red      nightly (schedule) red on main"), "{brief}");
+    assert!(
+        brief.contains("ci       1 of 3 failures inherited"),
+        "{brief}"
+    );
+    assert!(
+        brief.contains("red      nightly (schedule) red on main"),
+        "{brief}"
+    );
     let next_at = brief.find("next     ").unwrap();
     assert!(brief.find("ci       ").unwrap() < next_at, "{brief}");
     let (_, resume) = output(&mut bin(&dir, &["resume"]));
-    assert!(resume.contains("ci       1 of 3 failures inherited"), "{resume}");
+    assert!(
+        resume.contains("ci       1 of 3 failures inherited"),
+        "{resume}"
+    );
     // A new commit leaves the cache behind: it no longer speaks for HEAD.
     std::fs::write(dir.join("test/c.test.ts"), "pass again").unwrap();
     git(&dir, &["commit", "-qam", "touch c"]);
@@ -227,14 +270,28 @@ fn the_report_carries_the_verdicts_once() {
     let api = fake_api(history);
     let (code, out) = ledger(&dir, &api, &["--out", "ledger.json", "--streaks", "0"]);
     assert_eq!(code, 0, "{out}");
-    let (code, out) = output(&mut bin(&dir, &["ci", "plan", "--base", "main", "--out", "plan.json"]));
+    let (code, out) = output(&mut bin(
+        &dir,
+        &["ci", "plan", "--base", "main", "--out", "plan.json"],
+    ));
     assert_eq!(code, 0, "{out}");
     let (code, report) = output(&mut bin(
         &dir,
-        &["ci", "report", "--plan", "plan.json", "--ledger", "ledger.json"],
+        &[
+            "ci",
+            "report",
+            "--plan",
+            "plan.json",
+            "--ledger",
+            "ledger.json",
+        ],
     ));
     assert_eq!(code, 0, "{report}");
-    assert_eq!(report.matches("#### Is this red mine?").count(), 1, "{report}");
+    assert_eq!(
+        report.matches("#### Is this red mine?").count(),
+        1,
+        "{report}"
+    );
     assert!(report.contains("| inherited | `unit` | `test/b.test.ts > subtracts` | red on main since b90c0ff (2026-11-07) |"), "{report}");
     assert!(!report.contains("Red on the default branch"), "{report}");
 }
@@ -243,9 +300,8 @@ fn the_report_carries_the_verdicts_once() {
 fn without_a_token_the_ledger_says_how_to_get_one() {
     let dir = repo("token");
     // No `gh` on this PATH either.
-    let (code, out) = output(
-        bin(&dir, &["ci", "ledger", "--repo", "o/r"]).env("PATH", dir.join("nothing")),
-    );
+    let (code, out) =
+        output(bin(&dir, &["ci", "ledger", "--repo", "o/r"]).env("PATH", dir.join("nothing")));
     assert_eq!(code, 2, "{out}");
     assert!(out.contains("no GITHUB_TOKEN or GH_TOKEN"), "{out}");
 }
@@ -267,10 +323,22 @@ fn a_rerun_tells_flaky_from_inherited_from_a_regression_on_the_merge_base() {
         &["ci", "ledger", "--input", "in.json", "--rerun", "--json"],
     ));
     assert_eq!(code, 0, "{out}");
-    assert!(out.contains("test/a.test.ts: failed again on HEAD and passed on the merge base"), "{out}");
-    assert!(out.contains("test/b.test.ts: failed again on HEAD and on the merge base"), "{out}");
-    assert!(out.contains("test/c.test.ts: passed on a rerun of HEAD"), "{out}");
-    assert!(out.contains("test/gone.test.ts: no runner runs it here"), "{out}");
+    assert!(
+        out.contains("test/a.test.ts: failed again on HEAD and passed on the merge base"),
+        "{out}"
+    );
+    assert!(
+        out.contains("test/b.test.ts: failed again on HEAD and on the merge base"),
+        "{out}"
+    );
+    assert!(
+        out.contains("test/c.test.ts: passed on a rerun of HEAD"),
+        "{out}"
+    );
+    assert!(
+        out.contains("test/gone.test.ts: no runner runs it here"),
+        "{out}"
+    );
     let json_start = out.find("{\n").unwrap();
     let json_end = out.rfind('}').unwrap();
     let made: Value = serde_json::from_str(&out[json_start..=json_end]).unwrap();
@@ -282,11 +350,25 @@ fn a_rerun_tells_flaky_from_inherited_from_a_regression_on_the_merge_base() {
         .collect();
     assert_eq!(verdicts, ["own", "inherited", "flaky", "own"]);
     assert_eq!(made["proposals"][0]["path"], "test/c.test.ts");
-    assert!(git(&dir, &["worktree", "list"]).lines().count() == 1, "the temporary worktree is gone");
+    assert!(
+        git(&dir, &["worktree", "list"]).lines().count() == 1,
+        "the temporary worktree is gone"
+    );
     // A zero time cap reruns nothing.
     let (_, out) = output(&mut bin(
         &dir,
-        &["ci", "ledger", "--input", "in.json", "--rerun", "--rerun-seconds", "0"],
+        &[
+            "ci",
+            "ledger",
+            "--input",
+            "in.json",
+            "--rerun",
+            "--rerun-seconds",
+            "0",
+        ],
     ));
-    assert!(out.contains("test/a.test.ts: not rerun: the time cap ran out"), "{out}");
+    assert!(
+        out.contains("test/a.test.ts: not rerun: the time cap ran out"),
+        "{out}"
+    );
 }

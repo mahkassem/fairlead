@@ -48,7 +48,11 @@ fn common_why(of: &[&Failure]) -> String {
 pub fn summary(l: &Ledger) -> String {
     let total = l.failures.len();
     if total == 0 {
-        let running = l.runs.iter().filter(|r| r.conclusion == "in_progress").count();
+        let running = l
+            .runs
+            .iter()
+            .filter(|r| r.conclusion == "in_progress")
+            .count();
         return match (l.runs.len(), running) {
             (0, _) => "no CI runs found for this commit".to_string(),
             (_, 0) => format!("no failures in {}", plural(l.runs.len(), "run")),
@@ -243,12 +247,18 @@ pub fn doctor_lines(root: &Path) -> String {
     let age = age_minutes(&l).map_or(String::new(), |m| format!(", {m} min old"));
     if lines.is_empty() {
         return if l.default_branch.is_some() {
-            format!("streaks: none red on {} (ledger{age})\n", l.default_branch.as_deref().unwrap_or(""))
+            format!(
+                "streaks: none red on {} (ledger{age})\n",
+                l.default_branch.as_deref().unwrap_or("")
+            )
         } else {
             String::new()
         };
     }
-    let mut out = format!("streaks: {} red (ledger{age}; `fairlead ci ledger` refreshes it)\n", lines.len());
+    let mut out = format!(
+        "streaks: {} red (ledger{age}; `fairlead ci ledger` refreshes it)\n",
+        lines.len()
+    );
     for line in lines {
         out.push_str(&format!("  {line}\n"));
     }

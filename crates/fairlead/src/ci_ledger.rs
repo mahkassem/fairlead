@@ -62,7 +62,12 @@ pub struct LedgerArgs {
     #[arg(long)]
     rerun: bool,
     /// The time the reruns may take altogether, in seconds.
-    #[arg(long, value_name = "SECONDS", default_value_t = 300, requires = "rerun")]
+    #[arg(
+        long,
+        value_name = "SECONDS",
+        default_value_t = 300,
+        requires = "rerun"
+    )]
     rerun_seconds: u64,
     /// The most test files rerun.
     #[arg(long, value_name = "N", default_value_t = 10, requires = "rerun")]
@@ -79,7 +84,8 @@ pub fn run(args: LedgerArgs, cwd: &Path) -> Result<ExitCode, String> {
         None => fetch(&args, &root, &config)?,
     };
     if args.rerun {
-        for line in crate::ledger_rerun::rerun(cwd, &mut made, args.rerun_seconds, args.rerun_tests) {
+        for line in crate::ledger_rerun::rerun(cwd, &mut made, args.rerun_seconds, args.rerun_tests)
+        {
             eprintln!("ledger: {line}");
         }
     }
@@ -152,7 +158,7 @@ fn prune(dir: &Path) {
         .filter(|e| e.path().extension().is_some_and(|x| x == "json"))
         .filter_map(|e| Some((e.metadata().ok()?.modified().ok()?, e.path())))
         .collect();
-    files.sort_by(|a, b| b.0.cmp(&a.0));
+    files.sort_by_key(|f| std::cmp::Reverse(f.0));
     for (_, path) in files.into_iter().skip(KEPT) {
         let _ = std::fs::remove_file(path);
     }
@@ -216,9 +222,17 @@ pub fn extractors(config: &Config) -> Result<Vec<(Regex, Extractor)>, String> {
     }
     names
         .into_iter()
-        .map(|n| Ok((Regex::new("").expect("empty regex"), Extractor::named(n, None)?)))
+        .map(|n| {
+            Ok((
+                Regex::new("").expect("empty regex"),
+                Extractor::named(n, None)?,
+            ))
+        })
         .collect()
 }
+
+/// The runs to judge, each with its attempt, and every run on their commit.
+type Judged = (Vec<(Value, u32)>, Vec<Value>);
 
 /// The runs to judge: the one named, the current Actions run, or the
 /// newest of each workflow on the commit.
@@ -227,8 +241,10 @@ fn runs_to_judge(
     repo: &str,
     args: &LedgerArgs,
     root: &Path,
-) -> Result<(Vec<(Value, u32)>, Vec<Value>), String> {
-    let id = args.run.or_else(|| env("GITHUB_RUN_ID").and_then(|v| v.parse().ok()));
+) -> Result<Judged, String> {
+    let id = args
+        .run
+        .or_else(|| env("GITHUB_RUN_ID").and_then(|v| v.parse().ok()));
     if let Some(id) = id {
         let run = live::run(http, repo, id)?;
         let attempt = env("GITHUB_RUN_ATTEMPT")
@@ -251,11 +267,17 @@ fn runs_to_judge(
     Ok((judged, on_commit))
 }
 
-fn base_of(args: &LedgerArgs, run: &Value, default: &mut dyn FnMut() -> Result<String, String>) -> Result<String, String> {
+fn base_of(
+    args: &LedgerArgs,
+    run: &Value,
+    default: &mut dyn FnMut() -> Result<String, String>,
+) -> Result<String, String> {
     if let Some(b) = args.base.clone().or_else(|| env("GITHUB_BASE_REF")) {
         return Ok(b);
     }
-    let from_pull = run["pull_requests"][0]["base"]["ref"].as_str().filter(|b| !b.is_empty());
+    let from_pull = run["pull_requests"][0]["base"]["ref"]
+        .as_str()
+        .filter(|b| !b.is_empty());
     match from_pull {
         Some(b) => Ok(b.to_string()),
         None => default(),
@@ -321,7 +343,8 @@ fn fetch(args: &LedgerArgs, root: &Path, config: &Config) -> Result<Ledger, Stri
         made.base_branch = base.clone();
         let same_tree = live::same_tree(&http, &repo, run, &on_commit)?;
         let workflow_id = run["workflow_id"].as_u64().unwrap_or(0);
-        let mut history = live::base_runs(&http, &repo, workflow_id, &base, args.history, &failing)?;
+        let mut history =
+            live::base_runs(&http, &repo, workflow_id, &base, args.history, &failing)?;
         // On the base branch itself, only runs before this one are its history.
         history.retain(|r| r.run_id != id && r.created_at < row.created_at);
         let ev = Evidence {
@@ -335,7 +358,12 @@ fn fetch(args: &LedgerArgs, root: &Path, config: &Config) -> Result<Ledger, Stri
     if args.streaks > 0 {
         let branch = default()?;
         for (rows, whole) in live::branch_history(&http, &repo, &branch, args.streaks)? {
-            made.streaks.extend(fairlead_replay::streaks::streak(&rows, whole, &made_at, &extractors));
+            made.streaks.extend(fairlead_replay::streaks::streak(
+                &rows,
+                whole,
+                &made_at,
+                &extractors,
+            ));
         }
         made.default_branch = Some(branch);
     }

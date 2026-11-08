@@ -81,7 +81,12 @@ fn within(cmd: &mut Command, deadline: Instant) -> Ran {
 }
 
 fn git(dir: &Path, args: &[&str]) -> Option<String> {
-    let out = Command::new("git").arg("-C").arg(dir).args(args).output().ok()?;
+    let out = Command::new("git")
+        .arg("-C")
+        .arg(dir)
+        .args(args)
+        .output()
+        .ok()?;
     out.status
         .success()
         .then(|| String::from_utf8_lossy(&out.stdout).trim().to_string())
@@ -103,7 +108,14 @@ impl Temporary {
         let _ = std::fs::remove_dir_all(&path);
         git(
             root,
-            &["worktree", "add", "-q", "--detach", &path.to_string_lossy(), sha],
+            &[
+                "worktree",
+                "add",
+                "-q",
+                "--detach",
+                &path.to_string_lossy(),
+                sha,
+            ],
         )?;
         Some(Temporary {
             root: root.to_path_buf(),
@@ -116,7 +128,12 @@ impl Drop for Temporary {
     fn drop(&mut self) {
         let _ = git(
             &self.root,
-            &["worktree", "remove", "--force", &self.path.to_string_lossy()],
+            &[
+                "worktree",
+                "remove",
+                "--force",
+                &self.path.to_string_lossy(),
+            ],
         );
         let _ = std::fs::remove_dir_all(&self.path);
     }
@@ -157,12 +174,14 @@ pub fn rerun(cwd: &Path, l: &mut Ledger, seconds: u64, most: usize) -> Vec<Strin
         let head = run_file(&root, &file, deadline);
         let (verdict, said) = match head {
             Ran::Passed => (Verdict::Flaky, "passed on a rerun of HEAD".to_string()),
-            Ran::NoTest => (Verdict::Own, "no runner runs it here, so it wasn't rerun".to_string()),
+            Ran::NoTest => (
+                Verdict::Own,
+                "no runner runs it here, so it wasn't rerun".to_string(),
+            ),
             Ran::OutOfTime => (Verdict::Own, "not rerun: the time cap ran out".to_string()),
             Ran::Failed => {
-                let wt = worktree.get_or_insert_with(|| {
-                    base.as_deref().and_then(|b| Temporary::at(&root, b))
-                });
+                let wt = worktree
+                    .get_or_insert_with(|| base.as_deref().and_then(|b| Temporary::at(&root, b)));
                 let short: String = base.as_deref().unwrap_or("").chars().take(7).collect();
                 match wt.as_ref().map(|t| run_file(&t.path, &file, deadline)) {
                     Some(Ran::Failed) => (

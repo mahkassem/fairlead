@@ -46,7 +46,8 @@ pub fn normalize(message: &str) -> String {
     }
     // A long hex word with a digit in it is an id or a hash, not words.
     static HEX: OnceLock<Regex> = OnceLock::new();
-    let hex = HEX.get_or_init(|| Regex::new(r"\b[0-9a-fA-F]{7,}\b").expect("built-in pattern compiles"));
+    let hex =
+        HEX.get_or_init(|| Regex::new(r"\b[0-9a-fA-F]{7,}\b").expect("built-in pattern compiles"));
     let text = hex.replace_all(&text, |c: &regex::Captures| {
         if c[0].bytes().any(|b| b.is_ascii_digit()) {
             "<hex>".to_string()
@@ -108,7 +109,8 @@ fn header(line: &str) -> bool {
 pub fn message_for(log: &[String], printed: Option<&Printed>) -> String {
     let named = printed.and_then(|p| {
         let key = p.title.as_deref().unwrap_or(&p.path);
-        log.iter().position(|l| l.contains(key) || l.contains(&p.path))
+        log.iter()
+            .position(|l| l.contains(key) || l.contains(&p.path))
     });
     if let Some(at) = named {
         let after: Vec<&String> = log.iter().skip(at + 1).take(6).collect();

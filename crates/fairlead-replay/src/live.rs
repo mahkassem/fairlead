@@ -26,7 +26,10 @@ fn u64_of(v: &Value, key: &str) -> u64 {
 
 /// Only names a ref or workflow GitHub would accept in a query.
 fn plain(s: &str) -> Result<&str, String> {
-    if !s.is_empty() && s.chars().all(|c| c.is_ascii_alphanumeric() || "._-/".contains(c)) {
+    if !s.is_empty()
+        && s.chars()
+            .all(|c| c.is_ascii_alphanumeric() || "._-/".contains(c))
+    {
         Ok(s)
     } else {
         Err(format!("`{s}` isn't a plain name"))
@@ -118,7 +121,10 @@ pub fn jobs(
 pub fn runs_on(http: &dyn Http, repo: &str, sha: &str) -> Result<Vec<Value>, String> {
     let body = get(
         http,
-        &format!("/repos/{repo}/actions/runs?head_sha={}&per_page={PER_PAGE}", plain(sha)?),
+        &format!(
+            "/repos/{repo}/actions/runs?head_sha={}&per_page={PER_PAGE}",
+            plain(sha)?
+        ),
     )?;
     let mut newest: BTreeMap<(u64, String), Value> = BTreeMap::new();
     for run in body
@@ -152,11 +158,17 @@ pub fn same_tree(
     let none = BTreeSet::new();
     let mut rows = Vec::new();
     for attempt in 1..last {
-        rows.push(row_of(repo, run, attempt, jobs(http, repo, id, attempt, Some(&none))?));
+        rows.push(row_of(
+            repo,
+            run,
+            attempt,
+            jobs(http, repo, id, attempt, Some(&none))?,
+        ));
     }
-    for other in on_commit.iter().filter(|o| {
-        u64_of(o, "id") != id && u64_of(o, "workflow_id") == u64_of(run, "workflow_id")
-    }) {
+    for other in on_commit
+        .iter()
+        .filter(|o| u64_of(o, "id") != id && u64_of(o, "workflow_id") == u64_of(run, "workflow_id"))
+    {
         let attempt = u64_of(other, "run_attempt").max(1) as u32;
         let listed = jobs(http, repo, u64_of(other, "id"), attempt, Some(&none))?;
         rows.push(row_of(repo, other, attempt, listed));
@@ -236,7 +248,10 @@ pub fn branch_history(
     branch: &str,
     limit: usize,
 ) -> Result<Vec<(Vec<Row>, bool)>, String> {
-    let body = get(http, &format!("/repos/{repo}/actions/workflows?per_page={PER_PAGE}"))?;
+    let body = get(
+        http,
+        &format!("/repos/{repo}/actions/workflows?per_page={PER_PAGE}"),
+    )?;
     let mut out = Vec::new();
     for workflow in body
         .get("workflows")
@@ -249,14 +264,26 @@ pub fn branch_history(
         let whole = (total as usize) <= limit;
         let mut by_event: BTreeMap<String, Vec<Row>> = BTreeMap::new();
         for run in &listed {
-            let rows = by_event.entry(str_of(run, "event").to_string()).or_default();
+            let rows = by_event
+                .entry(str_of(run, "event").to_string())
+                .or_default();
             let fetched = rows.iter().filter(|r| !r.jobs.is_empty()).count();
             let leading_red = fetched < 2 && !rows.iter().any(|r| r.conclusion == "success");
             let row = if leading_red && conclusion(run) == "failure" {
                 let attempt = u64_of(run, "run_attempt").max(1) as u32;
-                row_of(repo, run, attempt, jobs(http, repo, u64_of(run, "id"), attempt, None)?)
+                row_of(
+                    repo,
+                    run,
+                    attempt,
+                    jobs(http, repo, u64_of(run, "id"), attempt, None)?,
+                )
             } else {
-                row_of(repo, run, u64_of(run, "run_attempt").max(1) as u32, Vec::new())
+                row_of(
+                    repo,
+                    run,
+                    u64_of(run, "run_attempt").max(1) as u32,
+                    Vec::new(),
+                )
             };
             rows.push(row);
         }

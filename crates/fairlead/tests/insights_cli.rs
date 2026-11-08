@@ -233,16 +233,35 @@ fn speed_reads_done_steps_results_and_a_dataset_and_prints_numbers_with_a_sugges
     let out = fairlead(&dir, &["insights", "--speed", "--dataset", "runs.jsonl"]);
     let text = String::from_utf8_lossy(&out.stdout);
     assert!(out.status.success(), "{text}");
-    assert!(text.contains("plan     median 1.2 s to plan a change"), "{text}");
-    assert!(text.contains("slowest      test (CI job): median 5.0 min"), "{text}");
-    assert!(text.contains("run-whole    unit (done): its longest run took 0.3 s against 1.2 s to plan"), "{text}");
-    assert!(text.contains("1 passed only on a rerun of the same commit (50%)"), "{text}");
+    assert!(
+        text.contains("plan     median 1.2 s to plan a change"),
+        "{text}"
+    );
+    assert!(
+        text.contains("slowest      test (CI job): median 5.0 min"),
+        "{text}"
+    );
+    assert!(
+        text.contains("run-whole    unit (done): its longest run took 0.3 s against 1.2 s to plan"),
+        "{text}"
+    );
+    assert!(
+        text.contains("1 passed only on a rerun of the same commit (50%)"),
+        "{text}"
+    );
     assert!(text.contains("1 of 2 runs cancelled (50%)"), "{text}");
     assert!(text.contains("    → "), "{text}");
-    let out = fairlead(&dir, &["insights", "--speed", "--dataset", "runs.jsonl", "--json"]);
+    let out = fairlead(
+        &dir,
+        &["insights", "--speed", "--dataset", "runs.jsonl", "--json"],
+    );
     let v: Value = serde_json::from_slice(&out.stdout).unwrap();
     assert_eq!(v["speed"]["plan_seconds"], 1.2);
-    assert!(v["speed"]["lines"].as_array().unwrap().iter().any(|l| l["kind"] == "cancelled"));
+    assert!(v["speed"]["lines"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|l| l["kind"] == "cancelled"));
     let missing = fairlead(&dir, &["insights", "--speed", "--dataset", "nope.jsonl"]);
     assert_eq!(missing.status.code(), Some(2));
 }
@@ -254,13 +273,18 @@ fn suggest_proposes_replay_quarantine_for_the_flaky_tests_a_ledger_found() {
         "head_sha": "abc", "base_branch": "main", "runs": [], "failures": [],
         "proposals": [{"path": "test/c.test.ts", "job": "^e2e$", "reason": "it timed out with no assertion failing in run 9 on 2026-11-08", "until": "2026-11-22"}]});
     std::fs::create_dir_all(dir.join(".git/fairlead/ledger")).unwrap();
-    std::fs::write(dir.join(".git/fairlead/ledger/abc.json"), ledger.to_string()).unwrap();
+    std::fs::write(
+        dir.join(".git/fairlead/ledger/abc.json"),
+        ledger.to_string(),
+    )
+    .unwrap();
     std::fs::write(dir.join("given.json"), ledger.to_string()).unwrap();
     let out = fairlead(&dir, &["insights", "--suggest", "--ledger", "given.json"]);
     let text = String::from_utf8_lossy(&out.stdout);
     assert!(out.status.success(), "{text}");
     assert_eq!(
-        text.matches("[[replay.quarantine]] path = \"test/c.test.ts\", job = \"^e2e$\"").count(),
+        text.matches("[[replay.quarantine]] path = \"test/c.test.ts\", job = \"^e2e$\"")
+            .count(),
         1,
         "{text}"
     );

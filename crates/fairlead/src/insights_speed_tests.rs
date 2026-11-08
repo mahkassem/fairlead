@@ -27,14 +27,24 @@ fn done_event(steps: &[(&str, bool, f64)], plan: f64) -> String {
 }
 
 fn kinds(s: &Speed) -> Vec<(&str, String)> {
-    s.lines.iter().map(|l| (l.kind, l.subject.clone())).collect()
+    s.lines
+        .iter()
+        .map(|l| (l.kind, l.subject.clone()))
+        .collect()
 }
 
 #[test]
 fn a_step_that_never_fails_one_that_always_fails_and_one_faster_than_its_plan_are_named() {
     let mut log = String::new();
     for i in 0..NEVER_FAILED {
-        log.push_str(&done_event(&[("unit", true, 0.4), ("lint", true, 20.0 + i as f64), ("guard", false, 1.0)], 2.0));
+        log.push_str(&done_event(
+            &[
+                ("unit", true, 0.4),
+                ("lint", true, 20.0 + i as f64),
+                ("guard", false, 1.0),
+            ],
+            2.0,
+        ));
         log.push('\n');
     }
     log.push_str("{\"at\": \"2026-10-01T00:00:00Z\", \"stage\": \"done\", \"steps\": [{\"id\": \"unit\", \"passed\": false, \"seconds\": 9}]}\n");
@@ -45,15 +55,37 @@ fn a_step_that_never_fails_one_that_always_fails_and_one_faster_than_its_plan_ar
     let k = kinds(&s);
     assert_eq!(k[0], ("slowest", "lint (done)".to_string()));
     assert!(k.contains(&("never-failed", "lint (done)".into())), "{k:?}");
-    assert!(k.contains(&("never-failed", "unit (done)".into())), "an event before --since doesn't count: {k:?}");
-    assert!(k.contains(&("always-fails", "guard (done)".into())), "{k:?}");
+    assert!(
+        k.contains(&("never-failed", "unit (done)".into())),
+        "an event before --since doesn't count: {k:?}"
+    );
+    assert!(
+        k.contains(&("always-fails", "guard (done)".into())),
+        "{k:?}"
+    );
     assert!(k.contains(&("run-whole", "unit (done)".into())), "{k:?}");
-    assert!(!k.contains(&("never-failed", "guard (done)".into())), "guard isn't a runner or check");
+    assert!(
+        !k.contains(&("never-failed", "guard (done)".into())),
+        "guard isn't a runner or check"
+    );
     let whole = s.lines.iter().find(|l| l.kind == "run-whole").unwrap();
-    assert_eq!(whole.numbers, "its longest run took 0.4 s against 2.0 s to plan");
+    assert_eq!(
+        whole.numbers,
+        "its longest run took 0.4 s against 2.0 s to plan"
+    );
     assert!(whole.suggestion.contains("all_from = \"draft\""));
-    let later = s.lines.iter().find(|l| l.kind == "never-failed" && l.subject.starts_with("lint")).unwrap();
-    assert!(later.suggestion.contains("`[[checks]] id = \"lint\", from = \"merge\"`"), "{}", later.suggestion);
+    let later = s
+        .lines
+        .iter()
+        .find(|l| l.kind == "never-failed" && l.subject.starts_with("lint"))
+        .unwrap();
+    assert!(
+        later
+            .suggestion
+            .contains("`[[checks]] id = \"lint\", from = \"merge\"`"),
+        "{}",
+        later.suggestion
+    );
 }
 
 #[test]
@@ -67,7 +99,11 @@ fn without_a_plan_time_no_run_whole_line_and_the_replay_plan_time_stands_in() {
     assert!(none.lines.iter().all(|l| l.kind != "run-whole"));
     assert!(render(&none).contains("no plan time recorded yet"));
     let replayed = coach(&inputs, &config(), Some(1.5));
-    let whole = replayed.lines.iter().find(|l| l.kind == "run-whole").unwrap();
+    let whole = replayed
+        .lines
+        .iter()
+        .find(|l| l.kind == "run-whole")
+        .unwrap();
     assert_eq!(whole.subject, "unit (ci run)");
     assert!(replayed.lines[0].suggestion.contains("--shards 2"));
 }
@@ -112,10 +148,23 @@ fn a_dataset_gives_reruns_cancellations_and_the_pull_requests_behind_them() {
         row(4, 1, 8, "cancelled", None),
     ]);
     let s = coach(&inputs, &config(), None);
-    let line = |kind: &str| s.lines.iter().find(|l| l.kind == kind).unwrap().numbers.clone();
-    assert_eq!(line("reruns"), "1 reruns over 4 runs; 1 passed only on a rerun of the same commit (25%)");
+    let line = |kind: &str| {
+        s.lines
+            .iter()
+            .find(|l| l.kind == kind)
+            .unwrap()
+            .numbers
+            .clone()
+    };
+    assert_eq!(
+        line("reruns"),
+        "1 reruns over 4 runs; 1 passed only on a rerun of the same commit (25%)"
+    );
     assert_eq!(line("cancelled"), "2 of 4 runs cancelled (50%)");
-    assert_eq!(line("pulls"), "#7: 2 runs, 1 reruns, 1 cancelled; #8: 2 runs, 0 reruns, 1 cancelled");
+    assert_eq!(
+        line("pulls"),
+        "#7: 2 runs, 1 reruns, 1 cancelled; #8: 2 runs, 0 reruns, 1 cancelled"
+    );
     let job = s.steps.iter().find(|st| st.source == Source::Job).unwrap();
     assert_eq!((job.runs, job.failed, job.max), (3, 1, 60.0));
 }

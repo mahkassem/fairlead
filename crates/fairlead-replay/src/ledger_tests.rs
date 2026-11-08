@@ -62,12 +62,35 @@ fn a_failure_the_base_branch_has_is_inherited_since_its_streak_began() {
         1,
         "head",
         8,
-        vec![job("unit", "failure", &["Test"], &[A, "Error: boom", B, "AssertionError: expected 1 to be 2"])],
+        vec![job(
+            "unit",
+            "failure",
+            &["Test"],
+            &[A, "Error: boom", B, "AssertionError: expected 1 to be 2"],
+        )],
     );
     let base = vec![
-        row(7, 1, "b7c0ffee000", 7, vec![job("unit", "failure", &["Test"], &[A, "Error: boom"])]),
-        row(6, 1, "b6c0ffee000", 6, vec![job("unit", "failure", &["Test"], &[A, "Error: boom"])]),
-        row(5, 1, "b5c0ffee000", 5, vec![job("unit", "success", &[], &[])]),
+        row(
+            7,
+            1,
+            "b7c0ffee000",
+            7,
+            vec![job("unit", "failure", &["Test"], &[A, "Error: boom"])],
+        ),
+        row(
+            6,
+            1,
+            "b6c0ffee000",
+            6,
+            vec![job("unit", "failure", &["Test"], &[A, "Error: boom"])],
+        ),
+        row(
+            5,
+            1,
+            "b5c0ffee000",
+            5,
+            vec![job("unit", "success", &[], &[])],
+        ),
     ];
     let v = verdicts(&run, &[], &base);
     assert_eq!(v[0].0, "src/a.test.ts > adds");
@@ -78,10 +101,28 @@ fn a_failure_the_base_branch_has_is_inherited_since_its_streak_began() {
 
 #[test]
 fn a_failure_main_has_fixed_since_says_to_update_the_branch() {
-    let run = row(9, 1, "head", 8, vec![job("unit", "failure", &["Test"], &[A, "Error: boom"])]);
+    let run = row(
+        9,
+        1,
+        "head",
+        8,
+        vec![job("unit", "failure", &["Test"], &[A, "Error: boom"])],
+    );
     let base = vec![
-        row(7, 1, "b7c0ffee000", 7, vec![job("unit", "success", &[], &[])]),
-        row(6, 1, "b6c0ffee000", 6, vec![job("unit", "failure", &["Test"], &[A, "Error: boom"])]),
+        row(
+            7,
+            1,
+            "b7c0ffee000",
+            7,
+            vec![job("unit", "success", &[], &[])],
+        ),
+        row(
+            6,
+            1,
+            "b6c0ffee000",
+            6,
+            vec![job("unit", "failure", &["Test"], &[A, "Error: boom"])],
+        ),
     ];
     let v = verdicts(&run, &[], &base);
     assert_eq!(v[0].1, Verdict::Inherited);
@@ -90,9 +131,21 @@ fn a_failure_main_has_fixed_since_says_to_update_the_branch() {
 
 #[test]
 fn a_job_that_passed_on_another_attempt_is_flaky_before_anything_else() {
-    let run = row(9, 1, "head", 8, vec![job("unit", "failure", &["Test"], &[A, "Error: boom"])]);
+    let run = row(
+        9,
+        1,
+        "head",
+        8,
+        vec![job("unit", "failure", &["Test"], &[A, "Error: boom"])],
+    );
     let again = row(9, 2, "head", 8, vec![job("unit", "success", &[], &[])]);
-    let base = vec![row(7, 1, "b7", 7, vec![job("unit", "failure", &["Test"], &[A, "Error: boom"])])];
+    let base = vec![row(
+        7,
+        1,
+        "b7",
+        7,
+        vec![job("unit", "failure", &["Test"], &[A, "Error: boom"])],
+    )];
     let v = verdicts(&run, &[again], &base);
     assert_eq!(v[0].1, Verdict::Flaky);
     let other_run = row(10, 1, "head", 8, vec![job("unit", "success", &[], &[])]);
@@ -101,30 +154,105 @@ fn a_job_that_passed_on_another_attempt_is_flaky_before_anything_else() {
 
 #[test]
 fn a_timeout_with_no_assertion_is_flaky_and_with_one_is_own() {
-    let timed = row(9, 1, "head", 8, vec![job("unit", "failure", &["Test"], &[A, "Error: Test timed out in 5000ms."])]);
+    let timed = row(
+        9,
+        1,
+        "head",
+        8,
+        vec![job(
+            "unit",
+            "failure",
+            &["Test"],
+            &[A, "Error: Test timed out in 5000ms."],
+        )],
+    );
     let v = verdicts(&timed, &[], &[]);
-    assert_eq!((v[0].1, v[0].2.as_str()), (Verdict::Flaky, "it timed out with no assertion failing"));
-    let asserted = row(9, 1, "head", 8, vec![job("unit", "failure", &["Test"], &[A, "AssertionError: expected 1 to be 2"])]);
+    assert_eq!(
+        (v[0].1, v[0].2.as_str()),
+        (Verdict::Flaky, "it timed out with no assertion failing")
+    );
+    let asserted = row(
+        9,
+        1,
+        "head",
+        8,
+        vec![job(
+            "unit",
+            "failure",
+            &["Test"],
+            &[A, "AssertionError: expected 1 to be 2"],
+        )],
+    );
     assert_eq!(verdicts(&asserted, &[], &[])[0].1, Verdict::Own);
 }
 
 #[test]
 fn a_job_that_failed_in_setup_or_out_of_memory_is_infra() {
-    let setup = row(9, 1, "head", 8, vec![job("unit", "failure", &["Install dependencies"], &["npm ERR! 503 Service Unavailable"])]);
+    let setup = row(
+        9,
+        1,
+        "head",
+        8,
+        vec![job(
+            "unit",
+            "failure",
+            &["Install dependencies"],
+            &["npm ERR! 503 Service Unavailable"],
+        )],
+    );
     let v = verdicts(&setup, &[], &[]);
     assert_eq!(v.len(), 1, "one failure for the job");
     assert_eq!(v[0].0, "unit");
     assert_eq!(v[0].1, Verdict::Infra);
-    let oom = row(9, 1, "head", 8, vec![job("e2e", "failure", &["Run"], &["##[error]Process completed with exit code 137."])]);
+    let oom = row(
+        9,
+        1,
+        "head",
+        8,
+        vec![job(
+            "e2e",
+            "failure",
+            &["Run"],
+            &["##[error]Process completed with exit code 137."],
+        )],
+    );
     assert_eq!(verdicts(&oom, &[], &[])[0].1, Verdict::Infra);
 }
 
 #[test]
 fn a_job_failure_with_no_test_is_inherited_only_on_the_same_fingerprint() {
-    let run = row(9, 1, "head", 8, vec![job("lint", "failure", &["Lint"], &["error: unused import at src/x.rs:3:1"])]);
-    let same = vec![row(7, 1, "b7", 7, vec![job("lint", "failure", &["Lint"], &["error: unused import at src/x.rs:9:4"])])];
+    let run = row(
+        9,
+        1,
+        "head",
+        8,
+        vec![job(
+            "lint",
+            "failure",
+            &["Lint"],
+            &["error: unused import at src/x.rs:3:1"],
+        )],
+    );
+    let same = vec![row(
+        7,
+        1,
+        "b7",
+        7,
+        vec![job(
+            "lint",
+            "failure",
+            &["Lint"],
+            &["error: unused import at src/x.rs:9:4"],
+        )],
+    )];
     assert_eq!(verdicts(&run, &[], &same)[0].1, Verdict::Inherited);
-    let other = vec![row(7, 1, "b7", 7, vec![job("lint", "failure", &["Lint"], &["error: missing docs"])])];
+    let other = vec![row(
+        7,
+        1,
+        "b7",
+        7,
+        vec![job("lint", "failure", &["Lint"], &["error: missing docs"])],
+    )];
     assert_eq!(verdicts(&run, &[], &other)[0].1, Verdict::Own);
 }
 
@@ -136,6 +264,9 @@ fn annotations_name_tests_without_an_extractor() {
         title: "signs in".into(),
     }];
     let found = found_in(&j, &[]);
-    assert_eq!(found[0].test.as_deref(), Some("e2e/login.spec.ts > signs in"));
+    assert_eq!(
+        found[0].test.as_deref(),
+        Some("e2e/login.spec.ts > signs in")
+    );
     assert_eq!(found[0].message, "Error: locator not visible");
 }

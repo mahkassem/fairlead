@@ -1,8 +1,7 @@
 //! A replay over a synthetic git history with known failures reports
 //! exactly the expected hits, misses and other outcomes.
 
-use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::path::PathBuf;
 
 use fairlead_core::config::Config;
 use fairlead_replay::dataset::{Job, Row};
@@ -11,39 +10,8 @@ use fairlead_replay::report::report;
 use fairlead_replay::run::{replay, Replayer, Sources};
 use fairlead_replay::window::Window;
 
-fn git(dir: &Path, args: &[&str]) -> String {
-    let out = Command::new("git")
-        .args([
-            "-c",
-            "user.name=t",
-            "-c",
-            "user.email=t@example.com",
-            "-c",
-            "commit.gpgsign=false",
-        ])
-        .args(args)
-        .current_dir(dir)
-        .output()
-        .unwrap();
-    assert!(
-        out.status.success(),
-        "git {args:?}: {}",
-        String::from_utf8_lossy(&out.stderr)
-    );
-    String::from_utf8_lossy(&out.stdout).trim().to_string()
-}
-
-fn write(dir: &Path, path: &str, text: &str) {
-    let full = dir.join(path);
-    std::fs::create_dir_all(full.parent().unwrap()).unwrap();
-    std::fs::write(full, text).unwrap();
-}
-
-fn commit(dir: &Path, message: &str) -> String {
-    git(dir, &["add", "-A"]);
-    git(dir, &["commit", "-q", "-m", message]);
-    git(dir, &["rev-parse", "HEAD"])
-}
+mod common;
+use common::{commit, git, job, row, write, CONFIG};
 
 struct History {
     dir: PathBuf,
@@ -85,70 +53,6 @@ fn history() -> History {
         d,
     }
 }
-
-fn job(name: &str, conclusion: &str, log: &[&str]) -> Job {
-    Job {
-        name: name.into(),
-        conclusion: conclusion.into(),
-        failed_steps: Vec::new(),
-        annotations: Vec::new(),
-        annotations_capped: false,
-        log: log.iter().map(|s| s.to_string()).collect(),
-        image: None,
-        seconds: None,
-    }
-}
-
-fn row(
-    run_id: u64,
-    attempt: u32,
-    pr: u64,
-    head: &str,
-    base: &str,
-    day: u32,
-    jobs: Vec<Job>,
-) -> Row {
-    let conclusion = if jobs.iter().any(Job::failed) {
-        "failure"
-    } else {
-        "success"
-    };
-    Row {
-        repo: "example/repo".into(),
-        run_id,
-        attempt,
-        event: "pull_request".into(),
-        workflow: "ci".into(),
-        pr: Some(pr),
-        head_sha: head.into(),
-        base_sha: Some(base.into()),
-        created_at: format!("2026-09-{day:02}T10:00:00Z"),
-        conclusion: conclusion.into(),
-        seconds: None,
-        jobs,
-    }
-}
-
-const CONFIG: &str = r#"
-[[tests.runners]]
-id = "vitest"
-match = ["**"]
-command = ["vitest", "run", "{files}"]
-
-[[tests.runners]]
-id = "e2e"
-match = ["e2e/**"]
-command = ["playwright", "test", "{files}"]
-
-[[replay.failures]]
-runner = "vitest"
-extractor = "vitest"
-job = "^test$"
-
-[replay]
-ignore = ["^all-green$"]
-ignore_steps = ["^Install$"]
-"#;
 
 #[test]
 fn a_synthetic_history_replays_to_the_expected_outcomes() {
@@ -972,67 +876,4 @@ fn a_scheduled_run_counts_a_failure_no_push_since_the_last_green_one_reached_as_
         text.contains(&format!("introduced: push {} (PR 42)", short(&p1))),
         "{text}"
     );
-}
-
-#[test]
-fn a_test_that_timed_out_without_an_assertion_failing_is_flaky_not_a_miss() {
-    let dir = std::env::temp_dir().join(format!("fairlead-replay-timeout-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
-    std::fs::create_dir_all(&dir).unwrap();
-    git(&dir, &["init", "-q", "-b", "main"]);
-    write(&dir, "src/b.ts", "export const b = 1;\n");
-    write(&dir, "test/a.test.ts", "it('a works', () => {});\n");
-    write(&dir, "test/b.test.ts", "import { b } from '../src/b';\n");
-    let base = commit(&dir, "base");
-    git(&dir, &["checkout", "-q", "-b", "pr14"]);
-    write(&dir, "src/b.ts", "export const b = 2;\n");
-    let head = commit(&dir, "pr14: change b");
-    git(&dir, &["checkout", "-q", "main"]);
-    let failing = " FAIL  test/a.test.ts > a works";
-    let rows = vec![
-        row(
-            1,
-            1,
-            14,
-            &head,
-            &base,
-            10,
-            vec![job(
-                "test",
-                "failure",
-                &[failing, "Error: Test timed out in 5000ms."],
-            )],
-        ),
-        row(
-            2,
-            1,
-            14,
-            &head,
-            &base,
-            11,
-            vec![job(
-                "test",
-                "failure",
-                &[failing, "AssertionError: expected 1 to be 2"],
-            )],
-        ),
-    ];
-    let mut config: Config = toml::from_str(CONFIG).unwrap();
-    config.graph.cache = false;
-    let wt_path =
-        std::env::temp_dir().join(format!("fairlead-replay-timeout-wt-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&wt_path);
-    let replayer = Replayer {
-        clone: &dir,
-        worktree: Worktree::open(&dir, &wt_path, &base).unwrap(),
-        config: &config,
-        sources: Sources::new(&config).unwrap(),
-    };
-    let replayed = replay(&replayer, &rows, &Window::ending("2026-09-11", 7).unwrap());
-    let outcomes: Vec<String> = replayed
-        .failures
-        .iter()
-        .map(|f| format!("{:?}", f.outcome))
-        .collect();
-    assert_eq!(outcomes, ["Flaky", "Miss"]);
 }

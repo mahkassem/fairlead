@@ -295,7 +295,8 @@ fn gather(root: &Path, args: &InsightsArgs, cfg: &config::Config) -> Result<Insi
         }
     }
     if args.suggest {
-        out.suggestions.extend(ledger_suggestions(root, args, &since)?);
+        out.suggestions
+            .extend(ledger_suggestions(root, args, &since)?);
         suggest(&mut out, cfg, &rules);
         out.suggestions.extend(bench_suggestion(root, cfg));
     }
@@ -326,7 +327,11 @@ fn speed(
 
 /// A `[[replay.quarantine]]` proposal for each flaky test the ledgers
 /// found, named once with how many ledgers found it.
-fn ledger_suggestions(root: &Path, args: &InsightsArgs, since: &str) -> Result<Vec<Suggestion>, String> {
+fn ledger_suggestions(
+    root: &Path,
+    args: &InsightsArgs,
+    since: &str,
+) -> Result<Vec<Suggestion>, String> {
     let mut ledgers = Vec::new();
     for p in &args.ledger {
         ledgers.push(crate::ci_ledger::read(p)?);

@@ -58,10 +58,7 @@ const INFRA: [(&str, &str); 8] = [
         r"(?i)\b(?:500 internal server error|502 bad gateway|503 service (?:temporarily )?unavailable|504 gateway time-?out)\b|returned (?:a )?50[0-4]\b|status(?: code)?:? 50[0-4]\b",
         "a service answered 5xx",
     ),
-    (
-        r"(?i)no space left on device",
-        "the runner ran out of disk",
-    ),
+    (r"(?i)no space left on device", "the runner ran out of disk"),
     (
         r"(?i)could not resolve host|temporary failure in name resolution|connection reset by peer|ETIMEDOUT|ECONNRESET",
         "the network failed",
@@ -70,10 +67,7 @@ const INFRA: [(&str, &str); 8] = [
         r"(?i)the job (?:was not started|has exceeded the maximum execution time)",
         "the job hit the platform's limit",
     ),
-    (
-        r"(?i)rate limit exceeded|API rate limit",
-        "a rate limit",
-    ),
+    (r"(?i)rate limit exceeded|API rate limit", "a rate limit"),
 ];
 
 fn infra_patterns() -> &'static Vec<(Regex, &'static str)> {
@@ -118,7 +112,10 @@ pub fn infra(job: &Job, tests_named: bool) -> Option<String> {
     if job.log.iter().any(|l| is_assertion(l)) {
         return None;
     }
-    job.log.iter().find_map(|l| infra_mark(l)).map(str::to_string)
+    job.log
+        .iter()
+        .find_map(|l| infra_mark(l))
+        .map(str::to_string)
 }
 
 #[cfg(test)]
@@ -140,25 +137,41 @@ mod tests {
 
     #[test]
     fn a_timeout_with_no_assertion_is_told_from_one_with_an_assertion() {
-        let only = ["FAIL  src/a.test.ts > waits", "Error: Test timed out in 5000ms."];
+        let only = [
+            "FAIL  src/a.test.ts > waits",
+            "Error: Test timed out in 5000ms.",
+        ];
         let lines: Vec<String> = only.iter().map(|s| s.to_string()).collect();
         assert!(timed_out_without_assertion(&lines));
         let mut both = lines.clone();
         both.push("AssertionError: expected 1 to be 2".into());
         assert!(!timed_out_without_assertion(&both));
         assert!(is_timeout("panic: test timed out after 10m0s"));
-        assert!(is_timeout("thrown: \"Exceeded timeout of 5000 ms for a test."));
+        assert!(is_timeout(
+            "thrown: \"Exceeded timeout of 5000 ms for a test."
+        ));
         assert!(!is_timeout("expected 1 to be 2"));
     }
 
     #[test]
     fn a_job_that_failed_in_setup_or_with_an_infra_mark_is_infra() {
         let setup = job(&["Install dependencies"], &[]);
-        assert!(infra(&setup, false).unwrap().contains("before any test ran"));
+        assert!(infra(&setup, false)
+            .unwrap()
+            .contains("before any test ran"));
         assert_eq!(infra(&setup, true), None, "a named test means tests ran");
-        let oom = job(&["Test"], &["##[error]Process completed with exit code 137."]);
-        assert_eq!(infra(&oom, false).as_deref(), Some("out of memory (exit 137)"));
-        let bad = job(&["Test"], &["Error: 503 Service Unavailable", "expected 200"]);
+        let oom = job(
+            &["Test"],
+            &["##[error]Process completed with exit code 137."],
+        );
+        assert_eq!(
+            infra(&oom, false).as_deref(),
+            Some("out of memory (exit 137)")
+        );
+        let bad = job(
+            &["Test"],
+            &["Error: 503 Service Unavailable", "expected 200"],
+        );
         assert_eq!(infra(&bad, false), None, "an assertion is the test's own");
         let lost = job(&[], &["The runner has received a shutdown signal."]);
         assert_eq!(infra(&lost, false).as_deref(), Some("the runner was lost"));

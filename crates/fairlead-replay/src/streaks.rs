@@ -69,7 +69,12 @@ fn drift(newer: &Row, older: &Row, extractors: &Extractors) -> Vec<Drift> {
         .jobs
         .iter()
         .filter(|j| j.failed() && !j.log.is_empty())
-        .filter(|j| older.jobs.iter().any(|o| o.name == j.name && o.failed() && !o.log.is_empty()))
+        .filter(|j| {
+            older
+                .jobs
+                .iter()
+                .any(|o| o.name == j.name && o.failed() && !o.log.is_empty())
+        })
         .filter(|j| {
             fingerprints(newer, &j.name, extractors) != fingerprints(older, &j.name, extractors)
         })
@@ -83,7 +88,12 @@ fn drift(newer: &Row, older: &Row, extractors: &Extractors) -> Vec<Drift> {
 
 /// The streak of one workflow and event from its runs, newest first.
 /// `whole_history` says the runs are all it has had; `now` is a timestamp.
-pub fn streak(runs: &[Row], whole_history: bool, now: &str, extractors: &Extractors) -> Option<Streak> {
+pub fn streak(
+    runs: &[Row],
+    whole_history: bool,
+    now: &str,
+    extractors: &Extractors,
+) -> Option<Streak> {
     let runs: Vec<&Row> = runs.iter().filter(|r| !r.cancelled()).collect();
     let newest = runs.first()?;
     let red_runs: Vec<&Row> = runs.iter().copied().take_while(|r| red(r)).collect();
@@ -176,7 +186,13 @@ mod tests {
         assert_eq!(s.drift.len(), 1);
         assert_eq!(s.drift[0].was, "e2e/a.test.ts > a: Error: x");
         assert_eq!(s.drift[0].now, "e2e/b.test.ts > b: Error: y");
-        let green = streak(&[run(4, 8, "success", &[])], false, "2026-11-08T20:00:00Z", &x()).unwrap();
+        let green = streak(
+            &[run(4, 8, "success", &[])],
+            false,
+            "2026-11-08T20:00:00Z",
+            &x(),
+        )
+        .unwrap();
         assert_eq!((green.red, green.since, green.hours), (0, None, None));
         assert!(streak(&[], false, "2026-11-08T00:00:00Z", &x()).is_none());
     }

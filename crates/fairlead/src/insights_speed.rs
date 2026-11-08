@@ -103,7 +103,10 @@ pub struct Inputs {
 impl Inputs {
     /// The `done` events in the log since `since`.
     pub fn add_events(&mut self, log: &str, since: &str) {
-        for v in log.lines().filter_map(|l| serde_json::from_str::<Value>(l).ok()) {
+        for v in log
+            .lines()
+            .filter_map(|l| serde_json::from_str::<Value>(l).ok())
+        {
             if v["stage"] != "done" || v["at"].as_str().is_none_or(|a| a < since) {
                 continue;
             }
@@ -138,7 +141,10 @@ impl Inputs {
     pub fn add_rows(&mut self, rows: Vec<Row>) {
         for r in &rows {
             for j in &r.jobs {
-                let (Some(seconds), true) = (j.seconds, matches!(j.conclusion.as_str(), "success" | "failure")) else {
+                let (Some(seconds), true) = (
+                    j.seconds,
+                    matches!(j.conclusion.as_str(), "success" | "failure"),
+                ) else {
                     continue;
                 };
                 self.samples

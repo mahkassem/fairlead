@@ -102,7 +102,10 @@ mod tests {
             seconds_between("2026-11-07T23:59:30Z", "2026-11-08T00:01:00Z"),
             Some(90)
         );
-        assert_eq!(seconds_between("2026-11-08T00:00:00Z", "2026-11-07T00:00:00Z"), None);
+        assert_eq!(
+            seconds_between("2026-11-08T00:00:00Z", "2026-11-07T00:00:00Z"),
+            None
+        );
         assert_eq!(epoch_seconds("2026-11-08"), None);
     }
 }
