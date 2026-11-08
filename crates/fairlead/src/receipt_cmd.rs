@@ -106,6 +106,10 @@ pub fn run_next(args: NextArgs, cwd: &Path) -> ExitCode {
     match state(cwd, args.base.clone(), session.as_deref()) {
         Ok(s) => {
             println!("{}", next_line(&s));
+            // A cached ledger only: `next` never reaches the network.
+            if let Some(line) = crate::ledger_text::head_line(&crate::graph_cmd::repo_root(cwd)) {
+                println!("ci: {line}");
+            }
             ExitCode::SUCCESS
         }
         Err(e) => {

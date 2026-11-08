@@ -9,6 +9,7 @@ mod brief_cmd;
 mod bun;
 mod ci_cmd;
 mod ci_judge;
+mod ci_ledger;
 mod ci_report;
 mod ci_shard;
 mod ci_workflow;
@@ -29,6 +30,8 @@ mod import_rules_cmd;
 mod init_cmd;
 mod insights_cmd;
 mod knowledge;
+mod ledger_rerun;
+mod ledger_text;
 mod lessons_cmd;
 mod mcp_cmd;
 mod mcp_tools;
@@ -340,6 +343,7 @@ fn doctor_report(dir: &Path, opts: &LoadOptions) -> String {
         hooks.push_str(&needs::doctor_lines(&root, &l.config));
         hooks.push_str(&phase::doctor_lines(&root, &l.config));
     }
+    hooks.push_str(&ledger_text::doctor_lines(&graph_cmd::repo_root(dir)));
     let config = match loaded {
         Ok(loaded) if loaded.files.is_empty() => "none found; defaults apply".to_string(),
         Ok(loaded) if loaded.problems.is_empty() => {

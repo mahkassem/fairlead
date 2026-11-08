@@ -191,7 +191,7 @@ fn command(root: &Path, tracker: &Tracker, id: &str) -> Result<Value, String> {
 }
 
 /// `owner/repo` from the `origin` remote's URL, for a GitHub one.
-fn origin_repo(root: &Path) -> Option<String> {
+pub(crate) fn origin_repo(root: &Path) -> Option<String> {
     let out = std::process::Command::new("git")
         .args(["remote", "get-url", "origin"])
         .current_dir(root)

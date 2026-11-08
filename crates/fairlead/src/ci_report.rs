@@ -93,13 +93,20 @@ pub fn write_results(
     std::fs::write(path, text).map_err(|e| format!("could not write {}: {e}", path.display()))
 }
 
+/// What a report may add to the plan and results: the receipt and the ledger.
+pub struct Extras<'a> {
+    pub receipt: Option<&'a Path>,
+    pub ledger: Option<&'a Path>,
+}
+
 pub fn run(
     cwd: &Path,
     plan: &Path,
     results: &[std::path::PathBuf],
-    receipt: Option<&Path>,
+    extras: Extras,
     comment: bool,
 ) -> Result<ExitCode, String> {
+    let receipt = extras.receipt;
     let plan = crate::ci_cmd::read_plan(cwd, plan)?;
     let mut read = Vec::new();
     for p in results {
@@ -123,7 +130,11 @@ pub fn run(
         ),
         None => None,
     };
-    let body = markdown(&plan, results.as_ref(), receipt.as_deref());
+    let mut body = markdown(&plan, results.as_ref(), receipt.as_deref());
+    if let Some(path) = extras.ledger {
+        let ledger = crate::ci_ledger::read(&cwd.join(path))?;
+        body.push_str(&crate::ledger_text::markdown(&ledger));
+    }
     match std::env::var_os("GITHUB_STEP_SUMMARY") {
         Some(target) => {
             let mut file = std::fs::OpenOptions::new()
