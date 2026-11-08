@@ -65,6 +65,7 @@ fairlead.toml: tests.unreachd: unknown field `unreachd`, expected one of ...
 | Key | Default | Meaning |
 | --- | --- | --- |
 | `fairlead` | none | The oldest Fairlead version this config needs, such as `"0.2"`. *Since 0.7.0:* a config that an older binary can't read, because it uses keys added later, gets this version in the error instead of the unknown key. |
+| `profile` | `"full"` | *Unreleased:* `guard` for the guard and the `[pr]` rules only, with no test plan: `done` runs `guard check` and `pr check`, and the score leaves the planner's items out. See [The guard only](install.md#the-guard-only) |
 | `phase` | none | *Since 0.15.0:* `early`, `testing` or `live`. Before a live deployment, a step with no `all_from` runs its whole suite only at the full stage ([The project's phase](plan.md#the-projects-phase)) |
 | `modules.discover` | `["workspaces"]` | Where modules come from |
 | `modules.define` | `[]` | Extra modules: `{ pattern = "services/{name}/src" }` |
@@ -102,20 +103,22 @@ fairlead.toml: tests.unreachd: unknown field `unreachd`, expected one of ...
 | `guard.exclude` | `[]` | Tracked files no guard rule reads |
 | `guard.findings` | `"added"` | Which findings count at a commit: `added`, only those the change adds; `all`, every finding in a file it touches |
 | `guard.on_finding` | `"deny"` | `deny` stops the commit on those findings; `warn` shows them and lets it through |
-| `guard.budget_ms` | `40` | The write hook's own time; past it the edit goes ahead and the event log says `timed_out` |
+| `guard.budget_ms` | `40` | The write hook's own time, loading the config included; past it the edit goes ahead and the event log says `timed_out`. *Unreleased:* each write event also records `load_ms` and `budget_ms`, and `doctor` names the budget beside the count |
 | `guard.events` | `"local"` | `local` records decisions in `.git/fairlead/events.jsonl`; `off` records nothing |
 | `guard.cite` | `{}` | A note appended to a rule's messages, by rule id |
 | `guard.size` | off | `files`, `exclude`, `file_lines`, `function_lines`, `test_hooks`, and `ratchet` (default `true`). See [Guard rules](guard.md) |
 | `guard.test_names` | off | `files`, `exclude`, `file`, `titles_without`, `title_calls`. See [Guard rules](guard.md#test-names) |
 | `guard.citations` | off | `files`, `exclude`, `pattern` (with a `code` group), `headings_in`. See [Guard rules](guard.md#citations) |
-| `guard.migrations` | off | `files`, `immutable` (default `true`), `base`, `unique_prefix`. See [Guard rules](guard.md#migrations) |
+| `guard.migrations` | off | `files`, `immutable` (default `true`), `base`, `unique_prefix`. *Unreleased:* `fetch` (default `false`), fetch the base before comparing numbers: at a push always, at a commit when the last fetch is over ten minutes old. See [Guard rules](guard.md#migrations) |
+| `guard.paths` | on | *Unreleased:* a commit may not add a file named like a secret. `deny` and `allow` (globs added to the built-in lists), `fixtures` (folder names whose matches only warn), `ratchet` (unset: tracked matches warn; `true`: held at the baseline; `false`: each fails), `enabled`. `guard.paths = false` turns it off. See [Secret paths](guard.md#secret-paths) |
 | `guard.commands` | `[]` | `match`, `reason`: commands an agent may not run; `unless`, a regex that lets a matched command through (*Since 0.8.0*). See [Guard rules](guard.md#commands) |
-| `guard.external` | `[]` | `id`, `command`, `stages` (default `["check"]`, or `commit`), `ratchet`. See [Guard rules](guard.md#external-rules) |
+| `guard.external` | `[]` | `id`, `command`, `stages` (default `["check"]`, or `commit`), `ratchet`. *Unreleased:* `preset = "gitleaks"` in place of `command`, at `commit` and `check` by default, with the id `gitleaks` unless `id` is given. See [Guard rules](guard.md#external-rules) and [gitleaks](guard.md#gitleaks) |
 | `hooks.claude` | `"shared"` | Where `fairlead hooks install` puts the Claude Code hooks: `shared`, `.claude/settings.json`; `local`, `.claude/settings.local.json` |
 | `done.tests` | `"planned"` | What `fairlead done` runs of the plan's test invocations: `planned` or `none`. See [The done gate](done.md) |
 | `done.checks` | `"planned"` | The same for the `[[checks]]` the plan selects |
 | `done.always` | `[]` | `[[checks]]` ids `fairlead done` runs for every change |
 | `done.guard` | `true` | Whether `fairlead done` ends with `fairlead guard check` |
+| `pr` | off | *Unreleased:* rules a change meets before review: `base`, `up_to_date` (default `true`), `branch`, `title`, `ticket` (`pattern`, `in`, `any`), `body_headings`, `labels` (`require`, `require_any`, `forbid`), and `[[pr.files]]` (`path`, `when`, `unless_label`, `why`). Checked by `done`, before a push and by `fairlead pr check` in CI. See [Pull request rules](pr.md) |
 | `done.on_stop` | `"ask"` | What the Claude Code Stop hook does while the tree hasn't passed: `off`, `ask` (send the agent back once) or `require`. See [The done gate](done.md#the-stop-hook) |
 | `brief.per` | `"session"` | Whether a second `fairlead brief` in the same session adds its paths to the first (`session`) or stands alone (`call`). See [The brief](brief.md) |
 | `brief.nudge` | `true` | Whether `fairlead hooks install` adds the `PostToolUse` note after an edit made with no brief |

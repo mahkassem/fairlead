@@ -1,5 +1,21 @@
 # Changelog
 
+## Unreleased
+
+### New
+
+- A guard that works on any stack from day one. `fairlead init --profile guard` writes `profile = "guard"` with only the guard: the secret-path rule, the gitleaks preset and, when the tree holds Laravel, Rails, Prisma or SQL migrations, a `[guard.migrations]` table for them, then adds the git hook. In that profile `fairlead done` runs only `guard check` and `pr check`, `doctor` prints `profile: guard`, and `doctor --score` marks the test-plan items `n/a` and scales the rest to 100. See [The guard only](https://mahkassem.github.io/fairlead/docs/install.html#the-guard-only).
+- Secret file names are refused at commit with no config. A commit may not add, copy or rename a file into a name like `.env`, `.env.*`, `*.jks`, `*.keystore`, `*.p12`, `*.pem`, `*.key`, `key.txt`, `client_secret*` or `*.mobileprovision`; `.env.example`, `*.pub` and other templates are allowed, and matches under test and fixture folders only warn. `[guard.paths]` adds to or replaces the lists, and `guard.paths = false` turns the rule off. Files already tracked are warnings at `guard check` until `ratchet` is set. See [Secret paths](https://mahkassem.github.io/fairlead/docs/guard.html#secret-paths).
+- gitleaks as a guard preset: `[[guard.external]] preset = "gitleaks"` runs `gitleaks git --pre-commit --staged` at commit and `gitleaks dir` at check, with `--redact`, and reads only the file, line, rule and fingerprint, so a secret's value never reaches a message or the log. Without gitleaks installed the stage says so once and passes; `doctor` names the version found. See [gitleaks](https://mahkassem.github.io/fairlead/docs/guard.html#gitleaks).
+- Migration numbers against the base as it is now: `guard.migrations.fetch = true` fetches the base before comparing, at every push through the new `fairlead guard check --push` pre-push hook and at a commit when the last fetch is over ten minutes old. A fetch gets 3 seconds; offline, the local ref is used with a warning. Open pull requests aren't read, since that costs an API call per pull request at every push.
+- `[pr]` rules: the base, a branch that contains it, the branch name, the title, a ticket key (in the branch, title or body), body headings, labels, and files a change must add (`[[pr.files]]`, with `when` and `unless_label`). `fairlead done` and the pre-push hook check what the machine knows, `fairlead pr check` reads the pull request event in CI, and `fairlead next` lists the rules before the pull request is opened. A rule a place can't check is reported as not checked, never as passed, and in CI it fails. See [Pull request rules](https://mahkassem.github.io/fairlead/docs/pr.html).
+- The npm package retries a failed download after 1, 2 and 4 seconds, on a network error, a stall, a 408, a 429 or a 5xx, and counts a body cut short as a failure. `FAIRLEAD_BINARY` names a binary fetched another way, such as from a CI cache: the install downloads nothing and `fairlead` runs that file. See [A binary fetched another way](https://mahkassem.github.io/fairlead/docs/install.html#a-binary-fetched-another-way).
+
+### Fixed
+
+- `fairlead doctor` named a write over the guard's time as having "run out of time", which read as the agent's 10-second hook timeout. The guard's own budget is `guard.budget_ms`, 40 ms by default, and a call over it is let through unchecked; doctor now says `ran past the 40 ms budget (guard.budget_ms)`, each write event records `load_ms` and `budget_ms`, and the latency line adds how long loading the config took.
+- The commit stage counts every staged file in its clean message; with only path or external rules configured it said `0 staged file(s)`.
+
 ## 0.15.1 (2026-11-08)
 
 ### Fixed

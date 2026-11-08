@@ -36,6 +36,39 @@ project or container image that never runs Fairlead still installs; running
 `fairlead` there exits 1 and prints the `cargo install` line that builds it
 from source ([#218](https://github.com/mahkassem/fairlead/issues/218)).
 
+*Unreleased:* a download that fails on the network, stalls for 30 seconds or
+gets a 408, 429 or 5xx answer is tried again after 1, 2 and 4 seconds, and
+each retry prints a line. A body that ends short of its length counts as a
+failure, so a cut connection is retried instead of leaving a broken archive.
+A 404, such as a version with no release, isn't retried.
+
+### A binary fetched another way
+
+*Unreleased:* where the runner can't or shouldn't download, such as CI with
+a cache or a mirror, set `FAIRLEAD_BINARY` to the binary's path. The install
+then downloads nothing, and every `fairlead` run through the package runs
+that file with the same arguments:
+
+```yaml
+- uses: actions/cache@v4
+  with:
+    path: ${{ runner.temp }}/fairlead
+    key: fairlead-${{ runner.os }}-0.16.0
+- run: |
+    mkdir -p "$RUNNER_TEMP/fairlead"
+    test -x "$RUNNER_TEMP/fairlead/fairlead" || curl -fsSL --retry 3 \
+      https://github.com/mahkassem/fairlead/releases/download/v0.16.0/fairlead-x86_64-unknown-linux-gnu.tar.xz \
+      | tar xJ --strip-components 1 -C "$RUNNER_TEMP/fairlead"
+- run: npm ci
+  env:
+    FAIRLEAD_BINARY: ${{ runner.temp }}/fairlead/fairlead
+```
+
+Set it on every later step that runs `fairlead` too, or once for the job.
+The file need not exist when the package installs, since a later step may
+put it there. When it still isn't there at run time, `fairlead` exits 1 and
+says so; unset the variable to go back to the download.
+
 ## Homebrew (macOS and Linux)
 
 ```sh
@@ -215,3 +248,30 @@ runner matched. What it can't tell, such as a runner's options in
 replaces a config without `--force`. When the manifests show a framework
 with a [pack](graph.md#framework-packs), Laravel or Next.js, it names the pack
 and writes it only with `--pack`.
+
+### The guard only
+
+*Unreleased:* for a stack the test planner doesn't read, such as Laravel,
+Rails, Flutter or Swift, or a team that wants the guard before anything
+else:
+
+```sh
+fairlead init --profile guard            # write fairlead.toml and add the git hook
+fairlead init --profile guard --dry-run  # print the config instead
+```
+
+It writes `profile = "guard"` and no runners, with the
+[secret-path rule](guard.md#secret-paths), the
+[gitleaks preset](guard.md#gitleaks) and, when the tree holds Laravel, Rails,
+Prisma or plain SQL migrations, a [`[guard.migrations]`](guard.md#migrations)
+table for that folder, its base the remote's default branch. Numbered
+migrations, as in Rails or `migrations/*.sql`, also get unique numbers
+checked against the base fetched at a push. Then it adds the commit stage
+to `lefthook.yml`, and the push stage when the config fetches, as
+`hooks install --git` would. It says when gitleaks isn't installed.
+
+In this profile `fairlead done` runs only `guard check` and, with
+[`[pr]` rules](pr.md), `pr check`; `doctor` prints `profile: guard`; and
+`doctor --score` leaves out the items that score the test plan
+([Readiness score](score.md#the-guard-profile)). In CI, run `fairlead guard check`, as the
+action's `command: guard check`, and `fairlead pr check` for the `[pr]` rules.

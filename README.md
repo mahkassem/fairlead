@@ -155,7 +155,12 @@ This README documents Fairlead 0.15.1. Each command, by what it's for:
   the project's `phase` is `early` or `testing`, runs only what a change
   reaches on a pull request and runs whole on a schedule.
 - **Rules as the agent works:** `guard check`, the hooks `hooks install` adds,
-  and `doctor`.
+  and `doctor`. *Unreleased:* a commit may not add a file named like a secret
+  (`.env`, `*.jks`, `*.pem` and the like) with no config at all; gitleaks
+  runs as a guard preset; migration numbers are checked against the base
+  fetched at a push (`guard check --push`); and `pr check` holds a change to
+  `[pr]` rules (branch name, ticket key, base, labels, body headings,
+  required files) in `done`, before a push and in CI.
 - **The change loop:** `brief` before an edit, or `context` for the brief with
   the lessons, skills, README and history to read; `done` before it's
   finished, then `receipt` and `next`; `resume` picks up where the last
@@ -186,7 +191,10 @@ This README documents Fairlead 0.15.1. Each command, by what it's for:
   shows, and `init --blueprint` adds a starting point for a kind of project:
   config, starter skills and the CI workflow. *Since 0.14.0:* on Bun 1.4.4 or
   later, `init` runs `bun test` in parallel (`--parallel --no-isolate`) and
-  offers `bun fmt --check` on the changed files as a check.
+  offers `bun fmt --check` on the changed files as a check. *Unreleased:*
+  `init --profile guard` sets up only the guard, for any stack, including
+  those the test planner doesn't read, such as Laravel, Rails, Flutter or
+  Swift.
 - **The config:** `config check`, `show` and `schema`.
 - **Upgrading:** `migrate`, which brings the hooks, the config's version
   floor and the version pins to the release you installed. *Since 0.7.0.*
@@ -257,6 +265,10 @@ how to build it from source ([Install](https://mahkassem.github.io/fairlead/docs
 PHP launcher downloads the release build for the platform on its first run,
 checks its sha256 before unpacking it, and caches it in `vendor/`
 ([Install](https://mahkassem.github.io/fairlead/docs/install.html#composer)).
+
+*Unreleased:* the npm package retries a failed download, and
+`FAIRLEAD_BINARY` points it at a binary fetched some other way, such as from
+a CI cache ([Install](https://mahkassem.github.io/fairlead/docs/install.html#a-binary-fetched-another-way)).
 
 ## Quick start
 

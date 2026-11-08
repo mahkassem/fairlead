@@ -16,6 +16,7 @@
 - [Plans in CI](ci.md)
 - [Workspaces](workspace.md)
 - [Guard rules](guard.md)
+- [Pull request rules](pr.md)
 - [The brief](brief.md)
 - [Trackers](trackers.md)
 - [Lessons](lessons.md)

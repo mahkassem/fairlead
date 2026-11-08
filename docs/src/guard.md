@@ -8,12 +8,20 @@ change passes through: as an agent writes a file, at commit, and in CI.
 | write | `fairlead guard hook`, run by Claude Code | the file an edit would leave, before it's written | a finding the edit adds; see [The write hook](#the-write-hook) |
 | check | `fairlead guard check` | every tracked file, as it is on disk | any zero-tolerance finding, or a ratcheted count above the baseline |
 | commit | `fairlead guard check --staged` | each staged file, at HEAD and in the index | a finding the staged change adds |
+| push | `fairlead guard check --push` | the branch's migrations against the base fetched now, and the [`[pr]` rules](pr.md) | a migration number the base took since, or a `[pr]` rule this machine can check |
 
 The check and commit stages also run the migration rules and the external rules configured for them.
+
+*Unreleased:* the [secret-path rule](#secret-paths) is on with no config, so
+a commit may not add a file named like a secret even in a repository that
+configured nothing else. For a stack the test planner doesn't read,
+[`fairlead init --profile guard`](install.md#the-guard-only) writes a config
+with only the guard.
 
 ## Rules
 
 Every preset is off until configured, and each one names the files it reads.
+The secret-path rule is the one exception: it's on by default.
 
 ```toml
 [guard]
@@ -51,7 +59,9 @@ when there is one.
 | `test-title` | `guard.test_names` | A test title that matches `titles_without`. |
 | `citation` | `guard.citations` | A pointer in a comment that names no heading in `headings_in`. |
 | `migration-edit` | `guard.migrations` | A change, move or deletion of a migration that exists at the base. |
-| `migration-prefix` | `guard.migrations` | Two migrations with the same leading number. |
+| `migration-prefix` | `guard.migrations` | Two migrations with the same leading number, or one the base took since the branch was cut. |
+| `secret-path` | `guard.paths`, on by default | A commit adding a file named like a secret. |
+| `gitleaks`, or your `id` | `guard.external` with `preset = "gitleaks"` | A likely secret in what a file says, as gitleaks finds it. |
 | your `id` | `guard.external` | Whatever the command reports. |
 
 ## Function length
@@ -148,6 +158,79 @@ falls back to HEAD. `unique_prefix` makes each
 file's leading number unique, apart from the listed groups; the commit stage
 fails only on a number the commit newly shares.
 
+*Unreleased:* a number is taken when another branch has already landed it.
+Two agents working at once each pick the next free number on their own
+branch, and the commit stage can't see the other's until the base is
+fetched. `fetch = true` fetches the base before comparing:
+
+```toml
+[guard.migrations]
+files = ["db/migrations/*.sql"]
+base = "origin/main"
+unique_prefix = {}
+fetch = true
+```
+
+At a push, `fairlead guard check --push` always fetches. At a commit it
+fetches when the last fetch of that remote is more than ten minutes old, so
+a run of commits costs one fetch. A fetch gets 3 seconds; one that fails or
+takes longer prints a line and the local ref is used, so working offline
+never blocks a commit. A base whose remote isn't configured isn't fetched.
+A number the base took prints as `migration-prefix: shares its number 002
+with 002_theirs.sql on origin/main; renumber it after the newest there`.
+`hooks install` adds the push stage to `lefthook.yml` as `fairlead-push`
+when `fetch` is set or there are [`[pr]` rules](pr.md), and takes it out
+when neither is.
+
+Open pull requests aren't read: that would cost a GitHub API call per open
+pull request at every commit or push, and the fetch at a push, with CI's
+check on the merge commit, already catches a number taken by a change that
+landed. Two pull requests that both wait unmerged with the same number are
+caught when the second one rebases.
+
+## Secret paths
+
+*Unreleased:* a commit may not add a file whose name says it holds a
+secret: a keystore, a private key, an env file, a provisioning profile.
+gitleaks reads what files say; this rule reads names, so it also catches a
+binary keystore no content scanner can read. It's on with no config:
+
+| Denied | Allowed |
+| --- | --- |
+| `**/*.jks`, `**/*.keystore`, `**/*.p12`, `**/*.pem`, `**/*.key`, `**/.env`, `**/.env.*`, `**/key.txt`, `**/client_secret*`, `**/*.mobileprovision` | `**/.env.example`, `.env.sample`, `.env.template`, `.env.test`, `.env.testing`, `.env.ci`, `.env.dist`, `**/*.example`, `**/*.pub`, `**/*.pub.pem` |
+
+```toml
+[guard.paths]
+deny = ["**/*.sqlite"]            # added to the built-in list
+allow = ["config/dev.key"]        # a match that's fine to commit
+fixtures = { replace = ["fixtures"] }   # folders whose matches only warn
+ratchet = true                    # tracked matches held at the baseline
+```
+
+`deny`, `allow` and `fixtures` add to the built-in lists, as other config
+lists do; `{ replace = [...] }` replaces one, and `{ replace = [] }` empties
+it. `guard.paths = false`, or `enabled = false` in the table, turns the rule
+off.
+
+At the commit stage a file fails when the commit adds it, copies it, or
+renames a file into a denied name; editing or renaming a file that already
+had such a name doesn't, since the commit didn't put it there. A match under
+a fixtures folder (`test`, `tests`, `fixtures`, `testdata`, `__tests__` or
+`spec`, by default) is printed as a warning and never fails. The message says
+to keep the file out of git (`.gitignore` and `git rm --cached`) or list it
+under `allow`.
+
+At the check stage, files already tracked are warnings until `ratchet` is
+set: a repository upgrading with a committed `.env` sees it and stays green.
+`ratchet = true` holds them at the [baseline](#the-ratchet), so a new one
+fails; `ratchet = false` fails on every one. The rule alone doesn't make a
+check stage run: with nothing else configured, `guard check` still says no
+rules are configured, and the commit stage is where the rule fails. A
+tracked secret stays in history after its file is removed, so rotate it.
+
+The write hook doesn't run this rule: an agent writing `.env` locally is
+fine, and the commit is where it would leave the machine.
+
 ## Commands
 
 ```toml
@@ -197,6 +280,40 @@ couldn't run. At the check stage the command runs as written. At the commit
 stage `{files}` expands to the staged files and every finding in them counts,
 since there's no before side to compare with. `write` isn't a stage an
 external rule can run at: when the hook runs, the file isn't written yet.
+
+### gitleaks
+
+*Unreleased:* [gitleaks](https://github.com/gitleaks/gitleaks) finds secrets
+in what files say. Fairlead runs it and reads its report; it doesn't detect
+secrets itself.
+
+```toml
+[[guard.external]]
+preset = "gitleaks"
+# id = "secrets"                # the rule id; "gitleaks" by default
+# stages = ["commit"]           # commit and check by default
+```
+
+A preset needs no `command`, and `config check` refuses a rule with both or
+neither. At the commit stage it runs `gitleaks git --pre-commit --staged`; at
+the check stage `gitleaks dir .`, keeping findings in tracked files. Both run
+with `--redact`, and Fairlead reads only the file, line, rule and fingerprint
+from the report, so a secret's value never reaches a message or the event
+log:
+
+```text
+config/app.yml:12 gitleaks: generic-api-key: a likely secret (value not shown); remove it and rotate it, or add `config/app.yml:generic-api-key:12` to .gitleaksignore
+```
+
+A finding gitleaks reports wrongly goes in `.gitleaksignore` by that
+fingerprint, and gitleaks' own `.gitleaks.toml` tunes its rules. It needs
+gitleaks 8.19 or later. When gitleaks isn't installed, the stage prints
+`gitleaks not installed; secret content not scanned` once and passes, so a
+teammate without it isn't blocked; `doctor` says which version it found, or
+that there's none. A command of your own that's missing still fails.
+`gitleaks dir` reads every file under the root, ignored ones included, so a
+large ignored build folder slows the check stage; list it under
+`[allowlist] paths` in `.gitleaks.toml`.
 
 ## The write hook
 
@@ -254,8 +371,11 @@ The hook lets a call go ahead, and says so in the event log, when it can't
 decide: the edit's old text isn't in the file or occurs more than once, the
 tool input has a shape it doesn't know, the file is outside the project, not
 UTF-8 or over 256 KB, the config has a problem, or it runs out of its own
-time, `guard.budget_ms` (40 by default). The check and commit stages still
-catch whatever it lets through.
+time, `guard.budget_ms` (40 by default). That budget is the guard's own, far
+shorter than the agent's hook timeout, and it counts from the hook's start,
+loading the config included, since that is time the agent waits. A call
+over it is let through unchecked and logged as `timed_out`. The check and
+commit stages still catch whatever it lets through.
 
 Install keeps a manifest in `.git/fairlead/backups/` with the settings file's
 original bytes and the bytes it wrote. Installing twice changes nothing.
@@ -305,7 +425,9 @@ The commit stage runs through [lefthook](https://github.com/evilmartians/lefthoo
 install adds a `fairlead-guard` command running `fairlead guard check --staged`
 (through the package runner where Fairlead is a package dependency)
 to `pre-commit` in `lefthook.yml` (or `lefthook.yaml`, `.lefthook.yml`,
-`.lefthook.yaml`, whichever is there). It adds lines at the indentation around
+`.lefthook.yaml`, whichever is there). *Unreleased:* with
+`guard.migrations.fetch` or [`[pr]` rules](pr.md), it also adds
+`fairlead-push`, running `fairlead guard check --push`, to `pre-push`. It adds lines at the indentation around
 them, under `commands`, or as an item where the config uses `jobs`, and never
 rewrites the rest, so comments and layout stay. A `pre-commit` or `commands`
 written on one line (`pre-commit: {}`) is refused, to be added by hand.
@@ -321,7 +443,12 @@ install made is removed.
 
 `fairlead doctor` reads the event log and reports the newest 500 write-hook
 calls by decision, the rules that denied, the hook's p50 and p95 time, any
-calls that ran out of time or hit an error, and the commit stage's runs. It
+calls that ran out of time or hit an error, and the commit stage's runs.
+*Unreleased:* a call over the budget reads `1 call(s) ran past the 40 ms
+budget (guard.budget_ms) and let the edit through`, and the latency line adds
+how long loading the config took at the median, so a slow config shows as
+one. With the gitleaks preset it prints `gitleaks: 8.24.3, for gitleaks`, or
+that gitleaks is missing or too old. It
 also says where each hook is installed, whether lefthook will run the git one,
 and whether `fairlead` is on the PATH, since the hooks call it by name, or
 that they run the project's own copy.

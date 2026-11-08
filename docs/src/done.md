@@ -18,6 +18,9 @@ In order:
 2. The `[[checks]]` the plan selects.
 3. The checks `done.always` names that the plan didn't select. Run outside a plan, a check's `{files}` stands for the change's files.
 4. `fairlead guard check` over the whole tree, as CI runs it.
+5. *Unreleased:* `fairlead pr check --local`, when there are [`[pr]` rules](pr.md).
+
+*Unreleased:* with `profile = "guard"` ([The guard only](install.md#the-guard-only)) there's no plan, so the gate runs only steps 4 and 5.
 
 Each step prints its command, then whether it passed and how long it took. The gate stops at the first failure unless `--keep-going` is given; either way it passes only when every step passed.
 
