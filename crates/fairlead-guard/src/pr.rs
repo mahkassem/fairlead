@@ -127,7 +127,7 @@ fn names(pr: &Pr, facts: &Facts, r: &mut Report) {
                 rule,
                 format!("the {place} `{v}` doesn't match `{}`", re.as_str()),
                 if rule == "pr-branch" {
-                    format!("rename the branch to match: `git branch -m <new-name>`, then push it under the new name")
+                    "rename the branch to match: `git branch -m <new-name>`, then push it under the new name".to_string()
                 } else {
                     "edit the pull request title to match".to_string()
                 },
@@ -409,12 +409,14 @@ mod tests {
 
     #[test]
     fn a_ticket_in_every_place_is_needed_unless_any_is_set() {
-        let mut pr = Pr::default();
-        pr.ticket = Some(Ticket {
-            pattern: r"[A-Z]+-[0-9]+".into(),
-            places: vec![Place::Branch, Place::Title],
-            any: false,
-        });
+        let mut pr = Pr {
+            ticket: Some(Ticket {
+                pattern: r"[A-Z]+-[0-9]+".into(),
+                places: vec![Place::Branch, Place::Title],
+                any: false,
+            }),
+            ..Pr::default()
+        };
         let facts = Facts {
             branch: Some("feat/ABC-1-x".into()),
             title: Some("feat: x".into()),
