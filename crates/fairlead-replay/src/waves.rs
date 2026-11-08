@@ -154,6 +154,7 @@ mod tests {
             base_sha: Some(format!("b{run}")),
             created_at: format!("2026-09-{day:02}T10:00:00Z"),
             conclusion: "failure".into(),
+            seconds: None,
             jobs: vec![Job {
                 name: "unit".into(),
                 conclusion: "failure".into(),
@@ -162,6 +163,7 @@ mod tests {
                 annotations_capped: false,
                 log: Vec::new(),
                 image: Some(image.into()),
+                seconds: None,
             }],
         }
     }

@@ -264,13 +264,15 @@ fn the_window_is_listed_a_week_at_a_time() {
 }
 
 #[test]
-fn only_named_workflows_and_runs_that_ran_are_recorded() {
+fn only_named_workflows_are_recorded_and_a_cancelled_run_without_its_jobs() {
     let mut http = api();
     http.responses.insert(
         "/repos/o/r/actions/workflows/ci.yml/runs".into(),
         json!({ "total_count": 2, "workflow_runs": [
             { "id": 11, "name": "ci", "head_sha": "aaa", "head_branch": "feature", "run_attempt": 2, "created_at": "2026-09-20T10:00:00Z", "conclusion": "success" },
-            { "id": 31, "name": "ci", "head_sha": "ccc", "head_branch": "feature", "run_attempt": 1, "created_at": "2026-09-20T11:00:00Z", "conclusion": "cancelled" }
+            { "id": 31, "name": "ci", "head_sha": "ccc", "head_branch": "feature", "run_attempt": 1, "created_at": "2026-09-20T11:00:00Z", "conclusion": "cancelled",
+              "run_started_at": "2026-09-20T11:00:00Z", "updated_at": "2026-09-20T11:01:30Z" },
+            { "id": 41, "name": "ci", "head_sha": "ddd", "head_branch": "feature", "run_attempt": 1, "created_at": "2026-09-20T12:00:00Z", "conclusion": "skipped" }
         ]}),
     );
     let mut o = opts(None);
@@ -278,8 +280,15 @@ fn only_named_workflows_and_runs_that_ran_are_recorded() {
     let (rows, stop) = fetch(&http, &o, &BTreeSet::new());
     assert_eq!(stop, Stop::Complete);
     let ids: BTreeSet<u64> = rows.iter().map(|r| r.run_id).collect();
-    assert_eq!(ids, [11].into_iter().collect());
+    assert_eq!(ids, [11, 31].into_iter().collect());
+    let cancelled = rows.iter().find(|r| r.run_id == 31).unwrap();
+    assert!(cancelled.cancelled() && cancelled.jobs.is_empty());
+    assert_eq!(cancelled.seconds, Some(90));
     let asked = http.asked.lock().unwrap();
+    assert!(
+        asked.iter().all(|p| !p.contains("/runs/31/attempts")),
+        "a cancelled run's jobs aren't fetched"
+    );
     assert!(
         asked
             .iter()

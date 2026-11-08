@@ -126,12 +126,13 @@ fn request(http: &dyn Http, path: &str, gone_ok: bool) -> Result<Value, String> 
     }
 }
 
-fn get(http: &dyn Http, path: &str) -> Result<Value, String> {
+/// The JSON at `path`, retried through rate limits and server errors.
+pub fn get(http: &dyn Http, path: &str) -> Result<Value, String> {
     request(http, path, false)
 }
 
 /// Like `get`, but a resource GitHub no longer has (404, 410) reads as `null`.
-fn get_gone_ok(http: &dyn Http, path: &str) -> Result<Value, String> {
+pub fn get_gone_ok(http: &dyn Http, path: &str) -> Result<Value, String> {
     request(http, path, true)
 }
 
@@ -324,7 +325,9 @@ fn base_at(clone: &Path, branch: &str, created_at: &str) -> Option<String> {
     .filter(|s| !s.is_empty())
 }
 
-fn job_of(http: &dyn Http, repo: &str, job: &Value) -> Result<Job, String> {
+/// A job as the dataset keeps it: a failed one with its failing steps,
+/// annotations and log excerpt, fetched with up to three requests.
+pub fn job_of(http: &dyn Http, repo: &str, job: &Value) -> Result<Job, String> {
     let conclusion = str_of(job, "conclusion").to_string();
     let mut out = Job {
         name: str_of(job, "name").to_string(),
@@ -334,6 +337,10 @@ fn job_of(http: &dyn Http, repo: &str, job: &Value) -> Result<Job, String> {
         annotations_capped: false,
         log: Vec::new(),
         image: None,
+        seconds: crate::window::seconds_between(
+            str_of(job, "started_at"),
+            str_of(job, "completed_at"),
+        ),
     };
     if !out.failed() {
         return Ok(out);
@@ -440,12 +447,19 @@ fn runs_at(http: &dyn Http, opts: &Options, filter: &str, at: &str) -> Result<Ve
     Ok(all)
 }
 
-/// A run worth a row: not a first attempt that was cancelled or skipped,
-/// which ran nothing.
+/// A run worth a row: not a first attempt that was skipped, which ran
+/// nothing. A cancelled one is kept, without its jobs, so reruns and
+/// cancellations can be counted.
 fn wanted(run: &Value) -> bool {
     let first = run.get("run_attempt").and_then(Value::as_u64).unwrap_or(1) == 1;
-    let empty = matches!(str_of(run, "conclusion"), "cancelled" | "skipped");
-    !(first && empty)
+    !(first && str_of(run, "conclusion") == "skipped")
+}
+
+/// The latest attempt of a run that was cancelled: it's recorded with no
+/// jobs, which costs no request and gives replay nothing to judge.
+fn cancelled_last(run: &Value, attempt: u32) -> bool {
+    let last = run.get("run_attempt").and_then(Value::as_u64).unwrap_or(1) as u32;
+    attempt == last && str_of(run, "conclusion") == "cancelled"
 }
 
 /// Today in UTC, from the system clock.
@@ -521,6 +535,20 @@ pub fn fetch(http: &dyn Http, opts: &Options, seen: &BTreeSet<(u64, u32)>) -> (V
     (rows, Stop::Complete)
 }
 
+/// Every job of one attempt of a run, failed ones with what extraction reads.
+pub fn jobs_of(http: &dyn Http, repo: &str, run_id: u64, attempt: u32) -> Result<Vec<Job>, String> {
+    let body = get(
+        http,
+        &format!("/repos/{repo}/actions/runs/{run_id}/attempts/{attempt}/jobs?per_page={PER_PAGE}"),
+    )?;
+    body.get("jobs")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .map(|j| job_of(http, repo, j))
+        .collect()
+}
+
 fn row_of(
     http: &dyn Http,
     opts: &Options,
@@ -532,20 +560,12 @@ fn row_of(
     let id = run.get("id").and_then(Value::as_u64).unwrap_or(0);
     let head_sha = str_of(run, "head_sha").to_string();
     let created_at = str_of(run, "created_at").to_string();
-    let jobs_body = get(
-        http,
-        &format!(
-            "/repos/{}/actions/runs/{id}/attempts/{attempt}/jobs?per_page={PER_PAGE}",
-            opts.repo
-        ),
-    )?;
-    let jobs = jobs_body
-        .get("jobs")
-        .and_then(Value::as_array)
-        .into_iter()
-        .flatten()
-        .map(|j| job_of(http, opts.repo, j))
-        .collect::<Result<Vec<Job>, String>>()?;
+    let cancelled = cancelled_last(run, attempt);
+    let jobs = if cancelled {
+        Vec::new()
+    } else {
+        jobs_of(http, opts.repo, id, attempt)?
+    };
     // A scheduled run's base is the last green one, which replay finds.
     let (pr, base_sha) = if event == "schedule" {
         (None, None)
@@ -579,11 +599,20 @@ fn row_of(
             &["fetch", "-q", "origin", "--end-of-options", &head_sha],
         );
     }
-    let conclusion = if jobs.iter().any(Job::failed) {
+    let conclusion = if cancelled {
+        "cancelled"
+    } else if jobs.iter().any(Job::failed) {
         "failure"
     } else {
         "success"
     };
+    // Only the latest attempt's times are the run's own.
+    let last = run.get("run_attempt").and_then(Value::as_u64).unwrap_or(1) as u32;
+    let seconds = (attempt == last)
+        .then(|| {
+            crate::window::seconds_between(str_of(run, "run_started_at"), str_of(run, "updated_at"))
+        })
+        .flatten();
     Ok(Row {
         repo: opts.repo.to_string(),
         run_id: id,
@@ -595,6 +624,7 @@ fn row_of(
         base_sha,
         created_at,
         conclusion: conclusion.to_string(),
+        seconds,
         jobs,
     })
 }

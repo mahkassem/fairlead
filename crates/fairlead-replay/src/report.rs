@@ -118,6 +118,25 @@ pub fn dir_glob(path: &str) -> String {
     }
 }
 
+/// Whether a glob matches every path, as a root-level file's directory does.
+pub fn matches_everything(glob: &str) -> bool {
+    glob.trim_start_matches("./")
+        .split('/')
+        .all(|part| part == "**" || part == "*")
+}
+
+/// The owner rule that ties `test` to `changed`, or none when either sits
+/// at the root: a rule there would select every test on every change.
+pub fn owner_rule(test: &str, changed: &str) -> Option<String> {
+    let (tests, covers) = (dir_glob(test), dir_glob(changed));
+    (!matches_everything(&tests) && !matches_everything(&covers))
+        .then(|| format!("[[tests.owners]] match = \"{tests}\", covers = [\"{covers}\"]"))
+}
+
+/// Why no owner rule is offered for a file at the repository root.
+pub const ROOT_NO_RULE: &str =
+    "no rule suggested: a file at the repository root would make a rule that selects every test";
+
 /// On the default branch, a miss is a failure that got past the plan.
 fn escape(event: &str) -> bool {
     event == "push" || event == crate::run::SCHEDULE
@@ -136,11 +155,12 @@ fn miss(f: &Failure) -> Miss {
         .iter()
         .find(|c| !crate::inherited::is_test_name(c) && !is_document(c));
     let fix = match (&f.target, cause) {
-        (Target::Test(test), Some(changed)) => format!(
-            "[[tests.owners]] match = \"{}\", covers = [\"{}\"]",
-            dir_glob(test),
-            dir_glob(changed)
-        ),
+        (Target::Test(test), Some(changed)) => {
+            owner_rule(test, changed).unwrap_or_else(|| ROOT_NO_RULE.into())
+        }
+        (Target::Check(_), Some(changed)) if matches_everything(&dir_glob(changed)) => {
+            ROOT_NO_RULE.into()
+        }
         (Target::Check(id), Some(changed)) => {
             format!("add \"{}\" to the paths of check {id}", dir_glob(changed))
         }
@@ -515,6 +535,20 @@ mod tests {
             fix.starts_with("no rule suggested: only tests or documents"),
             "{fix}"
         );
+    }
+
+    #[test]
+    fn a_root_level_test_or_change_suggests_no_rule_that_matches_everything() {
+        let mut f = missed(&["build.gradle.kts"]);
+        assert_eq!(miss(&f).fix, ROOT_NO_RULE);
+        f.target = Target::Test("RootTest.kt".into());
+        f.changed = vec!["okhttp/src/main/kotlin/okhttp3/Call.kt".into()];
+        assert_eq!(miss(&f).fix, ROOT_NO_RULE);
+        f.target = Target::Check("lint".into());
+        f.changed = vec!["settings.gradle.kts".into()];
+        assert_eq!(miss(&f).fix, ROOT_NO_RULE);
+        assert!(matches_everything("**") && matches_everything("./**/*"));
+        assert!(!matches_everything("src/**"));
     }
 
     #[test]

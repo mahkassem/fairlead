@@ -17,5 +17,6 @@ pub mod quarantine;
 pub mod recurring;
 pub mod report;
 pub mod run;
+pub mod signals;
 pub mod waves;
 pub mod window;

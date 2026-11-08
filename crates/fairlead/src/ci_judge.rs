@@ -89,11 +89,8 @@ impl<'a> Judge<'a> {
     fn verdict(&self, runner: &str, test: String) -> Verdict {
         let planned = self.merge.all || self.merge.tests.iter().any(|t| t.path == test);
         let fix = (!planned).then(|| match self.merge.changed.first() {
-            Some(changed) => format!(
-                "[[tests.owners]] match = \"{}\", covers = [\"{}\"]",
-                fairlead_replay::report::dir_glob(&test),
-                fairlead_replay::report::dir_glob(&changed.path)
-            ),
+            Some(changed) => fairlead_replay::report::owner_rule(&test, &changed.path)
+                .unwrap_or_else(|| fairlead_replay::report::ROOT_NO_RULE.into()),
             None => "no rule suggested: the merge changed nothing".into(),
         });
         Verdict {
