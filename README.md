@@ -77,6 +77,12 @@ of trying things like a stranger.
   *Since 0.13.0:* when the config being replayed differs from the base
   branch's, `replay run` reports the recall of both side by side and names
   each failure that moved between hit and miss.
+  *Unreleased:* `fairlead ci ledger` says whether each red check is the
+  change's own, inherited from the base branch ("red on main since abc1234"),
+  flaky or the platform's, with every workflow's red streak on the default
+  branch; `next`, `resume`, `brief` and `doctor` read it offline, and
+  `insights --speed` says where CI time goes: slow steps, steps that never
+  fail, suites faster than their plan, reruns and cancellations.
 - **Fast because it remembers.** No rereading the codebase to rediscover what
   was learned last week. The graph, the plan and the lessons are already there.
   *Since 0.2.0:* the import graph is built without installing dependencies
@@ -154,6 +160,9 @@ This README documents Fairlead 0.15.1. Each command, by what it's for:
   *Since 0.15.0:* a slow suite with `all_from = "full"`, or every suite while
   the project's `phase` is `early` or `testing`, runs only what a change
   reaches on a pull request and runs whole on a schedule.
+  *Unreleased:* `ci ledger` judges each failure of a run as own, inherited,
+  flaky or infra, `ci report --ledger` says it once, and the workflow
+  `ci workflow` writes runs it when a job fails.
 - **Rules as the agent works:** `guard check`, the hooks `hooks install` adds,
   and `doctor`.
 - **The change loop:** `brief` before an edit, or `context` for the brief with
@@ -181,7 +190,8 @@ This README documents Fairlead 0.15.1. Each command, by what it's for:
   `test bench` times `bun test` serial, `--parallel` and
   `--parallel --no-isolate` on the repository's tests, flags order-dependent
   ones, and recommends the fastest mode for `doctor --score` and
-  `insights --suggest`.
+  `insights --suggest`. *Unreleased:* `ci ledger`, a verdict for each red
+  check and the default branch's red streaks, and `insights --speed`.
 - **Getting started:** `init` writes a first config from what the repository
   shows, and `init --blueprint` adds a starting point for a kind of project:
   config, starter skills and the CI workflow. *Since 0.14.0:* on Bun 1.4.4 or
