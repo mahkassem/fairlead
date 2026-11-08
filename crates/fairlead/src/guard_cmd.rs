@@ -378,7 +378,9 @@ fn check_staged(root: &Path, guard: &Guard, settings: &config::Guard, list: bool
         config::Findings::All => "the staged files have",
     };
     if new.is_empty() {
-        println!("guard: {read} staged file(s), {what} no findings");
+        // Every staged file, not only those a content rule read: the path
+        // and external rules saw them all.
+        println!("guard: {} staged file(s), {what} no findings", staged.len());
         return ExitCode::SUCCESS;
     }
     let then = if warn { ", committing anyway" } else { "" };

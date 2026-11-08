@@ -113,6 +113,17 @@ pub fn refresh(root: &Path, remote: &Remote, always: bool) -> Option<String> {
             return None;
         }
     }
+    // A clone with no such remote has nothing to fetch and no ref to be stale.
+    let known = Command::new("git")
+        .args(["remote", "get-url", &remote.remote])
+        .current_dir(root)
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status()
+        .is_ok_and(|s| s.success());
+    if !known {
+        return None;
+    }
     let mut git = Command::new("git");
     git.args([
         "fetch",
@@ -126,7 +137,7 @@ pub fn refresh(root: &Path, remote: &Remote, always: bool) -> Option<String> {
     match run_with_timeout(git, TIMEOUT) {
         Some(()) => None,
         None => Some(format!(
-            "migrations: couldn't fetch {} {} within {} s (offline?); comparing with the local {}, which may be stale",
+            "migrations: couldn't fetch {} {} (offline, or over {} s); comparing with the local {}, which may be stale",
             remote.remote,
             remote.branch,
             TIMEOUT.as_secs(),
