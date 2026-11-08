@@ -377,15 +377,6 @@ phase line, which missed a production deploy whose workflow names the
 environment on its own line (`environment:` then `name: production`) and so
 suggested `phase = "early"` for a live repository.
 
-### Unreleased
-
-Migrate updates nothing in your files. A workflow `fairlead ci workflow`
-wrote gets the `ledger` job, which says whether each failure is the
-change's own, from `fairlead ci workflow --write` run again
-([Is this red mine?](ci.md#is-this-red-mine-fairlead-ci-ledger)). Replay
-datasets fetched before have no cancelled runs or times, so
-`insights --speed` counts those from the next fetch on.
-
 ## Going back to an older release
 
 Install the older release, then run its `hooks uninstall` and

@@ -300,7 +300,7 @@ escapes = "report" # or "fail": `ci report` exits 1 on an escape `ci run --judge
 
 ## Is this red mine? `fairlead ci ledger`
 
-*Unreleased.* When agents write most pull requests, the time goes less into running tests than into deciding whether a red check is the change's fault: explaining "already red on main" in the pull request, rerunning identical code until it passes, and missing a scheduled suite that has been red for weeks. `fairlead ci ledger` answers that from CI's own history.
+*Unreleased:* when agents write most pull requests, the time goes less into running tests than into deciding whether a red check is the change's fault: explaining "already red on main" in the pull request, rerunning identical code until it passes, and missing a scheduled suite that has been red for weeks. `fairlead ci ledger` answers that from CI's own history.
 
 ```sh
 fairlead ci ledger                      # the newest runs on HEAD, from a laptop

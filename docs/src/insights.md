@@ -8,7 +8,7 @@ fairlead insights --since 2026-09-01 --json
 fairlead insights --replay out/report.json --results results.json --results results-2.json
 fairlead insights --suggest                         # and the changes the evidence backs
 fairlead insights --suggest --write                 # and apply the one-key change
-fairlead insights --speed --dataset runs.jsonl      # where the time goes (Unreleased)
+fairlead insights --speed --dataset runs.jsonl      # where the time goes
 ```
 
 ## What it reads

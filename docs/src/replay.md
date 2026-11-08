@@ -33,7 +33,7 @@ With `--fetch-missing`, the recorded heads and bases the clone lacks are fetched
 | --- | --- |
 | hit | the test file or check is in the plan, or the plan selects everything |
 | miss | it isn't, and nothing below explains it; recall is hits over hits and misses |
-| flaky | another attempt of the same run passed the same job, or (*Unreleased*) the job's failure is a timeout with no assertion failing; decided before hit, so a flaky failure never raises recall |
+| flaky | another attempt of the same run passed the same job, or, *Unreleased:* the job's failure is a timeout with no assertion failing; decided before hit, so a flaky failure never raises recall |
 | unconfirmed | a later run of the same change passed the job: the same head again, or the same patch rebased onto a newer base (equal `git patch-id`) |
 | unattributed | the job failed, but no test file or check could be named from its annotations or log |
 | unavailable | the head commit, or the history to its merge base, isn't in the clone |
