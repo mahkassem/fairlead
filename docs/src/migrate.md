@@ -370,6 +370,13 @@ nothing is deployed, or `all_from = "full"` on a slow runner, then run
 `fairlead ci workflow --write` again so the workflow gets its schedule
 ([Whole suites at a later stage](plan.md#whole-suites-at-a-later-stage)).
 
+### To 0.15.1
+
+Migrate updates nothing in your files. 0.15.1 fixes `fairlead doctor`'s
+phase line, which missed a production deploy whose workflow names the
+environment on its own line (`environment:` then `name: production`) and so
+suggested `phase = "early"` for a live repository.
+
 ## Going back to an older release
 
 Install the older release, then run its `hooks uninstall` and
