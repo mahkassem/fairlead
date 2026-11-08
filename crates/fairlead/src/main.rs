@@ -29,6 +29,7 @@ mod import_cmd;
 mod import_rules_cmd;
 mod init_cmd;
 mod insights_cmd;
+mod insights_speed;
 mod knowledge;
 mod ledger_rerun;
 mod ledger_text;
