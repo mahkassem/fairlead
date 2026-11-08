@@ -33,6 +33,7 @@ next     edit, then: fairlead done
 - **lessons:** the [lessons](lessons.md) whose scope covers a named path, a file a named path imports, or every change, each with why it was picked. It lists `memory.cap` (5) of them. A lesson file that can't be offered is named in a `warning` line. *Since 0.8.0.*
 - **skills:** the [skills](skills.md) whose route covers a named path or a file it imports, or every change, each with its description and why. It lists `skills.cap` (8) of them. *Since 0.8.0.*
 - **done:** the steps `fairlead done` will run, the same list as `fairlead done --dry-run`.
+- **phase** and **later:** *Since 0.15.0:* the project's [phase](plan.md#the-projects-phase) and what it asks of the change, then one line for each suite whose whole run the plan leaves to a later stage.
 
 A path that isn't in the tree yet is a new file. Nothing reaches it, and the brief still lists the rules its location falls under. Each section shows its first five items, then how many more there are and the command that lists them. `--all` lifts the cap. Without it a brief stays under 40 lines.
 

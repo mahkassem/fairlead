@@ -29,6 +29,12 @@ pub struct Changes {
     /// Plan everything whatever changed, for this reason; a full CI stage sets it.
     #[arg(skip)]
     pub everything: Option<String>,
+    /// Run whole suites that wait for the full stage; `plan` and `done` set it from `--full`.
+    #[arg(skip)]
+    pub full_suites: bool,
+    /// The CI stage the plan is for; `ci plan` sets it.
+    #[arg(skip)]
+    pub stage: Option<fairlead_core::config::CiStage>,
     /// Scan with the parse cache of the checkout here, not the scanned one's.
     #[arg(skip)]
     pub cache_from: Option<PathBuf>,
@@ -43,6 +49,8 @@ impl Changes {
             sets,
             repo: None,
             everything: None,
+            full_suites: false,
+            stage: None,
             cache_from: None,
         }
     }
@@ -144,6 +152,7 @@ pub fn make(cwd: &Path, changes: &Changes) -> Result<Planned, String> {
     };
     let mut scan = scanned.map_err(|e| format!("could not read {}: {e}", root.display()))?;
     let changes_everything = changes.everything.clone();
+    let (full_suites, stage) = (changes.full_suites, changes.stage);
     let (changes, base) = if changes.files.is_empty() {
         let base = match &changes.base {
             Some(b) => b.clone(),
@@ -169,6 +178,8 @@ pub fn make(cwd: &Path, changes: &Changes) -> Result<Planned, String> {
     let input = Input {
         base_files,
         everything: changes_everything,
+        full_suites,
+        stage,
         changes,
         base,
         head,

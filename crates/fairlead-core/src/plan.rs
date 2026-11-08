@@ -91,6 +91,10 @@ pub struct Plan {
     /// Runners and checks the stage leaves for a later one.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub deferred: Vec<Deferred>,
+    /// Runners and checks that name their files although the plan runs
+    /// everything, because their whole suite waits for a later stage.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub named: Vec<String>,
     /// At merge, the pull request that passed the ready stage's steps on
     /// this exact tree, and the steps skipped for it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -148,6 +152,62 @@ pub struct Deferred {
     /// Test files or checks it would have run, so "deferred" and "reached
     /// nothing" read differently.
     pub selected: usize,
+    /// Why it waits: a later `from`, or a whole suite whose `all_from` is
+    /// later than this plan's stage.
+    #[serde(default, skip_serializing_if = "DeferWhy::is_stage")]
+    pub why: DeferWhy,
+    /// For a whole suite: how many of `selected` the change reaches. At
+    /// `plan.whole_share` or more of the suite, it waits whole; a person runs
+    /// it before merging.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub reached: usize,
+}
+
+fn is_zero(n: &usize) -> bool {
+    *n == 0
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "kebab-case")]
+pub enum DeferWhy {
+    #[default]
+    Stage,
+    /// The step runs here, but not its whole suite.
+    Whole,
+}
+
+impl DeferWhy {
+    pub fn is_stage(&self) -> bool {
+        *self == DeferWhy::Stage
+    }
+}
+
+impl Deferred {
+    /// One line saying what waits and what a person can do about it.
+    pub fn advice(&self) -> String {
+        let what = match self.kind {
+            InvocationKind::Runner => format!("{} test file(s)", self.selected),
+            InvocationKind::Check => "its run over every file it matches".to_string(),
+        };
+        match self.why {
+            DeferWhy::Stage => format!(
+                "{} waits for the {} stage ({} selected)",
+                self.id, self.from, self.selected
+            ),
+            DeferWhy::Whole if self.reached == 0 => format!(
+                "{}: the whole suite runs at the {} stage; this plan leaves out {what}, and `fairlead done --full` runs them here",
+                self.id, self.from
+            ),
+            DeferWhy::Whole => format!(
+                "{}: this change reaches {} of {} test files ({}%), so the whole suite waits for the {} stage; run `fairlead done --full` here before merging",
+                self.id,
+                self.reached,
+                self.selected,
+                self.reached * 100 / self.selected.max(1),
+                self.from
+            ),
+        }
+    }
 }
 
 /// A selected test or check held here. It runs in an invocation of its

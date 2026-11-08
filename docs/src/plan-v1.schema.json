@@ -62,6 +62,21 @@
         }
       ]
     },
+    "DeferWhy": {
+      "oneOf": [
+        {
+          "enum": [
+            "stage"
+          ],
+          "type": "string"
+        },
+        {
+          "const": "whole",
+          "description": "The step runs here, but not its whole suite.",
+          "type": "string"
+        }
+      ]
+    },
     "Deferred": {
       "description": "A runner or check whose `from` stage is later than the plan's.",
       "properties": {
@@ -74,11 +89,21 @@
         "kind": {
           "$ref": "#/$defs/InvocationKind"
         },
+        "reached": {
+          "description": "For a whole suite: how many of `selected` the change reaches. At\n`plan.whole_share` or more of the suite, it waits whole; a person runs\nit before merging.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
         "selected": {
           "description": "Test files or checks it would have run, so \"deferred\" and \"reached\nnothing\" read differently.",
           "format": "uint",
           "minimum": 0,
           "type": "integer"
+        },
+        "why": {
+          "$ref": "#/$defs/DeferWhy",
+          "description": "Why it waits: a later `from`, or a whole suite whose `all_from` is\nlater than this plan's stage."
         }
       },
       "required": [
@@ -595,6 +620,13 @@
       "description": "What to run, in order: each an argv in a working directory.",
       "items": {
         "$ref": "#/$defs/Invocation"
+      },
+      "type": "array"
+    },
+    "named": {
+      "description": "Runners and checks that name their files although the plan runs\neverything, because their whole suite waits for a later stage.",
+      "items": {
+        "type": "string"
       },
       "type": "array"
     },

@@ -151,6 +151,9 @@ This README documents Fairlead 0.15.0. Each command, by what it's for:
   which writes a staged workflow, and the GitHub Action. *Since 0.13.0:*
   `ci plan --shards N` splits a plan across a matrix of N jobs, balanced by
   past durations, and `ci run --shard K/N` runs one job's share.
+  *Since 0.15.0:* a slow suite with `all_from = "full"`, or every suite while
+  the project's `phase` is `early` or `testing`, runs only what a change
+  reaches on a pull request and runs whole on a schedule.
 - **Rules as the agent works:** `guard check`, the hooks `hooks install` adds,
   and `doctor`.
 - **The change loop:** `brief` before an edit, or `context` for the brief with
@@ -193,11 +196,14 @@ The [quick start](#quick-start) shows the first few, and the
 
 ## Status
 
-Pre-alpha. The latest release, v0.15.0, adds `[[needs]]`: a repository
-declares what some tests need from the machine, such as a service on a port
-or a container runtime, and `fairlead doctor` checks whether this machine
-has it, the first step towards a done gate that says what it couldn't
-prove instead of failing. 0.14.2 fixed the npm install on Windows under a
+Pre-alpha. The latest release, v0.15.0, leaves slow suites, such as
+end-to-end and browser tests, to a scheduled run: a pull request runs only
+what the change reaches (`all_from`, or the project's `phase` before a live
+deployment). It also adds `[[needs]]`: a repository declares what some
+tests need from the machine, such as a service on a port or a container
+runtime, and `fairlead doctor` checks whether this machine has it, the
+first step towards a done gate that says what it couldn't prove instead of
+failing. 0.14.2 fixed the npm install on Windows under a
 path with a space in it, and 0.14.1 shipped 0.14.0's changes, whose
 release stopped before publishing: GitHub cancelled its Apple-silicon build
 on a retiring macOS image. 0.14 measures and uses Bun 1.4.4 (`init` writes the

@@ -317,6 +317,7 @@ pub fn invocations(
     tests: &[TestSelection],
     checks: &[CheckSelection],
     all: bool,
+    named: &std::collections::BTreeSet<String>,
     held: &[Quarantined],
 ) -> Vec<Invocation> {
     let is_held = |kind: InvocationKind, target: &str| {
@@ -324,7 +325,7 @@ pub fn invocations(
     };
     let mut out = Vec::new();
     for runner in cx.config.tests.runners.items() {
-        let all = all && !finds_others(cx, runner);
+        let all = all && !finds_others(cx, runner) && !named.contains(&runner.id);
         let (alone, mine): (Vec<&TestSelection>, Vec<&TestSelection>) = tests
             .iter()
             .filter(|t| t.runner.as_deref() == Some(runner.id.as_str()))
@@ -363,7 +364,7 @@ pub fn invocations(
             .filter_map(|g| Pattern::new(g).ok())
             .collect();
         let files = if check.command.iter().any(|a| a == "{files}") {
-            check_files(cx, &paths, check.files, all)
+            check_files(cx, &paths, check.files, all && !named.contains(&check.id))
         } else {
             Vec::new()
         };

@@ -35,6 +35,7 @@ mod mcp_tools;
 mod migrate_cmd;
 mod migrate_notes;
 mod needs;
+mod phase;
 mod plan_cmd;
 mod receipt_cmd;
 mod replay_cmd;
@@ -111,6 +112,9 @@ enum Command {
         /// Print the plan's JSON Schema and exit.
         #[arg(long)]
         schema: bool,
+        /// Plan whole suites that wait for a later stage too, as a run here would.
+        #[arg(long)]
+        full: bool,
     },
     /// Explain test selection, or time Bun's test modes with `bench`.
     #[command(args_conflicts_with_subcommands = true, subcommand_negates_reqs = true)]
@@ -334,6 +338,7 @@ fn doctor_report(dir: &Path, opts: &LoadOptions) -> String {
         }
         agents = agents_cmd::doctor_lines(&root, &l.config);
         hooks.push_str(&needs::doctor_lines(&root, &l.config));
+        hooks.push_str(&phase::doctor_lines(&root, &l.config));
     }
     let config = match loaded {
         Ok(loaded) if loaded.files.is_empty() => "none found; defaults apply".to_string(),
@@ -585,12 +590,16 @@ fn main() -> ExitCode {
         Some(Command::Receipt { args }) => receipt_cmd::run(args, &cwd()),
         Some(Command::Next { args }) => receipt_cmd::run_next(args, &cwd()),
         Some(Command::Plan {
-            changes,
+            mut changes,
             head,
             json,
             out,
             schema,
-        }) => plan_cmd::run_plan(&cwd(), changes, head, json, out, schema),
+            full,
+        }) => {
+            changes.full_suites = full;
+            plan_cmd::run_plan(&cwd(), changes, head, json, out, schema)
+        }
         Some(Command::Ci { action }) => ci_cmd::run(action, &cwd()),
         Some(Command::Replay { action }) => replay_cmd::run(action),
         Some(Command::Insights { args }) => insights_cmd::run(args, &cwd()),

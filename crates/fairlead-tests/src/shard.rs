@@ -50,6 +50,12 @@ fn unit(runner: &Runner, all: bool) -> Option<Unit> {
         .then_some(Unit::File)
 }
 
+/// Whether the plan runs this runner's whole suite: it runs everything and
+/// the runner doesn't name its files instead.
+fn whole(plan: &Plan, id: &str) -> bool {
+    plan.all && !plan.named.iter().any(|n| n == id)
+}
+
 /// The file, or for a `{packages}` runner the directory holding it.
 fn unit_key(runner: &Runner, all: bool, path: &str) -> String {
     match unit(runner, all) {
@@ -113,7 +119,7 @@ fn divided<'a>(plan: &'a Plan, config: &'a Config) -> Vec<Divided<'a>> {
         .runners
         .items()
         .iter()
-        .filter(|r| unit(r, plan.all).is_some() && runs(&r.id))
+        .filter(|r| unit(r, whole(plan, &r.id)).is_some() && runs(&r.id))
         .map(|runner| Divided {
             runner,
             tests: plan
@@ -151,7 +157,11 @@ pub fn split(
     // Units: a file, or a `{packages}` runner's directory, keyed in path order.
     let mut units: BTreeMap<(usize, String), f64> = BTreeMap::new();
     for (r, t, seconds) in &files {
-        let key = unit_key(runners[*r].runner, plan.all, &t.path);
+        let key = unit_key(
+            runners[*r].runner,
+            whole(plan, &runners[*r].runner.id),
+            &t.path,
+        );
         let weight = if durations.is_some() {
             seconds.unwrap_or(fallback)
         } else {
@@ -166,7 +176,14 @@ pub fn split(
     let mut lists = Vec::new();
     for k in 0..count as usize {
         let mine = |r: usize, t: &TestSelection| {
-            shard_of[&(r, unit_key(runners[r].runner, plan.all, &t.path))] == k
+            shard_of[&(
+                r,
+                unit_key(
+                    runners[r].runner,
+                    whole(plan, &runners[r].runner.id),
+                    &t.path,
+                ),
+            )] == k
         };
         let weight: f64 = units
             .iter()

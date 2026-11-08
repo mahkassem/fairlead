@@ -60,6 +60,9 @@ pub struct Stages {
     /// At merge, skip the ready stage's steps when the pull request passed
     /// them on the same tree.
     pub reuse: bool,
+    /// When `ci workflow` schedules the full stage, as a cron line in UTC,
+    /// once any whole suite waits for it.
+    pub nightly: String,
 }
 
 impl Default for Stages {
@@ -68,17 +71,69 @@ impl Default for Stages {
             environments: strings(&["main"]),
             full_label: "run-everything".into(),
             reuse: true,
+            nightly: "17 19 * * 1-5".into(),
         }
+    }
+}
+
+/// Where a project is in its life. `early` and `testing` have no live
+/// deployment, so a change proves what it reaches and whole suites run at
+/// the end of the day; `live` keeps every step as it's configured.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "kebab-case")]
+pub enum Phase {
+    Early,
+    Testing,
+    Live,
+}
+
+impl Phase {
+    pub fn name(self) -> &'static str {
+        match self {
+            Phase::Early => "early",
+            Phase::Testing => "testing",
+            Phase::Live => "live",
+        }
+    }
+
+    /// Whether anything is deployed for people to use.
+    pub fn is_live(self) -> bool {
+        self == Phase::Live
     }
 }
 
 impl Config {
     /// Whether `ci plan` reads a stage when none is asked for: `[stages]`
-    /// is set, or a runner or check says when it runs.
+    /// is set, or a runner or check says when it, or its whole suite, runs.
     pub fn uses_stages(&self) -> bool {
         self.stages.is_some()
             || self.tests.runners.items().iter().any(|r| r.from.is_some())
             || self.checks.items().iter().any(|c| c.from.is_some())
+            || self.has_all_from()
+    }
+
+    /// Whether any runner or check runs its whole suite only from a later
+    /// stage than its own.
+    pub fn has_all_from(&self) -> bool {
+        self.tests
+            .runners
+            .items()
+            .iter()
+            .any(|r| self.all_from_of(r.all_from).is_some())
+            || self
+                .checks
+                .items()
+                .iter()
+                .any(|c| self.all_from_of(c.all_from).is_some())
+    }
+
+    /// A step's `all_from`, or the phase's default when it sets none: the
+    /// full stage before a live deployment, none once there is one.
+    pub fn all_from_of(&self, set: Option<CiStage>) -> Option<CiStage> {
+        set.or(match self.phase {
+            Some(Phase::Early | Phase::Testing) => Some(CiStage::Full),
+            Some(Phase::Live) | None => None,
+        })
     }
 
     /// `[stages]` as set, or its defaults.
@@ -100,6 +155,12 @@ pub(super) fn validate(config: &Config, problems: &mut Vec<Problem>) {
         problems.push(super::validate::problem(
             "stages.environments",
             "a branch name can't be empty",
+        ));
+    }
+    if stages.nightly.split_whitespace().count() != 5 {
+        problems.push(super::validate::problem(
+            "stages.nightly",
+            "a cron line has five fields, such as \"17 19 * * 1-5\"",
         ));
     }
     if stages.full_label.trim().is_empty() {

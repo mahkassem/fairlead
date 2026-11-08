@@ -79,6 +79,12 @@ pub struct Brief {
     pub lessons: Section<Item>,
     pub skills: Section<Item>,
     pub done: Section<Item>,
+    /// Where the project is in its life, and what that asks of a change.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub phase: Option<String>,
+    /// Whole suites the plan leaves to a later stage, one line each.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub later: Vec<String>,
     /// Inputs the brief couldn't use, such as a lesson file it couldn't read.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub warnings: Vec<String>,
@@ -418,6 +424,13 @@ fn assemble(
                 .map(|s| item(s.id.clone(), s.argv.join(" ")))
                 .collect(),
         },
+        phase: planned.config.phase.map(phase_line),
+        later: plan
+            .deferred
+            .iter()
+            .filter(|d| !d.why.is_stage())
+            .map(|d| d.advice())
+            .collect(),
         warnings: offered
             .bad
             .iter()
@@ -586,11 +599,28 @@ pub fn text(b: &Brief, all: bool) -> String {
         or_none(ids(&b.done.items)),
         &b.done.source,
     );
+    if let Some(phase) = &b.phase {
+        out.push_str(&format!("phase    {phase}\n"));
+    }
+    for line in &b.later {
+        out.push_str(&format!("later    {line}\n"));
+    }
     for w in &b.warnings {
         out.push_str(&format!("warning  {w}\n"));
     }
     out.push_str("next     edit, then: fairlead done\n");
     out
+}
+
+/// What a phase asks of a change, for the agent deciding what to prove.
+fn phase_line(phase: fairlead_core::config::Phase) -> String {
+    use fairlead_core::config::Phase;
+    let ask = match phase {
+        Phase::Early => "nothing is deployed: prove what the change reaches; whole suites run at the end of the day",
+        Phase::Testing => "testers use it, nothing is live: prove what the change reaches, and run a whole suite here when the change reaches most of it",
+        Phase::Live => "people use it: run what the plan selects, check what this machine can prove (`fairlead doctor`), and say in the pull request what it couldn't",
+    };
+    format!("{}: {ask}", phase.name())
 }
 
 /// Briefs in the git directory, one JSON file each, never committed.

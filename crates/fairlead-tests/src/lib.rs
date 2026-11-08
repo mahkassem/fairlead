@@ -12,6 +12,7 @@ pub mod hubs;
 pub mod invoke;
 pub mod lockfile;
 pub mod modules;
+pub mod nightly;
 pub mod owners;
 pub use fairlead_core::pattern;
 pub mod planner;

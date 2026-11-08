@@ -24,6 +24,17 @@ pub struct Plan {
     /// lockfile selects only the workspace packages whose resolved
     /// dependencies changed; opt-in while the benchmarks gather evidence.
     pub lockfile: LockfileMode,
+    /// A change reaching at least this share of a suite whose whole run
+    /// waits for a later stage waits with it. Left out of the digest at its
+    /// default, so configs that don't set it keep their plan ids.
+    #[serde(skip_serializing_if = "is_default_share")]
+    pub whole_share: f64,
+}
+
+const DEFAULT_SHARE: f64 = 0.5;
+
+fn is_default_share(share: &f64) -> bool {
+    *share == DEFAULT_SHARE
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, JsonSchema)]
@@ -75,6 +86,7 @@ impl Default for Plan {
                 "LICENSE*",
             ]),
             lockfile: LockfileMode::default(),
+            whole_share: DEFAULT_SHARE,
         }
     }
 }
@@ -153,6 +165,13 @@ fn unknown_kind(name: &str) -> String {
 
 /// `on` names known kinds and at least one, and `paths` at least one glob.
 pub(super) fn validate(config: &Config, problems: &mut Vec<Problem>) {
+    let share = config.plan.whole_share;
+    if !(share > 0.0 && share <= 1.0) {
+        problems.push(super::validate::problem(
+            "plan.whole_share",
+            "is a share of a suite, above 0 and at most 1, such as 0.5",
+        ));
+    }
     for (i, entry) in config.plan.run_all.items().iter().enumerate() {
         let RunAll::Kinds(kinds) = entry else {
             continue;

@@ -28,6 +28,9 @@ pub struct DoneArgs {
     /// Only say whether the working tree as it stands has passed; exits 0 if it has.
     #[arg(long, conflicts_with_all = ["dry_run", "keep_going"])]
     check: bool,
+    /// Run whole suites that wait for a later stage too.
+    #[arg(long, conflicts_with = "check")]
+    full: bool,
 }
 
 pub fn run(args: DoneArgs, cwd: &Path) -> ExitCode {
@@ -41,7 +44,9 @@ pub fn run(args: DoneArgs, cwd: &Path) -> ExitCode {
 }
 
 fn gate(args: &DoneArgs, cwd: &Path) -> Result<ExitCode, String> {
-    let planned = make(cwd, &args.changes)?;
+    let mut changes = args.changes.clone();
+    changes.full_suites = args.full;
+    let planned = make(cwd, &changes)?;
     let root = crate::graph_cmd::repo_root(cwd);
     let tree = planned.plan.tree_hash.clone();
     let log = EventLog::open(&root);
@@ -97,18 +102,30 @@ fn gate(args: &DoneArgs, cwd: &Path) -> Result<ExitCode, String> {
     }
     let passed = ran.len() == steps.len() && ran.iter().all(|s| s.passed || s.quarantined);
     let not_provable = ran.iter().filter(|s| s.quarantined).count();
+    let waiting = waiting(&planned);
+    let decision = match (passed, waiting.is_empty()) {
+        (false, _) => "fail",
+        (true, true) => "pass",
+        (true, false) => "deferred",
+    };
     if let Some(log) = &log {
-        let mut event = Event::new(
-            "done",
-            if passed { "pass" } else { "fail" },
-            started.elapsed(),
-        );
+        let mut event = Event::new("done", decision, started.elapsed());
         event.tree = Some(tree);
         event.steps = ran;
         // The log is a record; failing to write it never changes the outcome.
         let _ = log.append(&event);
     }
-    if passed && not_provable > 0 {
+    for d in planned.plan.deferred.iter().filter(|d| !d.why.is_stage()) {
+        println!("done: {}", d.advice());
+    }
+    if passed && !waiting.is_empty() {
+        println!(
+            "done: passed, {} steps; not finished: the change reaches most of {}, which ran nowhere yet. `fairlead done --full` runs it here",
+            steps.len(),
+            waiting.join(", ")
+        );
+        Ok(ExitCode::SUCCESS)
+    } else if passed && not_provable > 0 {
         println!(
             "done: passed, {} steps; {not_provable} failed as quarantined, so not provable here: say so in the pull request",
             steps.len()
@@ -121,6 +138,23 @@ fn gate(args: &DoneArgs, cwd: &Path) -> Result<ExitCode, String> {
         eprintln!("done: not passed; fix the failing step and run `fairlead done` again");
         Ok(ExitCode::FAILURE)
     }
+}
+
+/// Whole suites the change reaches most of, which hold the gate open until a
+/// run with `--full`: once anything is deployed. Before that, the scheduled
+/// run is enough.
+fn waiting(planned: &crate::plan_cmd::Planned) -> Vec<String> {
+    let early = planned.config.phase == Some(fairlead_core::config::Phase::Early);
+    if early {
+        return Vec::new();
+    }
+    planned
+        .plan
+        .deferred
+        .iter()
+        .filter(|d| !d.why.is_stage() && d.reached > 0)
+        .map(|d| d.id.clone())
+        .collect()
 }
 
 /// The planned tests and checks `[done]` asks for, then `done.always`

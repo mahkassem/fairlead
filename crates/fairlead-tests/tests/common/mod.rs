@@ -75,6 +75,8 @@ pub fn try_plan_with_base(
             tree_hash: "worktree:test".into(),
             base_files,
             everything: None,
+            full_suites: false,
+            stage: None,
         },
     )
 }

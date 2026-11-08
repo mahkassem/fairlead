@@ -65,6 +65,7 @@ fairlead.toml: tests.unreachd: unknown field `unreachd`, expected one of ...
 | Key | Default | Meaning |
 | --- | --- | --- |
 | `fairlead` | none | The oldest Fairlead version this config needs, such as `"0.2"`. *Since 0.7.0:* a config that an older binary can't read, because it uses keys added later, gets this version in the error instead of the unknown key. |
+| `phase` | none | *Since 0.15.0:* `early`, `testing` or `live`. Before a live deployment, a step with no `all_from` runs its whole suite only at the full stage ([The project's phase](plan.md#the-projects-phase)) |
 | `modules.discover` | `["workspaces"]` | Where modules come from |
 | `modules.define` | `[]` | Extra modules: `{ pattern = "services/{name}/src" }` |
 | `graph.tsconfig` | `"auto"` | The nearest tsconfig to each file, or a path |
@@ -80,13 +81,14 @@ fairlead.toml: tests.unreachd: unknown field `unreachd`, expected one of ...
 | `tests.match` | `**/*.{test,spec}.{ts,tsx,js,jsx,mjs,cjs,mts,cts}` | Test files |
 | `tests.exclude` | `**/node_modules/**` | Paths that are never test files |
 | `tests.unreached` | `"module"` | What a changed file nothing reaches selects: `module`, `all` or `warn` |
-| `tests.runners` | `[]` | `id`, `match`, `exclude` (files under `match` left to another runner), `invoke` (`once` or `per-module`), `cwd`, `command`. *Since 0.7.1:* `all_command` (the argv when everything runs) and `exclude_arg` (an argv fragment that leaves one file out), below. *Since 0.8.0:* `from`, the earliest [CI stage](ci.md#stages) it runs at, `ready` by default |
+| `tests.runners` | `[]` | `id`, `match`, `exclude` (files under `match` left to another runner), `invoke` (`once` or `per-module`), `cwd`, `command`. *Since 0.7.1:* `all_command` (the argv when everything runs) and `exclude_arg` (an argv fragment that leaves one file out), below. *Since 0.8.0:* `from`, the earliest [CI stage](ci.md#stages) it runs at, `ready` by default. *Since 0.15.0:* `all_from`, the earliest stage its whole suite runs at ([Whole suites](plan.md#whole-suites-at-a-later-stage)) |
 | `tests.owners` | `[]` | Tests that don't import what they test: `match`, `covers`, and `overrides_run_all` to let a covered `plan.run_all` path select only those tests |
 | `tests.classes` | `[]` | `class` (`unit`, `own`, `demand`, `canary`) for a `match` |
-| `checks` | `[]` | Steps that aren't tests: `id`, `command`, `paths`, `modules`, `files`. *Since 0.8.0:* `from`, the earliest [CI stage](ci.md#stages) it runs at, `draft` by default |
+| `checks` | `[]` | Steps that aren't tests: `id`, `command`, `paths`, `modules`, `files`. *Since 0.8.0:* `from`, the earliest [CI stage](ci.md#stages) it runs at, `draft` by default. *Since 0.15.0:* `all_from`, the earliest stage it runs over every file it matches |
 | `quarantine` | `[]` | A test (`path`) or check (`check`) that fails on one platform whatever the change: `os`, `when` (`autocrlf`, `space-in-path`), `signature`, `reason`, `proved_in`, `until` ([Test plan](plan.md#tests-that-lie-on-one-platform)) |
 | `plan.run_all` | lockfiles, root manifests, tsconfig, runner and CI config | A changed path matching one selects everything. *Since 0.8.0:* except a change that only moves dependency versions and a workflow run only by hand or on a schedule ([Changes that don't run everything](plan.md#changes-that-dont-run-everything)). *Since 0.13.0:* an entry `{ paths, on }` runs everything only for the kinds of change `on` names (`added`, `modified`, `deleted`, `renamed`); see [Run everything by kind of change](plan.md#run-everything-by-kind-of-change) |
 | `plan.lockfile` | `"all"` | `all`: a changed lockfile selects everything; `scope` (opt-in): a changed root `pnpm-lock.yaml` selects the workspace packages whose resolved dependencies changed |
+| `plan.whole_share` | `0.5` | *Since 0.15.0:* a change reaching at least this share of a suite whose whole run waits for a later stage waits with it |
 | `plan.ignore` | root Markdown, the changesets tool's folder (`.changeset/**`), `docs/**`, READMEs, changelogs, licences | A changed path matching one that reaches no test selects nothing, instead of falling to `tests.unreached`; one that reaches tests still selects them, and a changed test file always runs |
 | `replay.provider` | `"github"` | Where CI history comes from |
 | `replay.window_days` | `90` | How far back replay looks |
@@ -133,6 +135,7 @@ fairlead.toml: tests.unreachd: unknown field `unreachd`, expected one of ...
 | `stages.environments` | `["main"]` | Branches, by name or glob, whose pushes are the merge stage. See [Stages](ci.md#stages). *Since 0.8.0* |
 | `stages.full_label` | `"run-everything"` | A pull request label that makes its runs the full stage |
 | `stages.reuse` | `true` | At merge, skip the ready stage's steps when the pull request passed them on the same tree |
+| `stages.nightly` | `"17 19 * * 1-5"` | *Since 0.15.0:* the cron line, in UTC, that `ci workflow` schedules the full stage at once a whole suite waits for it |
 | `ci.comment` | `false` | Whether `fairlead ci report` also keeps one pull request comment up to date with the report. See [Plans in CI](ci.md#fairlead-ci-report---plan-path) |
 | `ci.escapes` | `"report"` | What a failing test the merged change's plan left out does once `ci run --judge` finds it: `"report"` lists it, `"fail"` also makes `ci report` exit 1. See [Escapes](ci.md#escapes---judge-path) |
 | `guard.comments` | off | `files`, `exclude`, `tests`, `migrations`, `block_length`, `density`, `history`, `item_codes`, `agent_phrases`, `block_marker`, and `ratchet` (default `false`). See [Guard rules](guard.md#comments) |
