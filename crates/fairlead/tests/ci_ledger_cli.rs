@@ -205,11 +205,20 @@ fn each_failure_gets_a_verdict_and_the_cache_speaks_for_head_offline() {
     let (_, doctor) = output(&mut bin(&dir, &["doctor"]));
     assert!(doctor.contains("streaks: 2 red"), "{doctor}");
     assert!(doctor.contains("nightly (schedule) red on main for 2 runs"), "{doctor}");
+    let (_, brief) = output(&mut bin(&dir, &["brief", "test/a.test.ts"]));
+    assert!(brief.contains("ci       1 of 3 failures inherited"), "{brief}");
+    assert!(brief.contains("red      nightly (schedule) red on main"), "{brief}");
+    let next_at = brief.find("next     ").unwrap();
+    assert!(brief.find("ci       ").unwrap() < next_at, "{brief}");
+    let (_, resume) = output(&mut bin(&dir, &["resume"]));
+    assert!(resume.contains("ci       1 of 3 failures inherited"), "{resume}");
     // A new commit leaves the cache behind: it no longer speaks for HEAD.
     std::fs::write(dir.join("test/c.test.ts"), "pass again").unwrap();
     git(&dir, &["commit", "-qam", "touch c"]);
     let (_, next) = output(&mut bin(&dir, &["next"]));
     assert!(!next.contains("ci:"), "{next}");
+    let (_, resume) = output(&mut bin(&dir, &["resume"]));
+    assert!(!resume.contains("ci       "), "{resume}");
 }
 
 #[test]
