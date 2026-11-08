@@ -56,6 +56,30 @@ pub fn args(stage: Stage, report: &Path) -> Vec<String> {
     args
 }
 
+/// The oldest gitleaks whose flags `args` uses.
+pub const OLDEST: (u32, u32) = (8, 19);
+
+/// `gitleaks version`'s answer, such as `8.24.3`, or None when it isn't installed.
+pub fn version(root: &Path) -> Option<String> {
+    let out = fairlead_core::process::command(PROGRAM, root)
+        .arg("version")
+        .output()
+        .ok()?;
+    let text = String::from_utf8_lossy(&out.stdout);
+    let v = text.trim().trim_start_matches('v');
+    (out.status.success() && !v.is_empty()).then(|| v.to_string())
+}
+
+/// Whether a version is at least `OLDEST`; one that doesn't parse is
+/// trusted, since a build from source prints its commit instead.
+pub fn new_enough(version: &str) -> bool {
+    let mut parts = version.split('.').map(|p| p.parse::<u32>());
+    match (parts.next(), parts.next()) {
+        (Some(Ok(major)), Some(Ok(minor))) => (major, minor) >= OLDEST,
+        _ => true,
+    }
+}
+
 /// What a run gave: findings, or a note to show when the binary is missing.
 pub enum Ran {
     Found(Vec<Finding>),
@@ -134,6 +158,16 @@ pub fn parse(id: &'static str, report: &str) -> Result<Vec<Finding>, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn versions_before_8_19_are_too_old() {
+        assert!(new_enough("8.24.3"));
+        assert!(new_enough("8.19.0"));
+        assert!(new_enough("9.0.0"));
+        assert!(!new_enough("8.18.4"));
+        assert!(!new_enough("7.6.1"));
+        assert!(new_enough("dev-1a2b3c"));
+    }
 
     /// gitleaks 8.x's JSON report, with an obviously fake value in the
     /// fields a parser must never read.

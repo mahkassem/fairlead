@@ -345,9 +345,19 @@ fn doctor_report(dir: &Path, opts: &LoadOptions) -> String {
             hooks.push_str(&line);
         }
         agents = agents_cmd::doctor_lines(&root, &l.config);
+        hooks.push_str(&guard_cmd::doctor_lines(&root, &l.config));
         hooks.push_str(&needs::doctor_lines(&root, &l.config));
-        hooks.push_str(&phase::doctor_lines(&root, &l.config));
+        // A phase only decides when whole suites run, and this profile plans none.
+        if l.config.profile.is_full() {
+            hooks.push_str(&phase::doctor_lines(&root, &l.config));
+        }
     }
+    let profile = match &loaded {
+        Ok(l) if !l.config.profile.is_full() => {
+            "profile: guard (no test plan; `fairlead done` runs `guard check` and `pr check`)\n"
+        }
+        _ => "",
+    };
     let config = match loaded {
         Ok(loaded) if loaded.files.is_empty() => "none found; defaults apply".to_string(),
         Ok(loaded) if loaded.problems.is_empty() => {
@@ -363,7 +373,7 @@ fn doctor_report(dir: &Path, opts: &LoadOptions) -> String {
     let here = fairlead_tests::quarantine::Here::detect(&graph_cmd::repo_root(dir));
     let conditions: Vec<&str> = here.conditions.iter().map(|c| c.name()).collect();
     format!(
-        "fairlead {}\n{versions}platform: {}-{}\nconditions: {}\nconfig: {}\n{agents}{hooks}",
+        "fairlead {}\n{versions}platform: {}-{}\nconditions: {}\nconfig: {}\n{profile}{agents}{hooks}",
         env!("CARGO_PKG_VERSION"),
         std::env::consts::OS,
         std::env::consts::ARCH,

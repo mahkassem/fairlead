@@ -423,3 +423,33 @@ fn check_push(root: &Path, guard: &Guard, config: &config::Config) -> ExitCode {
         ExitCode::SUCCESS
     }
 }
+
+/// For `fairlead doctor`: whether the gitleaks a preset rule runs is there
+/// and new enough.
+pub fn doctor_lines(root: &Path, config: &config::Config) -> String {
+    let ids: Vec<String> = config
+        .guard
+        .external
+        .items()
+        .iter()
+        .filter(|r| r.preset == Some(config::ExternalPreset::Gitleaks))
+        .map(|r| r.rule_id())
+        .collect();
+    if ids.is_empty() {
+        return String::new();
+    }
+    let rules = format!("`{}`", ids.join("`, `"));
+    use fairlead_guard::gitleaks;
+    match gitleaks::version(root) {
+        Some(v) if gitleaks::new_enough(&v) => format!("gitleaks: {v}, for {rules}\n"),
+        Some(v) => format!(
+            "gitleaks: {v} is older than {}.{}, so {rules} fails until it's upgraded\n",
+            gitleaks::OLDEST.0,
+            gitleaks::OLDEST.1
+        ),
+        None => format!(
+            "gitleaks: not installed, so {rules} notes it and scans no content \
+             (https://github.com/gitleaks/gitleaks#installing)\n"
+        ),
+    }
+}
