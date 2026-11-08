@@ -8,10 +8,7 @@ use fairlead_core::config::{CiStage, Config};
 
 /// Text in a workflow that deploys something people use. A hint only: the
 /// config's `phase` decides.
-const LIVE: [&str; 9] = [
-    "environment: production",
-    "environment: prod",
-    "environment: live",
+const LIVE: [&str; 6] = [
     "--prod",
     "helm upgrade",
     "argocd app sync",
@@ -19,6 +16,21 @@ const LIVE: [&str; 9] = [
     "firebase deploy",
     "kubectl apply",
 ];
+
+/// GitHub environment names that mean people use what's deployed.
+const LIVE_ENVIRONMENTS: [&str; 3] = ["production", "prod", "live"];
+
+/// The environment a job line names, in `environment: X` or, on the line
+/// after a bare `environment:`, `name: X`.
+fn environment_name(line: &str, after_bare: bool) -> Option<&str> {
+    let value = match line.strip_prefix("environment:") {
+        Some(v) => v,
+        None if after_bare => line.strip_prefix("name:")?,
+        None => return None,
+    };
+    let value = value.trim().trim_matches(|c| c == '\'' || c == '"');
+    (!value.is_empty()).then_some(value)
+}
 
 /// A workflow file's name and text.
 pub struct Workflow {
@@ -54,12 +66,16 @@ pub fn workflows(root: &Path) -> Vec<Workflow> {
 pub fn live_evidence(workflows: &[Workflow]) -> Vec<String> {
     let mut out = Vec::new();
     for w in workflows {
+        let mut after_bare = false;
         for (n, line) in w.text.lines().enumerate() {
             let line = line.trim().to_ascii_lowercase();
-            if line.starts_with('#') {
+            if line.is_empty() || line.starts_with('#') {
                 continue;
             }
-            if LIVE.iter().any(|m| line.contains(m)) {
+            let env = environment_name(&line, after_bare);
+            after_bare = line == "environment:";
+            let live_env = env.is_some_and(|e| LIVE_ENVIRONMENTS.contains(&e));
+            if live_env || LIVE.iter().any(|m| line.contains(m)) {
                 out.push(format!("{}:{}", w.name, n + 1));
                 break;
             }
@@ -138,6 +154,25 @@ mod tests {
             wf("b.yml", "# environment: production\nrun: echo\n"),
         ];
         assert_eq!(live_evidence(&found), vec!["a.yml:3".to_string()]);
+    }
+
+    #[test]
+    fn an_environment_named_on_its_own_line_is_live_evidence_and_staging_isnt() {
+        let found = [
+            wf(
+                "prod.yml",
+                "jobs:\n  ship:\n    environment:\n      name: production\n      url: https://x\n",
+            ),
+            wf("quoted.yml", "jobs:\n  ship:\n    environment: 'live'\n"),
+            wf(
+                "stage.yml",
+                "jobs:\n  ship:\n    environment:\n      name: staging\n    steps:\n      - name: production smoke\n",
+            ),
+        ];
+        assert_eq!(
+            live_evidence(&found),
+            vec!["prod.yml:4".to_string(), "quoted.yml:3".to_string()]
+        );
     }
 
     #[test]
