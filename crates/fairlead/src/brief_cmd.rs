@@ -318,13 +318,15 @@ fn offer(root: &Path, brief: &Brief) {
     }
 }
 
-/// The merge base with `base`, or with the default branch.
+/// The merge base with `base`, or with the default base, or HEAD.
 pub fn base(root: &Path, base: Option<&str>) -> Option<String> {
-    let base = match base {
-        Some(b) => b.to_string(),
-        None => git::default_base(root).ok()?,
-    };
-    git::merge_base(root, &base).ok()
+    let config = fairlead_core::config::load(
+        root,
+        &fairlead_core::config::LoadOptions::from_process(Vec::new()),
+    )
+    .ok()
+    .map(|l| l.config);
+    crate::plan_cmd::merge_base_or_head(root, base, config.as_ref())
 }
 
 fn assemble(

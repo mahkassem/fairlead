@@ -389,8 +389,7 @@ fn stop_reason(
     if !edited {
         return None;
     }
-    let base = git::default_base(&root).ok()?;
-    let merge_base = git::merge_base(&root, &base).ok()?;
+    let merge_base = crate::plan_cmd::merge_base_or_head(&root, None, Some(&loaded.config))?;
     // Nothing changed means nothing to gate, as for a session that only read.
     if git::changes(&root, &merge_base).ok()?.is_empty() {
         return None;
