@@ -278,8 +278,46 @@ message`, one per line, becomes a rule with your `id`; other lines are ignored.
 A tool that exits non-zero and prints no findings fails the check, since it
 couldn't run. At the check stage the command runs as written. At the commit
 stage `{files}` expands to the staged files and every finding in them counts,
-since there's no before side to compare with. `write` isn't a stage an
-external rule can run at: when the hook runs, the file isn't written yet.
+since there's no before side to compare with, unless the rule says
+`diff = true` (below). `write` isn't a stage an external rule can run at:
+when the hook runs, the file isn't written yet.
+
+### Before and after
+
+*Unreleased:* a linter adopted on an old codebase reports thousands of
+findings nobody will fix in one change. `diff = true` fails only on the
+findings the change adds:
+
+```toml
+[[guard.external]]
+id = "lint"
+command = ["npx", "eslint", "--format", "unix", "{files}"]
+stages = ["commit", "check"]
+diff = true
+```
+
+- **Where.** At the commit stage the base is HEAD and the files are the
+  staged ones. At the check stage the base is the merge base with `--base`,
+  and `fairlead done` passes its plan's merge base when a diff rule exists.
+  `guard check` with no `--base` leaves a diff rule out with a note.
+- **How.** The command runs on the head; when it finds anything, it runs
+  again in a temporary worktree of the base (`git worktree add --detach`,
+  with hooks off), removed afterwards, on an error too. A finding counts
+  only when the base has fewer findings in the same file with the same
+  message, numbers in it taken out and spaces collapsed, so code that moved
+  to other lines isn't new, and a renamed file is read as its old name.
+- **Cheap with `{files}`.** A command that takes `{files}` runs on the
+  changed files only, on both sides, and the base worktree holds just those
+  files and the files beside them and in each folder above, where a linter's
+  config lives; the repository's ignored top-level folders, such as
+  `node_modules`, are linked in (not on Windows), so the tool finds what was
+  installed. Without `{files}` the base worktree is the whole tree, and the
+  tool runs over all of it. With `{files}`, a finding the change causes in a
+  file it didn't touch isn't seen; leave `{files}` out for a typechecker.
+- **When the base can't run.** A base the tool fails on, or one that can't
+  be checked out, is a note, and every finding on the head counts.
+- `diff` doesn't go with a `preset` or with `ratchet`, which keep old
+  findings out their own ways; `config check` says so.
 
 ### gitleaks
 
@@ -427,7 +465,7 @@ install adds a `fairlead-guard` command running `fairlead guard check --staged`
 to `pre-commit` in `lefthook.yml` (or `lefthook.yaml`, `.lefthook.yml`,
 `.lefthook.yaml`, whichever is there). *Unreleased:* with
 `guard.migrations.fetch` or [`[pr]` rules](pr.md), it also adds
-`fairlead-push`, running `fairlead guard check --push`, to `pre-push`. It adds lines at the indentation around
+`fairlead-push` to `pre-push`. *Unreleased:* it runs `fairlead done --pre-push`, the plan and then the push checks ([Before a push](done.md#before-a-push)), and `hooks install --git` moves an entry that runs `fairlead guard check --push` onto it; `done.pre_push = true` adds it without either. It adds lines at the indentation around
 them, under `commands`, or as an item where the config uses `jobs`, and never
 rewrites the rest, so comments and layout stay. A `pre-commit` or `commands`
 written on one line (`pre-commit: {}`) is refused, to be added by hand.

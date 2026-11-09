@@ -6,6 +6,7 @@ After a change, `fairlead receipt` compares what changed with the session's [bri
 fairlead receipt                    # compare the working tree with the session's brief
 fairlead receipt --out receipt.md   # also write it to a file a commit or pull request can carry
 fairlead receipt --json             # the same, as JSON
+fairlead receipt --pr               # a block for the pull request body
 fairlead next                       # the one step that's due
 ```
 
@@ -17,6 +18,26 @@ tests    planned now 2, briefed 1: 1 added by files outside the brief
 gate     passed for this tree at 16:01 (1 step) in 9 s
 next     ready: the gate passed and the receipt is written; `gh pr ready` if the pull request is a draft
 ```
+
+## Stages and platforms
+
+*Unreleased:* a pass on a laptop says nothing about the code on another OS, or about the stages it didn't run. The receipt says, after the gate line, where each step of the newest `fairlead done` run on this tree ran, by CI stage and platform, and plainly what it didn't prove:
+
+```text
+gate     failed for this tree at lint
+ran      draft, linux/x86_64: lint (failed)
+ran      ready, linux/x86_64: unit
+not run  never run on this tree: types
+not run  unverifiable here: native-build needs macos; proved in CI (macos job)
+```
+
+- **ran:** each step by its stage (its `from`, or `ready` for a runner and `draft` for a check) and the `os/arch` it ran on, marked `(failed)` or `(held)`. A run an earlier release recorded says `stage not recorded, platform not recorded`.
+- **never run on this tree:** steps the gate plans now that its newest run didn't reach, such as those after a failure without `--keep-going`; with no run, every one.
+- **unverifiable here:** steps an unmet [`[[needs]]` entry](done.md#needs) left out, `needs macos` for an `os` need and `needs "postgres"` for any other, and steps a [`[[quarantine]]` entry](plan.md#tests-that-lie-on-one-platform) held, each with where it's proved.
+
+The JSON carries the same as `gate.ran` (with `stage`, `os` and `arch`), `never_run` and `unverifiable`; each is left out when empty, and a receipt without them still reads.
+
+`fairlead receipt --pr` prints the receipt as a block for the pull request body, which `pr check` reads to tie the body's claims to a pass for the head's tree, and `ci report` shows in its summary ([Claims and receipts](pr.md#claims-and-receipts)).
 
 ## Inside, reach and outside
 

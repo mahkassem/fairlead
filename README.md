@@ -169,11 +169,20 @@ This README documents Fairlead 0.15.2. Each command, by what it's for:
   runs as a guard preset; migration numbers are checked against the base
   fetched at a push (`guard check --push`); and `pr check` holds a change to
   `[pr]` rules (branch name, ticket key, base, labels, body headings,
-  required files) in `done`, before a push and in CI.
+  required files) in `done`, before a push and in CI. A foreign linter with
+  `diff = true` fails only on the findings a change adds, against the base
+  in a temporary worktree, and `pr check` fails a body that says "verified"
+  or "tests pass" with no passing receipt for the head's tree.
 - **The change loop:** `brief` before an edit, or `context` for the brief with
   the lessons, skills, README and history to read; `done` before it's
   finished, then `receipt` and `next`; `resume` picks up where the last
-  session on a branch stopped.
+  session on a branch stopped. *Unreleased:* `done` plans the branch from its
+  merge base with `[pr] base` or the default branch, runs first the cheap
+  steps CI history shows going red (and adds a cheap check the plan left
+  out, saying why), and runs as the pre-push hook (`done --pre-push`); the
+  receipt says where each step ran, by stage and platform, what never ran on
+  this tree and what can't be proved here ("unverifiable here: needs
+  macos"), and `receipt --pr` puts it in the pull request body.
 - **Project memory:** `learn` writes a lesson, `import lessons` turns a lessons
   document the team already keeps into one lesson per heading, and `lessons`
   lists, reviews and checks them. The brief offers the ones a change reaches.

@@ -279,7 +279,7 @@ Writes one Markdown summary of the run. It goes to `$GITHUB_STEP_SUMMARY` when G
 - changed files no test reaches, and what the plan did about each;
 - the tests and checks not provable where the plan was made, each with its evidence and where it is proved instead;
 - with `--results`, a line per invocation with its outcome and time, and a block with the command to run each failed one again. *Since 0.13.0:* repeat `--results` for the files several jobs wrote, such as [one per shard](#sharding-a-plan), to report them as one run;
-- with `--receipt FILE`, the [receipt](receipt.md) a branch carries, as `fairlead receipt --out` wrote it, folded away;
+- with `--receipt FILE`, the [receipt](receipt.md) a branch carries, as `fairlead receipt --out` wrote it, folded away. *Unreleased:* a JSON receipt is shown as its text, and with no `--receipt` the newest block [`fairlead receipt --pr`](pr.md#claims-and-receipts) put in the pull request's body is shown instead; its summary says whether it's for the head's tree (`Receipt for the head's tree: gate passed`) or an earlier one;
 - *Unreleased:* with `--ledger FILE`, the verdicts a [`ci ledger --out FILE`](#is-this-red-mine-fairlead-ci-ledger) wrote, once for the whole run however many jobs failed, in the summary and the comment alike.
 
 Results from another plan are refused with exit code 2.
