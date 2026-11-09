@@ -47,9 +47,9 @@ Every run appends a `done` event to `.git/fairlead/events.jsonl`: the plan's tre
 
 - **Nothing changed** from the default branch's merge base: it lets the stop through, as for a session that only read.
 - **A pass for this tree:** it lets the stop through.
-- **Otherwise** it exits 2 with the reason on stderr, which Claude Code gives the agent instead of stopping: the gate hasn't passed for the tree as it is now, or its last run failed, and to run `fairlead done`.
-- **`on_stop = "ask"`**, the default, sends the agent back once: when Claude Code says a Stop hook already did (`stop_hook_active`), the next stop goes through. **`"require"`** sends it back every time until the gate passes; Claude Code's own cap on consecutive blocks ends a loop.
-- On any error, such as no base branch or an unreadable config, it lets the stop through. Each time it sends the agent back it records a `stop` event with the tree, never the reason's text.
+- **Otherwise** it exits 2 with the reason on stderr, which Claude Code gives the agent instead of stopping: the gate hasn't run on the tree as it is now, or its last run failed at a named step, or its steps passed while a whole suite waits (with what holds it and the ways forward), and the one thing to run next.
+- **`on_stop = "ask"`**, the default, sends the agent back once: when Claude Code says a Stop hook already did (`stop_hook_active`), the next stop goes through. *Unreleased:* and it sends a session back at most once for a given tree, read from the `stop` events it records with the session id, since Claude Code clears `stop_hook_active` at every new turn and the hook otherwise asked again on every turn of a long session. An edit makes a new tree, which it asks about once more. The reminder says it is the one for this tree. **`"require"`** sends it back every time until the gate passes; Claude Code's own cap on consecutive blocks ends a loop.
+- On any error, such as no base branch or an unreadable config, it lets the stop through. Each time it sends the agent back it records a `stop` event with the tree and the session id, never the reason's text.
 
 ```toml
 [done]

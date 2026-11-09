@@ -116,7 +116,7 @@ fairlead.toml: tests.unreachd: unknown field `unreachd`, expected one of ...
 | `done.checks` | `"planned"` | The same for the `[[checks]]` the plan selects |
 | `done.always` | `[]` | `[[checks]]` ids `fairlead done` runs for every change |
 | `done.guard` | `true` | Whether `fairlead done` ends with `fairlead guard check` |
-| `done.on_stop` | `"ask"` | What the Claude Code Stop hook does while the tree hasn't passed: `off`, `ask` (send the agent back once) or `require`. See [The done gate](done.md#the-stop-hook) |
+| `done.on_stop` | `"ask"` | What the Claude Code Stop hook does while the tree hasn't passed: `off`, `ask` (send the agent back once per session and tree) or `require`. See [The done gate](done.md#the-stop-hook) |
 | `brief.per` | `"session"` | Whether a second `fairlead brief` in the same session adds its paths to the first (`session`) or stands alone (`call`). See [The brief](brief.md) |
 | `brief.nudge` | `true` | Whether `fairlead hooks install` adds the `PostToolUse` note after an edit made with no brief |
 | `brief.resume` | `true` | Whether `fairlead hooks install` adds the `SessionStart` hook that runs `fairlead resume`. See [Context and resume](context.md#the-sessionstart-hook). *Since 0.8.0* |

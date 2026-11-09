@@ -141,6 +141,10 @@ fn done_always_must_name_a_check() {
 
 /// Runs the Stop hook as Claude Code would, returning its exit code and stderr.
 fn stop(dir: &Path, active: bool) -> (i32, String) {
+    stop_as(dir, "s", active)
+}
+
+fn stop_as(dir: &Path, session: &str, active: bool) -> (i32, String) {
     use std::io::Write as _;
     let mut child = Command::new(env!("CARGO_BIN_EXE_fairlead"))
         .args(["guard", "stop"])
@@ -153,7 +157,7 @@ fn stop(dir: &Path, active: bool) -> (i32, String) {
         .spawn()
         .unwrap();
     let input = serde_json::json!({
-        "session_id": "s", "cwd": dir, "hook_event_name": "Stop", "stop_hook_active": active
+        "session_id": session, "cwd": dir, "hook_event_name": "Stop", "stop_hook_active": active
     });
     child
         .stdin
@@ -187,6 +191,28 @@ fn the_stop_hook_sends_an_agent_back_until_the_tree_it_leaves_has_passed() {
         2,
         "an edit after the pass makes it stale"
     );
+}
+
+#[test]
+fn ask_sends_a_session_back_once_per_tree_though_each_turn_clears_stop_hook_active() {
+    let dir = repo("once");
+    let (code, err) = stop_as(&dir, "one", false);
+    assert_eq!(code, 2, "{err}");
+    assert!(
+        err.contains("this is the one reminder for this tree in this session"),
+        "{err}"
+    );
+    for turn in 0..3 {
+        assert_eq!(
+            stop_as(&dir, "one", false).0,
+            0,
+            "turn {turn} on the same tree goes through"
+        );
+    }
+    assert_eq!(stop_as(&dir, "two", false).0, 2, "another session is asked");
+    std::fs::write(dir.join("a.ts"), "export const a = 5;\n").unwrap();
+    assert_eq!(stop_as(&dir, "one", false).0, 2, "a new tree is asked");
+    assert_eq!(stop_as(&dir, "one", false).0, 0);
 }
 
 #[test]

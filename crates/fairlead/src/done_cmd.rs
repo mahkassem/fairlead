@@ -274,7 +274,7 @@ pub fn stop() -> ExitCode {
         .unwrap_or_default();
     let asked = call["stop_hook_active"].as_bool().unwrap_or(false);
     crate::tokens::record_from_hook(&dir, &call);
-    match stop_reason(&dir, asked) {
+    match stop_reason(&dir, asked, call["session_id"].as_str()) {
         Some(reason) => {
             eprintln!("{reason}");
             ExitCode::from(2)
@@ -283,8 +283,10 @@ pub fn stop() -> ExitCode {
     }
 }
 
-/// Why the agent should keep going, or none to let it stop.
-fn stop_reason(dir: &Path, asked: bool) -> Option<String> {
+/// Why the agent should keep going, or none to let it stop. Under `ask` it
+/// sends a session back once per tree: Claude Code clears
+/// `stop_hook_active` every turn, so that alone asks again each turn.
+fn stop_reason(dir: &Path, asked: bool, session: Option<&str>) -> Option<String> {
     let loaded = fairlead_core::config::load(
         dir,
         &fairlead_core::config::LoadOptions::from_process(Vec::new()),
@@ -303,7 +305,12 @@ fn stop_reason(dir: &Path, asked: bool) -> Option<String> {
     }
     let tree = tree_hash(&root)?;
     let log = EventLog::open(&root)?;
-    let why = match record::state(record::last_done(&log.read(), &tree).as_ref()) {
+    let text = log.read();
+    let ask = on_stop == OnStop::Ask;
+    if ask && asked_before(&text, &tree, session) {
+        return None;
+    }
+    let why = match record::state(record::last_done(&text, &tree).as_ref()) {
         State::Passed => return None,
         State::Waits(waiting) => format!(
             "the last `fairlead done` passed its steps, but {}",
@@ -317,8 +324,21 @@ fn stop_reason(dir: &Path, asked: bool) -> Option<String> {
     };
     let mut event = Event::new("stop", "block", std::time::Duration::ZERO);
     event.tree = Some(tree);
+    event.session = session.map(String::from);
     let _ = log.append(&event);
-    Some(format!("fairlead: this change isn't finished: {why}"))
+    let once = if ask {
+        " Under `done.on_stop = \"ask\"` this is the one reminder for this tree in this session."
+    } else {
+        ""
+    };
+    Some(format!("fairlead: this change isn't finished: {why}{once}"))
+}
+
+/// Whether the hook already sent `session` back for `tree`.
+fn asked_before(log: &str, tree: &str, session: Option<&str>) -> bool {
+    log.lines()
+        .filter_map(|l| serde_json::from_str::<serde_json::Value>(l).ok())
+        .any(|e| e["stage"] == "stop" && e["tree"] == tree && e["session"].as_str() == session)
 }
 
 /// The plan's tree hash for the working tree as it stands.
