@@ -44,6 +44,22 @@ fn parse(date: &str) -> Option<(i64, i64, i64)> {
     Some((parts.next()??, parts.next()??, parts.next()??))
 }
 
+/// Seconds since the epoch for an RFC 3339 UTC timestamp such as
+/// `2026-11-07T10:00:00Z`; fractions and an offset other than `Z` are ignored.
+pub fn epoch_seconds(timestamp: &str) -> Option<i64> {
+    let (y, m, d) = parse(timestamp)?;
+    let time = timestamp.get(11..19)?;
+    let mut hms = time.split(':').map(|p| p.parse::<i64>().ok());
+    let (h, mi, s) = (hms.next()??, hms.next()??, hms.next()??);
+    Some(days(y, m, d) * 86_400 + h * 3_600 + mi * 60 + s)
+}
+
+/// Seconds between two timestamps, when both parse and the second isn't earlier.
+pub fn seconds_between(from: &str, to: &str) -> Option<u64> {
+    let span = epoch_seconds(to)? - epoch_seconds(from)?;
+    u64::try_from(span).ok()
+}
+
 impl Window {
     pub fn ending(until: &str, window_days: u32) -> Option<Window> {
         let (y, m, d) = parse(until)?;
@@ -77,5 +93,19 @@ mod tests {
         assert_eq!(w.from, "2026-06-29", "90 days, both ends included");
         assert!(w.contains("2026-06-29T00:00:00Z") && w.contains("2026-09-26T23:59:59Z"));
         assert!(!w.contains("2026-06-28T23:59:59Z"));
+    }
+
+    #[test]
+    fn a_timestamp_becomes_seconds_and_a_span_between_two() {
+        assert_eq!(epoch_seconds("1970-01-02T00:00:01Z"), Some(86_401));
+        assert_eq!(
+            seconds_between("2026-11-07T23:59:30Z", "2026-11-08T00:01:00Z"),
+            Some(90)
+        );
+        assert_eq!(
+            seconds_between("2026-11-08T00:00:00Z", "2026-11-07T00:00:00Z"),
+            None
+        );
+        assert_eq!(epoch_seconds("2026-11-08"), None);
     }
 }

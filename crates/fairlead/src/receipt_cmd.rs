@@ -120,6 +120,10 @@ pub fn run_next(args: NextArgs, cwd: &Path) -> ExitCode {
                     println!("{line}");
                 }
             }
+            // A cached ledger only: `next` never reaches the network.
+            if let Some(line) = crate::ledger_text::head_line(&crate::graph_cmd::repo_root(cwd)) {
+                println!("ci: {line}");
+            }
             ExitCode::SUCCESS
         }
         Err(e) => {

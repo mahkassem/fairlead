@@ -51,6 +51,10 @@ pub struct Event {
     /// A `done` run's steps, by id, outcome and seconds; never their output.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub steps: Vec<Step>,
+    /// How long a `done` run took to plan, which `insights --speed` weighs
+    /// against how long a suite takes to run whole.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub plan_seconds: Option<f64>,
     /// What an `offer` or `use` event is about, such as `skill:forms` or `lesson:settle`.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub items: Vec<String>,
@@ -139,6 +143,7 @@ impl Event {
             truncated: false,
             tree: None,
             steps: Vec::new(),
+            plan_seconds: None,
             items: Vec::new(),
             tokens: None,
             waiting: Vec::new(),

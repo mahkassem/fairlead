@@ -27,7 +27,12 @@ pub struct Row {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub base_sha: Option<String>,
     pub created_at: String,
+    /// `success`, `failure`, or `cancelled` for a run a later push or a
+    /// person stopped, recorded with no jobs.
     pub conclusion: String,
+    /// From the run's start to its last update; none in rows fetched before 0.17.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub seconds: Option<u64>,
     pub jobs: Vec<Job>,
 }
 
@@ -48,6 +53,9 @@ pub struct Job {
     /// failed job's log header; none for a passing job or a self-hosted runner.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub image: Option<String>,
+    /// From the job's start to its end; none in rows fetched before 0.17.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub seconds: Option<u64>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -63,13 +71,22 @@ impl Job {
     }
 }
 
+impl Row {
+    /// A run stopped before it finished, which the dataset keeps without jobs.
+    pub fn cancelled(&self) -> bool {
+        self.conclusion == "cancelled"
+    }
+}
+
 /// The log lines worth keeping for extraction: each `FAIL`, `●` or bun
 /// `(fail)` line and the two after it, the bun file header a failure sits
 /// under, and bun's summary line, which ends what the extractor reads.
 /// PHPUnit's section headers and numbered failures, and Pest's `FAILED`,
 /// keep the frames after them; Collision's `⨯` lines are kept as they are. Surefire's `<<< ERROR!` lines and closing
 /// lists, the Gradle task header a `FAILED` line sits under, and Gradle's
-/// failed-task lines are kept too. Capped so one noisy job can't bloat the dataset.
+/// failed-task lines are kept too, and so is any line naming a timeout or
+/// an infrastructure failure, which say whether the change is to blame.
+/// Capped so one noisy job can't bloat the dataset.
 pub fn log_excerpt(log: &str) -> Vec<String> {
     const AFTER: usize = 2;
     const CAP: usize = 400;
@@ -109,7 +126,10 @@ pub fn log_excerpt(log: &str) -> Vec<String> {
             keep.extend(i..(i + 1 + AFTER).min(lines.len()));
             keep.extend(header.filter(|_| line.contains("(fail)") || unhandled));
         }
-        if cleaned.trim_end().ends_with("failed:") {
+        if cleaned.trim_end().ends_with("failed:")
+            || crate::signals::is_timeout(&cleaned)
+            || crate::signals::infra_mark(&cleaned).is_some()
+        {
             keep.insert(i);
         }
         if let Some(name) = cleaned.trim_start().strip_prefix("--- FAIL: ") {
@@ -285,6 +305,7 @@ mod tests {
             base_sha: None,
             created_at: "2026-09-01T00:00:00Z".into(),
             conclusion: "failure".into(),
+            seconds: None,
             jobs: Vec::new(),
         }
     }

@@ -274,6 +274,7 @@ mod tests {
             base_sha: Some("base2".into()),
             created_at: "2026-09-20T10:00:00Z".into(),
             conclusion: "success".into(),
+            seconds: None,
             jobs: vec![crate::dataset::Job {
                 name: "e2e".into(),
                 conclusion: "success".into(),
@@ -282,6 +283,7 @@ mod tests {
                 annotations_capped: false,
                 log: Vec::new(),
                 image: None,
+                seconds: None,
             }],
         };
         let mut fs = three();

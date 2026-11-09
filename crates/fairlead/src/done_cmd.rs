@@ -48,7 +48,9 @@ pub fn run(args: DoneArgs, cwd: &Path) -> ExitCode {
 fn gate(args: &DoneArgs, cwd: &Path) -> Result<ExitCode, String> {
     let mut changes = args.changes.clone();
     changes.full_suites = args.full;
+    let planning = Instant::now();
     let planned = make(cwd, &changes)?;
+    let plan_seconds = (planning.elapsed().as_secs_f64() * 100.0).round() / 100.0;
     let root = crate::graph_cmd::repo_root(cwd);
     let tree = planned.plan.tree_hash.clone();
     let log = EventLog::open(&root);
@@ -93,6 +95,7 @@ fn gate(args: &DoneArgs, cwd: &Path) -> Result<ExitCode, String> {
         event.steps = ran;
         event.waiting = waiting.clone();
         event.unmet = skips.iter().map(|s| s.record()).collect();
+        event.plan_seconds = Some(plan_seconds);
         // The log is a record; failing to write it never changes the outcome.
         let _ = log.append(&event);
     }

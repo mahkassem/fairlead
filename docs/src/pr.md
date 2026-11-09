@@ -66,7 +66,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - uses: mahkassem/fairlead@v0.15.1
+      - uses: mahkassem/fairlead@v0.15.2
         with:
           command: pr check
 ```

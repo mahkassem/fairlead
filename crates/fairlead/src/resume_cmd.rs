@@ -52,6 +52,9 @@ pub struct Resume {
     pub outside: Vec<String>,
     pub gate: Gate,
     pub next: String,
+    /// What a fresh cached ledger for HEAD says about CI's failures.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ci: Option<String>,
     /// Lessons added since the merge base.
     pub lessons: Vec<Added>,
 }
@@ -164,6 +167,7 @@ pub fn resume(cwd: &Path, session: Option<&str>) -> Result<Option<Resume>, Strin
         })
         .collect();
     Ok(Some(Resume {
+        ci: crate::ledger_text::head_line(&root),
         next: receipt_cmd::next_line(&s),
         gate: s.gate,
         brief: brief.id,
@@ -221,6 +225,9 @@ pub fn text(r: &Resume) -> String {
         out.push_str(&format!("  outside {}\n", names(&r.outside)));
     }
     out.push_str(&format!("gate     {}\n", receipt_cmd::gate_line(&r.gate)));
+    if let Some(ci) = &r.ci {
+        out.push_str(&format!("ci       {ci}\n"));
+    }
     match r.lessons.len() {
         0 => out.push_str("lessons  none added on this branch\n"),
         n => {

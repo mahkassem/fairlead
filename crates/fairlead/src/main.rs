@@ -9,6 +9,7 @@ mod brief_cmd;
 mod bun;
 mod ci_cmd;
 mod ci_judge;
+mod ci_ledger;
 mod ci_report;
 mod ci_shard;
 mod ci_workflow;
@@ -31,7 +32,10 @@ mod import_rules_cmd;
 mod init_cmd;
 mod init_guard;
 mod insights_cmd;
+mod insights_speed;
 mod knowledge;
+mod ledger_rerun;
+mod ledger_text;
 mod lessons_cmd;
 mod mcp_cmd;
 mod mcp_tools;
@@ -355,6 +359,7 @@ fn doctor_report(dir: &Path, opts: &LoadOptions) -> String {
             hooks.push_str(&phase::doctor_lines(&root, &l.config));
         }
     }
+    hooks.push_str(&ledger_text::doctor_lines(&graph_cmd::repo_root(dir)));
     let profile = match &loaded {
         Ok(l) if !l.config.profile.is_full() => {
             "profile: guard (no test plan; `fairlead done` runs `guard check` and `pr check`)\n"
