@@ -341,9 +341,15 @@ pub fn install_git(root: &Path, config: &fairlead_core::config::Config) -> Resul
     )
 }
 
-/// Whether the config asks for the pre-push entry: `[pr]` rules, or
-/// migration numbers compared with a freshly fetched base.
+/// Whether the config asks for the pre-push entry: push checks to run, or
+/// `done.pre_push`.
 pub fn wants_push(config: &fairlead_core::config::Config) -> bool {
+    push_checks(config) || config.done.pre_push
+}
+
+/// Whether there is something to check only at a push: `[pr]` rules, or
+/// migration numbers compared with a freshly fetched base.
+pub fn push_checks(config: &fairlead_core::config::Config) -> bool {
     config.pr.is_some()
         || config
             .guard
@@ -366,9 +372,22 @@ fn git_install(
     }
     let mut text = original.clone().unwrap_or_default();
     let mut added = Vec::new();
+    let mut upgraded = false;
     for (entry, run) in &entries {
         match lefthook::insert_entry(&text, entry, run) {
-            lefthook::Insert::Already => {}
+            lefthook::Insert::Already => {
+                // An entry an earlier release wrote runs the command it runs now.
+                let old = lefthook::current_run_of(&text, entry)
+                    .is_some_and(|c| entry.older.iter().any(|o| c.ends_with(o)));
+                if let Some(t) = old
+                    .then(|| lefthook::set_run_of(&text, entry, run))
+                    .flatten()
+                {
+                    text = t;
+                    upgraded = true;
+                    println!("hooks: the {} entry now runs `{}`", entry.hook, entry.run);
+                }
+            }
             lefthook::Insert::Refused(why) => {
                 return Err(format!("{} ({}): {why}", file.display(), entry.hook))
             }
@@ -378,7 +397,7 @@ fn git_install(
             }
         }
     }
-    if added.is_empty() {
+    if added.is_empty() && !upgraded {
         println!("hooks: already in {}", file.display());
         return Ok(());
     }
@@ -392,6 +411,9 @@ fn git_install(
         },
     )?;
     write(file, &written)?;
+    if added.is_empty() {
+        return Ok(());
+    }
     println!(
         "hooks: added {} to {}",
         added

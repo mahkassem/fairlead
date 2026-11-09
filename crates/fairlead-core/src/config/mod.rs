@@ -418,6 +418,10 @@ pub struct Runner {
     /// the tests a change reaches. Unset, the project's `phase` decides.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub all_from: Option<CiStage>,
+    /// Quick enough that `done` runs it first, or adds it, when CI history
+    /// shows it going red; without it, its median time decides.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub cheap: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, JsonSchema)]
@@ -478,6 +482,10 @@ pub struct Check {
     /// on changed files. Unset, the project's `phase` decides.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub all_from: Option<CiStage>,
+    /// Quick enough that `done` runs it first, or adds it, when CI history
+    /// shows it going red; without it, its median time decides.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub cheap: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
@@ -582,6 +590,12 @@ pub struct Done {
     /// What the Claude Code Stop hook does when the tree an agent leaves
     /// hasn't passed the gate.
     pub on_stop: OnStop,
+    /// A runner or check whose median time is at most this many seconds
+    /// counts as cheap, for the CI history `done` reads.
+    pub cheap_seconds: u32,
+    /// Install the pre-push hook, `fairlead done --pre-push`, even with no
+    /// `[pr]` rules or migration fetch asking for it.
+    pub pre_push: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, JsonSchema)]
@@ -604,6 +618,8 @@ impl Default for Done {
             always: List::default(),
             guard: true,
             on_stop: OnStop::Ask,
+            cheap_seconds: 60,
+            pre_push: false,
         }
     }
 }

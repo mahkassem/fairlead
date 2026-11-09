@@ -33,6 +33,10 @@ pub struct DoneArgs {
     /// Run whole suites that wait for a later stage too.
     #[arg(long, conflicts_with = "check")]
     full: bool,
+    /// The pre-push hook: the plan, as `done` runs it, then the push checks
+    /// in place of `pr check`; a tree that has passed runs the push checks only.
+    #[arg(long, conflicts_with = "check")]
+    pre_push: bool,
 }
 
 pub fn run(args: DoneArgs, cwd: &Path) -> ExitCode {
@@ -64,7 +68,17 @@ fn gate(args: &DoneArgs, cwd: &Path) -> Result<ExitCode, String> {
             ExitCode::FAILURE
         });
     }
-    let (steps, skips) = crate::done_needs::apply(&planned, steps(&planned)?, &root)?;
+    if args.pre_push {
+        let text = log.as_ref().map(|l| l.read()).unwrap_or_default();
+        if record::state(record::last_done(&text, &tree).as_ref()) == State::Passed {
+            return Ok(push_only(&planned, &root));
+        }
+    }
+    let (planned_steps, why) = steps_saying_why(&planned, args.pre_push)?;
+    for line in &why {
+        println!("done: {line}");
+    }
+    let (steps, skips) = crate::done_needs::apply(&planned, planned_steps, &root)?;
     for skip in &skips {
         println!("done: {}", skip.line());
     }
@@ -136,6 +150,35 @@ fn gate(args: &DoneArgs, cwd: &Path) -> Result<ExitCode, String> {
     } else {
         eprintln!("done: not passed; fix the failing step and run `fairlead done` again");
         Ok(ExitCode::FAILURE)
+    }
+}
+
+/// Before a push of a tree that has passed: only the push checks run, and
+/// nothing is recorded, since the tree's record stands.
+fn push_only(planned: &crate::plan_cmd::Planned, root: &Path) -> ExitCode {
+    println!("done: passed for this tree already, so only the push checks run");
+    if !crate::hooks_cmd::push_checks(&planned.config) {
+        return ExitCode::SUCCESS;
+    }
+    let Ok(me) = std::env::current_exe() else {
+        return ExitCode::FAILURE;
+    };
+    let step = Invocation {
+        id: "push".into(),
+        kind: InvocationKind::Check,
+        cwd: ".".into(),
+        argv: vec![
+            me.to_string_lossy().into_owned(),
+            "guard".into(),
+            "check".into(),
+            "--push".into(),
+        ],
+        quarantined: None,
+    };
+    let ran = run_steps(planned, &[step], root, false);
+    match ran.iter().all(|s| s.passed) {
+        true => ExitCode::SUCCESS,
+        false => ExitCode::FAILURE,
     }
 }
 
@@ -230,14 +273,29 @@ fn guard_only(planned: &crate::plan_cmd::Planned) -> bool {
     planned.config.profile == Profile::Guard
 }
 
-/// The planned tests and checks `[done]` asks for, then `done.always`
-/// checks the plan didn't select, then the guard and the `[pr]` rules. The
-/// guard-only profile runs only the last two.
+/// The steps `done` runs, as `steps_saying_why` orders them.
 pub fn steps(planned: &crate::plan_cmd::Planned) -> Result<Vec<Invocation>, String> {
-    let mut out = if guard_only(planned) {
-        Vec::new()
+    steps_saying_why(planned, false).map(|(steps, _)| steps)
+}
+
+/// The planned tests and checks `[done]` asks for, then `done.always`
+/// checks the plan didn't select, then the guard and the `[pr]` rules, or
+/// before a push the push checks. The guard-only profile runs only the
+/// last two. CI history puts cheap steps it shows red first, and adds cheap
+/// checks it shows red, each with a line saying why.
+pub fn steps_saying_why(
+    planned: &crate::plan_cmd::Planned,
+    pre_push: bool,
+) -> Result<(Vec<Invocation>, Vec<String>), String> {
+    let (mut out, why) = if guard_only(planned) {
+        (Vec::new(), Vec::new())
     } else {
-        planned_steps(planned)?
+        let root = &planned.scan.tree.root;
+        let log = EventLog::open(root).map(|l| l.read()).unwrap_or_default();
+        let history = crate::done_history::read(root, &planned.config, &log);
+        crate::done_history::coach(&planned.config, &history, planned_steps(planned)?, |id| {
+            unplanned_check(planned, id)
+        })?
     };
     let me = || -> Result<String, String> {
         std::env::current_exe()
@@ -265,10 +323,14 @@ pub fn steps(planned: &crate::plan_cmd::Planned) -> Result<Vec<Invocation>, Stri
             None => fairlead("guard", &["guard", "check"])?,
         }
     }
-    if planned.config.pr.is_some() {
-        fairlead("pr", &["pr", "check", "--local"])?;
+    let push = crate::hooks_cmd::push_checks(&planned.config);
+    match (pre_push, push) {
+        (true, true) => fairlead("push", &["guard", "check", "--push"])?,
+        (true, false) => {}
+        (false, _) if planned.config.pr.is_some() => fairlead("pr", &["pr", "check", "--local"])?,
+        (false, _) => {}
     }
-    Ok(out)
+    Ok((out, why))
 }
 
 /// The planned tests and checks `[done]` asks for, then `done.always`
@@ -285,13 +347,6 @@ fn planned_steps(planned: &crate::plan_cmd::Planned) -> Result<Vec<Invocation>, 
         })
         .cloned()
         .collect();
-    let changed: Vec<String> = planned
-        .plan
-        .changed
-        .iter()
-        .filter(|c| c.status != fairlead_core::plan::Status::Deleted)
-        .map(|c| c.path.clone())
-        .collect();
     for id in done.always.items() {
         if out
             .iter()
@@ -299,36 +354,46 @@ fn planned_steps(planned: &crate::plan_cmd::Planned) -> Result<Vec<Invocation>, 
         {
             continue;
         }
-        let check = planned
-            .config
-            .checks
-            .items()
-            .iter()
-            .find(|c| &c.id == id)
-            .ok_or_else(|| format!("done.always names `{id}`, which isn't a [[checks]] id"))?;
-        // Unplanned, `{files}` stands for the change's files.
-        let argv = check
-            .command
-            .iter()
-            .flat_map(|a| {
-                if a == "{files}" {
-                    changed.clone()
-                } else {
-                    vec![a.clone()]
-                }
-            })
-            .collect();
-        let root = &planned.scan.tree.root;
-        let held = quarantine::check_held(&planned.config, root, id).map(|q| q.target);
-        out.push(Invocation {
-            id: check.id.clone(),
-            kind: InvocationKind::Check,
-            cwd: ".".into(),
-            argv,
-            quarantined: held,
-        });
+        let check = unplanned_check(planned, id)
+            .map_err(|_| format!("done.always names `{id}`, which isn't a [[checks]] id"))?;
+        out.push(check);
     }
     Ok(out)
+}
+
+/// A `[[checks]]` entry the plan didn't select, as a step; `{files}`
+/// stands for the change's files.
+fn unplanned_check(planned: &crate::plan_cmd::Planned, id: &str) -> Result<Invocation, String> {
+    let changed: Vec<String> = planned
+        .plan
+        .changed
+        .iter()
+        .filter(|c| c.status != fairlead_core::plan::Status::Deleted)
+        .map(|c| c.path.clone())
+        .collect();
+    let check = planned
+        .config
+        .checks
+        .items()
+        .iter()
+        .find(|c| c.id == id)
+        .ok_or_else(|| format!("`{id}` isn't a [[checks]] id"))?;
+    let argv = check
+        .command
+        .iter()
+        .flat_map(|a| match a == "{files}" {
+            true => changed.clone(),
+            false => vec![a.clone()],
+        })
+        .collect();
+    let root = &planned.scan.tree.root;
+    Ok(Invocation {
+        id: check.id.clone(),
+        kind: InvocationKind::Check,
+        cwd: ".".into(),
+        argv,
+        quarantined: quarantine::check_held(&planned.config, root, id).map(|q| q.target),
+    })
 }
 
 /// The entries holding the steps: the plan's, and those holding a

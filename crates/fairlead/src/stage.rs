@@ -371,6 +371,7 @@ mod tests {
             files: None,
             from: None,
             all_from: None,
+            cheap: false,
         };
         config.checks = vec![check("e2e-web"), check("e2e_web")].into();
         let plan: Plan = serde_json::from_value(json!({

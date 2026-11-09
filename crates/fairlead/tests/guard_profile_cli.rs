@@ -99,7 +99,7 @@ fn init_with_the_guard_profile_writes_a_guard_only_config_for_the_stack() {
     let lefthook = std::fs::read_to_string(dir.join("lefthook.yml")).unwrap();
     assert!(lefthook.contains("guard check --staged"), "{lefthook}");
     assert!(
-        lefthook.contains("run: fairlead guard check --push"),
+        lefthook.contains("run: fairlead done --pre-push"),
         "{lefthook}"
     );
     let (ok, out) = fairlead(&dir, &["config", "check"], &[]);

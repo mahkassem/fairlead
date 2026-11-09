@@ -5,7 +5,9 @@
 /// The command lefthook runs before each commit.
 pub const RUN: &str = "fairlead guard check --staged";
 /// The command lefthook runs before each push.
-pub const PUSH_RUN: &str = "fairlead guard check --push";
+pub const PUSH_RUN: &str = "fairlead done --pre-push";
+/// What the push entry ran before `done --pre-push`, upgraded on install.
+pub const OLD_PUSH_RUN: &str = "fairlead guard check --push";
 
 /// One of Fairlead's entries: the git hook it runs at, its name and command.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -13,6 +15,8 @@ pub struct Entry {
     pub hook: &'static str,
     pub name: &'static str,
     pub run: &'static str,
+    /// Commands the entry ran in earlier releases, still read as it.
+    pub older: &'static [&'static str],
 }
 
 /// The commit stage, run before each commit.
@@ -20,6 +24,7 @@ pub const COMMIT: Entry = Entry {
     hook: "pre-commit",
     name: "fairlead-guard",
     run: RUN,
+    older: &[],
 };
 
 /// Migration numbers against a fresh base and the `[pr]` rules, before a push.
@@ -27,6 +32,7 @@ pub const PUSH: Entry = Entry {
     hook: "pre-push",
     name: "fairlead-push",
     run: PUSH_RUN,
+    older: &[OLD_PUSH_RUN],
 };
 /// The config names lefthook reads, in the order it looks for them.
 pub const FILES: [&str; 4] = [
@@ -149,9 +155,13 @@ fn runs(line: &str, entry: &Entry) -> bool {
         return false;
     };
     let value = value.trim().trim_matches(|c| c == '"' || c == '\'');
-    value
-        .strip_suffix(entry.run)
-        .is_some_and(|before| before.is_empty() || before.ends_with([' ', '/']))
+    std::iter::once(entry.run)
+        .chain(entry.older.iter().copied())
+        .any(|run| {
+            value
+                .strip_suffix(run)
+                .is_some_and(|before| before.is_empty() || before.ends_with([' ', '/']))
+        })
 }
 
 /// The config with the entry added: under `pre-commit` `commands`, as a
