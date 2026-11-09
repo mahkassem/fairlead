@@ -172,6 +172,7 @@ pub fn apply(plan: &mut Plan, config: &Config, stage: CiStage) {
             selected: count,
             why: Default::default(),
             reached: 0,
+            by_rule: 0,
         }),
     };
     plan.tests.retain(|t| match &t.runner {

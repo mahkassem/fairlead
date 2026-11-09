@@ -1,6 +1,7 @@
 //! The files Fairlead reads: everything git doesn't ignore, never
-//! `node_modules` or `.git`. Paths are repo-relative with `/` separators on
-//! every platform, so they match globs and print the same everywhere.
+//! `node_modules`, `.git` or a cache directory. Paths are repo-relative with
+//! `/` separators on every platform, so they match globs and print the same
+//! everywhere.
 
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
@@ -10,6 +11,8 @@ pub const SOURCE_EXTENSIONS: [&str; 16] = [
     "py", "java", "kt",
 ];
 const SKIPPED_DIRS: [&str; 2] = [".git", "node_modules"];
+/// How a `CACHEDIR.TAG` starts, by the Cache Directory Tagging spec.
+const CACHE_SIGNATURE: &[u8] = b"Signature: 8a477f597d28d172789f06886806bc55";
 
 #[derive(Debug, Clone)]
 pub struct Tree {
@@ -23,7 +26,11 @@ impl Tree {
         let walker = ignore::WalkBuilder::new(root)
             .hidden(false)
             .require_git(false)
-            .filter_entry(|e| !SKIPPED_DIRS.iter().any(|d| e.file_name() == *d))
+            .filter_entry(|e| {
+                let skipped = SKIPPED_DIRS.iter().any(|d| e.file_name() == *d);
+                let cache = e.file_type().is_some_and(|t| t.is_dir()) && is_cache_dir(e.path());
+                !skipped && !cache
+            })
             .build();
         let mut files: Vec<String> = walker
             .filter_map(Result::ok)
@@ -63,6 +70,32 @@ impl Tree {
 
     pub fn rel(&self, abs: &Path) -> Option<String> {
         relative(&self.root, abs)
+    }
+}
+
+/// Whether `dir` holds a `CACHEDIR.TAG` with the spec's signature: a tool's
+/// cache, whose files are nobody's change and no test's dependency.
+pub fn is_cache_dir(dir: &Path) -> bool {
+    use std::io::Read;
+    let mut head = [0u8; CACHE_SIGNATURE.len()];
+    std::fs::File::open(dir.join("CACHEDIR.TAG"))
+        .and_then(|mut f| f.read_exact(&mut head))
+        .is_ok_and(|()| head == CACHE_SIGNATURE)
+}
+
+/// Whether the repo-relative `rel`, or a directory above it under `root`,
+/// is a cache directory.
+pub fn in_cache_dir(root: &Path, rel: &str) -> bool {
+    let rel = rel.trim_end_matches('/');
+    let mut dir = rel;
+    loop {
+        if !dir.is_empty() && is_cache_dir(&root.join(dir)) {
+            return true;
+        }
+        match dir.rsplit_once('/') {
+            Some((up, _)) => dir = up,
+            None => return false,
+        }
     }
 }
 
@@ -142,6 +175,28 @@ mod tests {
         );
         assert_eq!(strip_verbatim(r"\\?\Volume{1}\x"), None);
         assert_eq!(strip_verbatim(r"D:\a"), None);
+    }
+
+    #[test]
+    fn a_directory_tagged_as_a_cache_is_left_out_and_a_bad_tag_isnt() {
+        let root = std::env::temp_dir().join(format!("fl-cachedir-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        for dir in [".build/out", "fake", "src"] {
+            std::fs::create_dir_all(root.join(dir)).unwrap();
+        }
+        let tag = "Signature: 8a477f597d28d172789f06886806bc55\n# a cache\n";
+        std::fs::write(root.join(".build/CACHEDIR.TAG"), tag).unwrap();
+        std::fs::write(root.join(".build/out/page.html"), "x").unwrap();
+        std::fs::write(root.join(".build/.debug"), "x").unwrap();
+        std::fs::write(root.join("fake/CACHEDIR.TAG"), "not a signature").unwrap();
+        std::fs::write(root.join("src/a.ts"), "x").unwrap();
+        let tree = Tree::scan(&root);
+        assert_eq!(tree.files, ["fake/CACHEDIR.TAG", "src/a.ts"]);
+        assert!(in_cache_dir(&root, ".build/out/page.html"));
+        assert!(in_cache_dir(&root, ".build/"));
+        assert!(!in_cache_dir(&root, "fake/CACHEDIR.TAG"));
+        assert!(!in_cache_dir(&root, "src/a.ts"));
+        let _ = std::fs::remove_dir_all(&root);
     }
 
     #[test]

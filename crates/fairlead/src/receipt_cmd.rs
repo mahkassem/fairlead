@@ -89,7 +89,16 @@ pub struct Gate {
     #[serde(default)]
     pub held: usize,
     pub seconds: f64,
+    /// For a run whose steps passed while whole suites wait: those suites.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub waiting: Vec<fairlead_guard::events::Waiting>,
+    /// Tests and checks an unmet `[[needs]]` entry kept from running here.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub not_run: Vec<fairlead_guard::events::Unmet>,
 }
+
+/// The gate's state when its steps passed and whole suites wait.
+const WAITS: &str = "passed, with a whole suite still to run (`fairlead done --full`)";
 
 pub fn run(args: ReceiptArgs, cwd: &Path) -> ExitCode {
     match receipt(&args, cwd) {
@@ -188,12 +197,14 @@ fn gate(log: &str, tree: &str) -> Gate {
             steps: 0,
             held: 0,
             seconds: 0.0,
+            waiting: Vec::new(),
+            not_run: Vec::new(),
         };
     };
     let steps = e["steps"].as_array().cloned().unwrap_or_default();
     let state = match e["decision"].as_str() {
         Some("pass") => "passed",
-        Some("deferred") => "passed, with a whole suite still to run (`fairlead done --full`)",
+        Some("deferred") => WAITS,
         _ => "failed",
     };
     Gate {
@@ -206,11 +217,24 @@ fn gate(log: &str, tree: &str) -> Gate {
         steps: steps.len(),
         held: steps.iter().filter(|s| s["quarantined"] == true).count(),
         seconds: steps.iter().filter_map(|s| s["seconds"].as_f64()).sum(),
+        waiting: serde_json::from_value(e["waiting"].clone()).unwrap_or_default(),
+        not_run: serde_json::from_value(e["unmet"].clone()).unwrap_or_default(),
     }
 }
 
 /// The one step that's due, in the words the Stop hook and the note use too.
 pub(crate) fn next_line(s: &State) -> String {
+    let unproved = s.gate.not_run.iter().find(|u| !u.proved);
+    if let (Some(u), "failed", None) = (unproved, s.gate.state.as_str(), &s.gate.failed_step) {
+        if !s.changed.is_empty() && s.brief.is_some() {
+            return format!("next: {}", crate::done_record::unmet_line(&u.need, &u.step));
+        }
+    }
+    if s.gate.state == WAITS && !s.changed.is_empty() && s.brief.is_some() {
+        let root = &s.now.scan.tree.root;
+        let hold = crate::done_record::hold(&s.gate.waiting, &s.now.config, root);
+        return format!("next: done --full: the gate's steps passed, but {hold}");
+    }
     due(
         !s.changed.is_empty(),
         s.brief.is_some(),
@@ -437,10 +461,11 @@ pub(crate) fn gate_line(g: &Gate) -> String {
             g.at.as_deref().map_or("?", |a| a.get(11..16).unwrap_or(a)),
             g.steps,
             if g.steps == 1 { "" } else { "s" },
-            if g.held > 0 {
-                format!(", {} held", g.held)
-            } else {
-                String::new()
+            match (g.held, g.not_run.len()) {
+                (0, 0) => String::new(),
+                (held, 0) => format!(", {held} held"),
+                (0, n) => format!(", {n} left to where an unmet need is proved"),
+                (held, n) => format!(", {held} held, {n} left to where an unmet need is proved"),
             },
             g.seconds
         ),
@@ -448,6 +473,15 @@ pub(crate) fn gate_line(g: &Gate) -> String {
             "failed for this tree at {}",
             g.failed_step.as_deref().unwrap_or("a step")
         ),
+        WAITS => {
+            let ids: Vec<&str> = g.waiting.iter().map(|w| w.id.as_str()).collect();
+            let what = if ids.is_empty() {
+                "a whole suite".to_string()
+            } else {
+                ids.join(", ")
+            };
+            format!("steps passed for this tree; {what} waits for `fairlead done --full`")
+        }
         _ => "not run for this tree".into(),
     }
 }
