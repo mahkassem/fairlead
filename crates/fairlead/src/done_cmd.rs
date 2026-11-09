@@ -7,7 +7,7 @@ use std::path::Path;
 use std::process::ExitCode;
 use std::time::Instant;
 
-use fairlead_core::config::{DoneTests, OnStop};
+use fairlead_core::config::{DoneTests, OnStop, Profile};
 use fairlead_core::plan::{Invocation, InvocationKind, Quarantined};
 use fairlead_guard::events::{Event, EventLog, Step, Waiting};
 use fairlead_tests::{git, quarantine};
@@ -33,6 +33,10 @@ pub struct DoneArgs {
     /// Run whole suites that wait for a later stage too.
     #[arg(long, conflicts_with = "check")]
     full: bool,
+    /// The pre-push hook: the plan, as `done` runs it, then the push checks
+    /// in place of `pr check`; a tree that has passed runs the push checks only.
+    #[arg(long, conflicts_with = "check")]
+    pre_push: bool,
 }
 
 pub fn run(args: DoneArgs, cwd: &Path) -> ExitCode {
@@ -48,7 +52,9 @@ pub fn run(args: DoneArgs, cwd: &Path) -> ExitCode {
 fn gate(args: &DoneArgs, cwd: &Path) -> Result<ExitCode, String> {
     let mut changes = args.changes.clone();
     changes.full_suites = args.full;
+    let planning = Instant::now();
     let planned = make(cwd, &changes)?;
+    let plan_seconds = (planning.elapsed().as_secs_f64() * 100.0).round() / 100.0;
     let root = crate::graph_cmd::repo_root(cwd);
     let tree = planned.plan.tree_hash.clone();
     let log = EventLog::open(&root);
@@ -62,7 +68,17 @@ fn gate(args: &DoneArgs, cwd: &Path) -> Result<ExitCode, String> {
             ExitCode::FAILURE
         });
     }
-    let (steps, skips) = crate::done_needs::apply(&planned, steps(&planned)?, &root)?;
+    if args.pre_push {
+        let text = log.as_ref().map(|l| l.read()).unwrap_or_default();
+        if record::state(record::last_done(&text, &tree).as_ref()) == State::Passed {
+            return Ok(push_only(&planned, &root));
+        }
+    }
+    let (planned_steps, why) = steps_saying_why(&planned, args.pre_push)?;
+    for line in &why {
+        println!("done: {line}");
+    }
+    let (steps, skips) = crate::done_needs::apply(&planned, planned_steps, &root)?;
     for skip in &skips {
         println!("done: {}", skip.line());
     }
@@ -93,16 +109,19 @@ fn gate(args: &DoneArgs, cwd: &Path) -> Result<ExitCode, String> {
         event.steps = ran;
         event.waiting = waiting.clone();
         event.unmet = skips.iter().map(|s| s.record()).collect();
+        event.plan_seconds = Some(plan_seconds);
         // The log is a record; failing to write it never changes the outcome.
         let _ = log.append(&event);
     }
-    for d in planned.plan.deferred.iter().filter(|d| !d.why.is_stage()) {
+    let deferred = planned
+        .plan
+        .deferred
+        .iter()
+        .filter(|_| !guard_only(&planned));
+    for d in deferred.filter(|d| !d.why.is_stage()) {
         println!("done: {}", d.advice());
     }
-    let elsewhere = match skips.len() {
-        0 => String::new(),
-        _ => "; what an unmet need covers wasn't run here and is proved where it says".into(),
-    };
+    let elsewhere = environment(&skips);
     if passed && !waiting.is_empty() {
         println!(
             "done: passed, {} steps{elsewhere}; not finished: {}",
@@ -128,6 +147,59 @@ fn gate(args: &DoneArgs, cwd: &Path) -> Result<ExitCode, String> {
     } else {
         eprintln!("done: not passed; fix the failing step and run `fairlead done` again");
         Ok(ExitCode::FAILURE)
+    }
+}
+
+/// The summary's account of what the machine, not the change, kept from
+/// running: "your change clean; environment: 2 skipped (postgres: proved
+/// in CI)".
+fn environment(skips: &[crate::done_needs::Skip]) -> String {
+    if skips.is_empty() {
+        return String::new();
+    }
+    let mut needs: Vec<String> = Vec::new();
+    for s in skips {
+        let line = match &s.proved_in {
+            Some(at) => format!("{}: proved in {at}", s.need),
+            None => format!("{}: proved nowhere yet", s.need),
+        };
+        if !needs.contains(&line) {
+            needs.push(line);
+        }
+    }
+    format!(
+        "; your change clean; environment: {} skipped ({})",
+        skips.len(),
+        needs.join("; ")
+    )
+}
+
+/// Before a push of a tree that has passed: only the push checks run, and
+/// nothing is recorded, since the tree's record stands.
+fn push_only(planned: &crate::plan_cmd::Planned, root: &Path) -> ExitCode {
+    println!("done: passed for this tree already, so only the push checks run");
+    if !crate::hooks_cmd::push_checks(&planned.config) {
+        return ExitCode::SUCCESS;
+    }
+    let Ok(me) = std::env::current_exe() else {
+        return ExitCode::FAILURE;
+    };
+    let step = Invocation {
+        id: "push".into(),
+        kind: InvocationKind::Check,
+        cwd: ".".into(),
+        argv: vec![
+            me.to_string_lossy().into_owned(),
+            "guard".into(),
+            "check".into(),
+            "--push".into(),
+        ],
+        quarantined: None,
+    };
+    let ran = run_steps(planned, &[step], root, false);
+    match ran.iter().all(|s| s.passed) {
+        true => ExitCode::SUCCESS,
+        false => ExitCode::FAILURE,
     }
 }
 
@@ -181,6 +253,13 @@ fn run_steps(
             passed: outcome == Outcome::Passed,
             quarantined: outcome == Outcome::Held,
             seconds,
+            stage: Some(
+                crate::stage::from_of(&planned.config, &s.id, &s.kind)
+                    .name()
+                    .into(),
+            ),
+            os: Some(std::env::consts::OS.into()),
+            arch: Some(std::env::consts::ARCH.into()),
         });
         if outcome == Outcome::Failed && !keep_going {
             break;
@@ -194,7 +273,7 @@ fn run_steps(
 /// run is enough.
 fn waiting(planned: &crate::plan_cmd::Planned) -> Vec<Waiting> {
     let early = planned.config.phase == Some(fairlead_core::config::Phase::Early);
-    if early {
+    if early || guard_only(planned) {
         return Vec::new();
     }
     planned
@@ -211,9 +290,73 @@ fn waiting(planned: &crate::plan_cmd::Planned) -> Vec<Waiting> {
         .collect()
 }
 
-/// The planned tests and checks `[done]` asks for, then `done.always`
-/// checks the plan didn't select, then the guard.
+fn guard_only(planned: &crate::plan_cmd::Planned) -> bool {
+    planned.config.profile == Profile::Guard
+}
+
+/// The steps `done` runs, as `steps_saying_why` orders them.
 pub fn steps(planned: &crate::plan_cmd::Planned) -> Result<Vec<Invocation>, String> {
+    steps_saying_why(planned, false).map(|(steps, _)| steps)
+}
+
+/// The planned tests and checks `[done]` asks for, then `done.always`
+/// checks the plan didn't select, then the guard and the `[pr]` rules, or
+/// before a push the push checks. The guard-only profile runs only the
+/// last two. CI history puts cheap steps it shows red first, and adds cheap
+/// checks it shows red, each with a line saying why.
+pub fn steps_saying_why(
+    planned: &crate::plan_cmd::Planned,
+    pre_push: bool,
+) -> Result<(Vec<Invocation>, Vec<String>), String> {
+    let (mut out, why) = if guard_only(planned) {
+        (Vec::new(), Vec::new())
+    } else {
+        let root = &planned.scan.tree.root;
+        let log = EventLog::open(root).map(|l| l.read()).unwrap_or_default();
+        let history = crate::done_history::read(root, &planned.config, &log);
+        crate::done_history::coach(&planned.config, &history, planned_steps(planned)?, |id| {
+            unplanned_check(planned, id)
+        })?
+    };
+    let me = || -> Result<String, String> {
+        std::env::current_exe()
+            .map(|p| p.to_string_lossy().into_owned())
+            .map_err(|e| format!("can't find this binary: {e}"))
+    };
+    let mut fairlead = |id: &str, args: &[&str]| -> Result<(), String> {
+        let mut argv = vec![me()?];
+        argv.extend(args.iter().map(|a| a.to_string()));
+        out.push(Invocation {
+            id: id.into(),
+            kind: InvocationKind::Check,
+            cwd: ".".into(),
+            argv,
+            quarantined: None,
+        });
+        Ok(())
+    };
+    // A diff rule counts only what the change adds, so it needs the base.
+    let diffs = planned.config.guard.external.items().iter().any(|e| e.diff);
+    let base = planned.plan.base.as_deref().filter(|_| diffs);
+    if planned.config.done.guard || guard_only(planned) {
+        match base {
+            Some(base) => fairlead("guard", &["guard", "check", "--base", base])?,
+            None => fairlead("guard", &["guard", "check"])?,
+        }
+    }
+    let push = crate::hooks_cmd::push_checks(&planned.config);
+    match (pre_push, push) {
+        (true, true) => fairlead("push", &["guard", "check", "--push"])?,
+        (true, false) => {}
+        (false, _) if planned.config.pr.is_some() => fairlead("pr", &["pr", "check", "--local"])?,
+        (false, _) => {}
+    }
+    Ok((out, why))
+}
+
+/// The planned tests and checks `[done]` asks for, then `done.always`
+/// checks the plan didn't select.
+fn planned_steps(planned: &crate::plan_cmd::Planned) -> Result<Vec<Invocation>, String> {
     let done = &planned.config.done;
     let mut out: Vec<Invocation> = planned
         .plan
@@ -225,13 +368,6 @@ pub fn steps(planned: &crate::plan_cmd::Planned) -> Result<Vec<Invocation>, Stri
         })
         .cloned()
         .collect();
-    let changed: Vec<String> = planned
-        .plan
-        .changed
-        .iter()
-        .filter(|c| c.status != fairlead_core::plan::Status::Deleted)
-        .map(|c| c.path.clone())
-        .collect();
     for id in done.always.items() {
         if out
             .iter()
@@ -239,50 +375,46 @@ pub fn steps(planned: &crate::plan_cmd::Planned) -> Result<Vec<Invocation>, Stri
         {
             continue;
         }
-        let check = planned
-            .config
-            .checks
-            .items()
-            .iter()
-            .find(|c| &c.id == id)
-            .ok_or_else(|| format!("done.always names `{id}`, which isn't a [[checks]] id"))?;
-        // Unplanned, `{files}` stands for the change's files.
-        let argv = check
-            .command
-            .iter()
-            .flat_map(|a| {
-                if a == "{files}" {
-                    changed.clone()
-                } else {
-                    vec![a.clone()]
-                }
-            })
-            .collect();
-        let root = &planned.scan.tree.root;
-        let held = quarantine::check_held(&planned.config, root, id).map(|q| q.target);
-        out.push(Invocation {
-            id: check.id.clone(),
-            kind: InvocationKind::Check,
-            cwd: ".".into(),
-            argv,
-            quarantined: held,
-        });
-    }
-    if done.guard {
-        let me = std::env::current_exe().map_err(|e| format!("can't find this binary: {e}"))?;
-        out.push(Invocation {
-            id: "guard".into(),
-            kind: InvocationKind::Check,
-            cwd: ".".into(),
-            argv: vec![
-                me.to_string_lossy().into_owned(),
-                "guard".into(),
-                "check".into(),
-            ],
-            quarantined: None,
-        });
+        let check = unplanned_check(planned, id)
+            .map_err(|_| format!("done.always names `{id}`, which isn't a [[checks]] id"))?;
+        out.push(check);
     }
     Ok(out)
+}
+
+/// A `[[checks]]` entry the plan didn't select, as a step; `{files}`
+/// stands for the change's files.
+fn unplanned_check(planned: &crate::plan_cmd::Planned, id: &str) -> Result<Invocation, String> {
+    let changed: Vec<String> = planned
+        .plan
+        .changed
+        .iter()
+        .filter(|c| c.status != fairlead_core::plan::Status::Deleted)
+        .map(|c| c.path.clone())
+        .collect();
+    let check = planned
+        .config
+        .checks
+        .items()
+        .iter()
+        .find(|c| c.id == id)
+        .ok_or_else(|| format!("`{id}` isn't a [[checks]] id"))?;
+    let argv = check
+        .command
+        .iter()
+        .flat_map(|a| match a == "{files}" {
+            true => changed.clone(),
+            false => vec![a.clone()],
+        })
+        .collect();
+    let root = &planned.scan.tree.root;
+    Ok(Invocation {
+        id: check.id.clone(),
+        kind: InvocationKind::Check,
+        cwd: ".".into(),
+        argv,
+        quarantined: quarantine::check_held(&planned.config, root, id).map(|q| q.target),
+    })
 }
 
 /// The entries holding the steps: the plan's, and those holding a
@@ -356,8 +488,7 @@ fn stop_reason(
     if !edited {
         return None;
     }
-    let base = git::default_base(&root).ok()?;
-    let merge_base = git::merge_base(&root, &base).ok()?;
+    let merge_base = crate::plan_cmd::merge_base_or_head(&root, None, Some(&loaded.config))?;
     // Nothing changed means nothing to gate, as for a session that only read.
     if git::changes(&root, &merge_base).ok()?.is_empty() {
         return None;
@@ -367,8 +498,13 @@ fn stop_reason(
     if ask && asked_before(&text, &tree, session) {
         return None;
     }
-    let why = match record::state(record::last_done(&text, &tree).as_ref()) {
-        State::Passed => return None,
+    let last = record::last_done(&text, &tree);
+    let why = match record::state(last.as_ref()) {
+        State::Passed => match last.as_ref().and_then(left_elsewhere) {
+            // Once per tree, whatever `on_stop` asks: the steps passed.
+            Some(left) if !asked_before(&text, &tree, session) => left,
+            _ => return None,
+        },
         State::Waits(waiting) => format!(
             "the last `fairlead done` passed its steps, but {}",
             record::hold(&waiting, &loaded.config, &root)
@@ -390,6 +526,23 @@ fn stop_reason(
         ""
     };
     Some(format!("fairlead: this change isn't finished: {why}{once}"))
+}
+
+/// For a pass that left steps to where an unmet need is proved, what to
+/// tell the person: the change isn't proved until that place has run them.
+fn left_elsewhere(event: &serde_json::Value) -> Option<String> {
+    let unmet = event["unmet"].as_array().filter(|u| !u.is_empty())?;
+    let mut needs: Vec<&str> = unmet.iter().filter_map(|u| u["need"].as_str()).collect();
+    needs.dedup();
+    Some(format!(
+        "the last `fairlead done` passed, but {} step(s) weren't run here because need {} isn't met on this machine. Say so in the pull request and keep it a draft until they pass where the need says they're proved; then stop.",
+        unmet.len(),
+        needs
+            .iter()
+            .map(|n| format!("\"{n}\""))
+            .collect::<Vec<_>>()
+            .join(", ")
+    ))
 }
 
 /// Tools that can change files. A shell command can, and an agent the
@@ -450,7 +603,7 @@ fn asked_before(log: &str, tree: &str, session: Option<&str>) -> bool {
 }
 
 /// The plan's tree hash for the working tree as it stands.
-fn tree_hash(root: &Path) -> Option<String> {
+pub fn tree_hash(root: &Path) -> Option<String> {
     if let Some(id) = git::clean_tree_id(root) {
         return Some(id);
     }

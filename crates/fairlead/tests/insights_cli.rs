@@ -200,3 +200,93 @@ fn a_guard_with_no_table_gets_one_and_a_dotted_key_is_edited_in_place() {
     );
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn speed_reads_done_steps_results_and_a_dataset_and_prints_numbers_with_a_suggestion() {
+    let dir = repo(
+        "speed",
+        "[[tests.runners]]\nid = \"unit\"\nmatch = [\"test/**\"]\ncommand = [\"sh\", \"{files}\"]\n",
+    );
+    let now = fairlead_guard::events::timestamp(SystemTime::now());
+    let mut log = String::new();
+    for _ in 0..3 {
+        log += &event(
+            &now,
+            "done",
+            "pass",
+            json!({"steps": [{"id": "unit", "passed": true, "seconds": 0.3}], "plan_seconds": 1.2}),
+        );
+    }
+    std::fs::write(dir.join(".git/fairlead/events.jsonl"), log).unwrap();
+    let rows = [
+        json!({"repo": "o/r", "run_id": 1, "attempt": 1, "event": "pull_request", "workflow": "ci", "pr": 4,
+               "head_sha": "h", "created_at": "2026-11-01T00:00:00Z", "conclusion": "failure",
+               "jobs": [{"name": "test", "conclusion": "failure", "seconds": 300}]}),
+        json!({"repo": "o/r", "run_id": 1, "attempt": 2, "event": "pull_request", "workflow": "ci", "pr": 4,
+               "head_sha": "h", "created_at": "2026-11-01T00:00:00Z", "conclusion": "success",
+               "jobs": [{"name": "test", "conclusion": "success", "seconds": 280}]}),
+        json!({"repo": "o/r", "run_id": 2, "attempt": 1, "event": "pull_request", "workflow": "ci", "pr": 4,
+               "head_sha": "h2", "created_at": "2026-11-01T01:00:00Z", "conclusion": "cancelled", "jobs": []}),
+    ];
+    let text: String = rows.iter().map(|r| r.to_string() + "\n").collect();
+    std::fs::write(dir.join("runs.jsonl"), text).unwrap();
+    let out = fairlead(&dir, &["insights", "--speed", "--dataset", "runs.jsonl"]);
+    let text = String::from_utf8_lossy(&out.stdout);
+    assert!(out.status.success(), "{text}");
+    assert!(
+        text.contains("plan     median 1.2 s to plan a change"),
+        "{text}"
+    );
+    assert!(
+        text.contains("slowest      test (CI job): median 5.0 min"),
+        "{text}"
+    );
+    assert!(
+        text.contains("run-whole    unit (done): its longest run took 0.3 s against 1.2 s to plan"),
+        "{text}"
+    );
+    assert!(
+        text.contains("1 passed only on a rerun of the same commit (50%)"),
+        "{text}"
+    );
+    assert!(text.contains("1 of 2 runs cancelled (50%)"), "{text}");
+    assert!(text.contains("    → "), "{text}");
+    let out = fairlead(
+        &dir,
+        &["insights", "--speed", "--dataset", "runs.jsonl", "--json"],
+    );
+    let v: Value = serde_json::from_slice(&out.stdout).unwrap();
+    assert_eq!(v["speed"]["plan_seconds"], 1.2);
+    assert!(v["speed"]["lines"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|l| l["kind"] == "cancelled"));
+    let missing = fairlead(&dir, &["insights", "--speed", "--dataset", "nope.jsonl"]);
+    assert_eq!(missing.status.code(), Some(2));
+}
+
+#[test]
+fn suggest_proposes_replay_quarantine_for_the_flaky_tests_a_ledger_found() {
+    let dir = repo("ledger", "");
+    let ledger = json!({"version": 1, "repo": "o/r", "made_at": fairlead_guard::events::timestamp(SystemTime::now()),
+        "head_sha": "abc", "base_branch": "main", "runs": [], "failures": [],
+        "proposals": [{"path": "test/c.test.ts", "job": "^e2e$", "reason": "it timed out with no assertion failing in run 9 on 2026-11-08", "until": "2026-11-22"}]});
+    std::fs::create_dir_all(dir.join(".git/fairlead/ledger")).unwrap();
+    std::fs::write(
+        dir.join(".git/fairlead/ledger/abc.json"),
+        ledger.to_string(),
+    )
+    .unwrap();
+    std::fs::write(dir.join("given.json"), ledger.to_string()).unwrap();
+    let out = fairlead(&dir, &["insights", "--suggest", "--ledger", "given.json"]);
+    let text = String::from_utf8_lossy(&out.stdout);
+    assert!(out.status.success(), "{text}");
+    assert_eq!(
+        text.matches("[[replay.quarantine]] path = \"test/c.test.ts\", job = \"^e2e$\"")
+            .count(),
+        1,
+        "{text}"
+    );
+    assert!(text.contains("found it flaky in 2 ledger(s)"), "{text}");
+}

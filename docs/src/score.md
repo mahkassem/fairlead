@@ -29,4 +29,8 @@ The replay items read a `fairlead replay run --json-out` report: `--replay FILE`
 
 *Since 0.14.0:* rubric 2 adds `bench`, read from the last [`fairlead test bench`](plan.md#measuring-buns-test-modes) result in `.fairlead/test-bench.json`. It's there only when a runner's command is `bun test`, and takes 5 of that repository's 15 runner points, so the total stays 100. A repository without such a runner scores as it did on rubric 1. No result, a result for a runner that's gone, or one that recommended nothing because every mode tripped an order-dependent test earns nothing; the fix names `fairlead test bench`.
 
+## The guard profile
+
+*Since 0.18.0:* with `profile = "guard"` ([The guard only](install.md#the-guard-only)) there's no test plan to score, so `runners`, `replay` and `recall` are `n/a`: shown as `[-] n/a`, with `"na": true` in the JSON, and left out of the total. The other seven items are worth 55 points, and the score is what they earn scaled to 100, so `--min 70` asks the same of both profiles. The text says both numbers, such as `guard profile: 30/55 on the 7 items it uses, scaled to 100`, and the JSON carries `"profile": "guard"`. The `ci` item is earned in full by a workflow that runs `fairlead guard check`, since there are no stages to plan.
+
 The events behind `done`, `firing` and `hooks` are the local event log, so a score reflects the machine it runs on. The tracker and token items in the design come with them, in a later rubric.

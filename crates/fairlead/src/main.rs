@@ -9,6 +9,7 @@ mod brief_cmd;
 mod bun;
 mod ci_cmd;
 mod ci_judge;
+mod ci_ledger;
 mod ci_report;
 mod ci_shard;
 mod ci_workflow;
@@ -16,6 +17,7 @@ mod context_cmd;
 mod coverage_cmd;
 mod doctor_version;
 mod done_cmd;
+mod done_history;
 mod done_needs;
 mod done_record;
 mod escapes;
@@ -29,8 +31,12 @@ mod hooks_cmd;
 mod import_cmd;
 mod import_rules_cmd;
 mod init_cmd;
+mod init_guard;
 mod insights_cmd;
+mod insights_speed;
 mod knowledge;
+mod ledger_rerun;
+mod ledger_text;
 mod lessons_cmd;
 mod mcp_cmd;
 mod mcp_tools;
@@ -39,7 +45,10 @@ mod migrate_notes;
 mod needs;
 mod phase;
 mod plan_cmd;
+mod pr_cmd;
+mod pr_receipt;
 mod receipt_cmd;
+mod receipt_stages;
 mod replay_cmd;
 mod resume_cmd;
 mod reuse;
@@ -162,6 +171,12 @@ enum Command {
         /// Override a config value for this run.
         #[arg(long = "set", value_name = "KEY=VALUE", global = true)]
         sets: Vec<String>,
+    },
+    /// The rules a change meets before review, from `[pr]`: in CI from the
+    /// pull request's event, elsewhere from git and `gh`.
+    Pr {
+        #[command(subcommand)]
+        action: pr_cmd::PrAction,
     },
     /// Run the gate a change passes before it's finished: its planned tests
     /// and checks, `done.always` and the guard, recorded against the tree.
@@ -340,9 +355,20 @@ fn doctor_report(dir: &Path, opts: &LoadOptions) -> String {
             hooks.push_str(&line);
         }
         agents = agents_cmd::doctor_lines(&root, &l.config);
+        hooks.push_str(&guard_cmd::doctor_lines(&root, &l.config));
         hooks.push_str(&needs::doctor_lines(&root, &l.config));
-        hooks.push_str(&phase::doctor_lines(&root, &l.config));
+        // A phase only decides when whole suites run, and this profile plans none.
+        if l.config.profile.is_full() {
+            hooks.push_str(&phase::doctor_lines(&root, &l.config));
+        }
     }
+    hooks.push_str(&ledger_text::doctor_lines(&graph_cmd::repo_root(dir)));
+    let profile = match &loaded {
+        Ok(l) if !l.config.profile.is_full() => {
+            "profile: guard (no test plan; `fairlead done` runs `guard check` and `pr check`)\n"
+        }
+        _ => "",
+    };
     let config = match loaded {
         Ok(loaded) if loaded.files.is_empty() => "none found; defaults apply".to_string(),
         Ok(loaded) if loaded.problems.is_empty() => {
@@ -358,7 +384,7 @@ fn doctor_report(dir: &Path, opts: &LoadOptions) -> String {
     let here = fairlead_tests::quarantine::Here::detect(&graph_cmd::repo_root(dir));
     let conditions: Vec<&str> = here.conditions.iter().map(|c| c.name()).collect();
     format!(
-        "fairlead {}\n{versions}platform: {}-{}\nconditions: {}\nconfig: {}\n{agents}{hooks}",
+        "fairlead {}\n{versions}platform: {}-{}\nconditions: {}\nconfig: {}\n{profile}{agents}{hooks}",
         env!("CARGO_PKG_VERSION"),
         std::env::consts::OS,
         std::env::consts::ARCH,
@@ -587,6 +613,7 @@ fn main() -> ExitCode {
         Some(Command::Hooks { action }) => hooks_cmd::run(action, &cwd()),
         Some(Command::Migrate { args }) => migrate_cmd::run(args, &cwd()),
         Some(Command::Done { args }) => done_cmd::run(args, &cwd()),
+        Some(Command::Pr { action }) => pr_cmd::run(action, &cwd()),
         Some(Command::Brief { args }) => brief_cmd::run(args, &cwd()),
         Some(Command::Context { args }) => context_cmd::run(args, &cwd()),
         Some(Command::Resume { args }) => resume_cmd::run(args, &cwd()),

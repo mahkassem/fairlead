@@ -167,26 +167,36 @@ pub fn claude_installed(root: &Path) -> bool {
     })
 }
 
-/// The lefthook config, when its commit stage runs another command than this version writes.
+/// The lefthook config, when its commit or push entry runs another command
+/// than this version writes.
 pub fn stale_git(root: &Path, git_dir: &Path) -> Result<Option<Refresh>, String> {
     let file = lefthook_file(root);
     let Some(text) = read(&file)? else {
         return Ok(None);
     };
-    let want = git_run(package_runner(root));
-    match lefthook::current_run(&text) {
-        Some(run) if run != want => {
-            let after = lefthook::set_run(&text, &want).expect("the stage line was found");
-            Ok(Some(Refresh {
-                what: format!("runs `{want}` instead of `{run}`"),
-                manifest: lefthook_manifest(git_dir, &file),
-                file,
-                before: text,
-                after,
-            }))
+    let mut after = text.clone();
+    let mut what = Vec::new();
+    for (entry, run) in [
+        (lefthook::COMMIT, lefthook::RUN),
+        (lefthook::PUSH, lefthook::PUSH_RUN),
+    ] {
+        let want = git_run(package_runner(root), run);
+        if let Some(have) = lefthook::current_run_of(&after, &entry).filter(|r| *r != want) {
+            after =
+                lefthook::set_run_of(&after, &entry, &want).expect("the entry's line was found");
+            what.push(format!("runs `{want}` instead of `{have}`"));
         }
-        _ => Ok(None),
     }
+    if what.is_empty() {
+        return Ok(None);
+    }
+    Ok(Some(Refresh {
+        what: what.join("; "),
+        manifest: lefthook_manifest(git_dir, &file),
+        file,
+        before: text,
+        after,
+    }))
 }
 
 /// Writes the refreshed file, and moves uninstall's record along with it

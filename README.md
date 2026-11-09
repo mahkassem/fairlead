@@ -77,6 +77,12 @@ of trying things like a stranger.
   *Since 0.13.0:* when the config being replayed differs from the base
   branch's, `replay run` reports the recall of both side by side and names
   each failure that moved between hit and miss.
+  *Since 0.18.0:* `fairlead ci ledger` says whether each red check is the
+  change's own, inherited from the base branch ("red on main since abc1234"),
+  flaky or the platform's, with every workflow's red streak on the default
+  branch; `next`, `resume`, `brief` and `doctor` read it offline, and
+  `insights --speed` says where CI time goes: slow steps, steps that never
+  fail, suites faster than their plan, reruns and cancellations.
 - **Fast because it remembers.** No rereading the codebase to rediscover what
   was learned last week. The graph, the plan and the lessons are already there.
   *Since 0.2.0:* the import graph is built without installing dependencies
@@ -139,7 +145,7 @@ repositories are on the way
 
 ## What it does
 
-This README documents Fairlead 0.15.2. Each command, by what it's for:
+This README documents Fairlead 0.18.0. Each command, by what it's for:
 
 - **The test plan:** `plan`, `test --explain`, the import graph (`graph`) and
   coverage maps (`coverage import`). *Since 0.13.0:* `graph hubs` lists the
@@ -154,12 +160,29 @@ This README documents Fairlead 0.15.2. Each command, by what it's for:
   *Since 0.15.0:* a slow suite with `all_from = "full"`, or every suite while
   the project's `phase` is `early` or `testing`, runs only what a change
   reaches on a pull request and runs whole on a schedule.
+  *Since 0.18.0:* `ci ledger` judges each failure of a run as own, inherited,
+  flaky or infra, `ci report --ledger` says it once, and the workflow
+  `ci workflow` writes runs it when a job fails.
 - **Rules as the agent works:** `guard check`, the hooks `hooks install` adds,
-  and `doctor`.
+  and `doctor`. *Since 0.18.0:* a commit may not add a file named like a secret
+  (`.env`, `*.jks`, `*.pem` and the like) with no config at all; gitleaks
+  runs as a guard preset; migration numbers are checked against the base
+  fetched at a push (`guard check --push`); and `pr check` holds a change to
+  `[pr]` rules (branch name, ticket key, base, labels, body headings,
+  required files) in `done`, before a push and in CI. A foreign linter with
+  `diff = true` fails only on the findings a change adds, against the base
+  in a temporary worktree, and `pr check` fails a body that says "verified"
+  or "tests pass" with no passing receipt for the head's tree.
 - **The change loop:** `brief` before an edit, or `context` for the brief with
   the lessons, skills, README and history to read; `done` before it's
   finished, then `receipt` and `next`; `resume` picks up where the last
-  session on a branch stopped.
+  session on a branch stopped. *Since 0.18.0:* `done` plans the branch from its
+  merge base with `[pr] base` or the default branch, runs first the cheap
+  steps CI history shows going red (and adds a cheap check the plan left
+  out, saying why), and runs as the pre-push hook (`done --pre-push`); the
+  receipt says where each step ran, by stage and platform, what never ran on
+  this tree and what can't be proved here ("unverifiable here: needs
+  macos"), and `receipt --pr` puts it in the pull request body.
 - **Project memory:** `learn` writes a lesson, `import lessons` turns a lessons
   document the team already keeps into one lesson per heading, and `lessons`
   lists, reviews and checks them. The brief offers the ones a change reaches.
@@ -181,12 +204,16 @@ This README documents Fairlead 0.15.2. Each command, by what it's for:
   `test bench` times `bun test` serial, `--parallel` and
   `--parallel --no-isolate` on the repository's tests, flags order-dependent
   ones, and recommends the fastest mode for `doctor --score` and
-  `insights --suggest`.
+  `insights --suggest`. *Since 0.18.0:* `ci ledger`, a verdict for each red
+  check and the default branch's red streaks, and `insights --speed`.
 - **Getting started:** `init` writes a first config from what the repository
   shows, and `init --blueprint` adds a starting point for a kind of project:
   config, starter skills and the CI workflow. *Since 0.14.0:* on Bun 1.4.4 or
   later, `init` runs `bun test` in parallel (`--parallel --no-isolate`) and
-  offers `bun fmt --check` on the changed files as a check.
+  offers `bun fmt --check` on the changed files as a check. *Since 0.18.0:*
+  `init --profile guard` sets up only the guard, for any stack, including
+  those the test planner doesn't read, such as Laravel, Rails, Flutter or
+  Swift.
 - **The config:** `config check`, `show` and `schema`.
 - **Upgrading:** `migrate`, which brings the hooks, the config's version
   floor and the version pins to the release you installed. *Since 0.7.0.*
@@ -196,27 +223,18 @@ The [quick start](#quick-start) shows the first few, and the
 
 ## Status
 
-Pre-alpha. The latest release, v0.15.2, makes `fairlead done` read
-`[[needs]]`: a suite this machine can't run is left out, and passes when
-the need names where it's proved. It also fixes the Stop hook, which now
-asks a session once per tree and never asks one that can't have edited, and
-says why a step failed or a suite holds the gate. 0.15.1 fixed
-`fairlead doctor` missing a production deploy whose workflow names the
-environment on its own line. 0.15.0 left slow suites, such as
-end-to-end and browser tests, to a scheduled run: a pull request runs only
-what the change reaches (`all_from`, or the project's `phase` before a live
-deployment). It also adds `[[needs]]`: a repository declares what some
-tests need from the machine, such as a service on a port or a container
-runtime, and `fairlead doctor` checks whether this machine has it, the
-first step towards a done gate that says what it couldn't prove instead of
-failing. 0.14.2 fixed the npm install on Windows under a
-path with a space in it, and 0.14.1 shipped 0.14.0's changes, whose
-release stopped before publishing: GitHub cancelled its Apple-silicon build
-on a retiring macOS image. 0.14 measures and uses Bun 1.4.4 (`init` writes the
-parallel test runner, and `fairlead test bench` says which test mode is
-fastest on your own tests), follows named imports through barrels to the
-file that declares them, and installs with Composer, from crates.io and
-from a Homebrew tap. What each earlier release added is
+Pre-alpha. The latest release, v0.18.0, folds what was planned as 0.16
+and 0.17 into one release. Guards work on any stack from day one
+(`init --profile guard`), secret file names are refused at commit with no
+config, gitleaks runs as a preset, and `[pr]` rules (branch, title, ticket,
+body, base, labels, files) run in `done`, at push and in CI with
+`fairlead pr check`. `fairlead ci ledger` answers "is this red mine?" (own,
+inherited, flaky or infra) and `insights --speed` says where test and CI
+time goes. `fairlead done` plans from the merge base, runs first what CI
+history shows going red, records each step's stage and platform, and a
+foreign linter fails only on what a change adds. 0.15.2 made `done` read
+`[[needs]]` and fixed the Stop hook; 0.15.0 left slow suites to a scheduled
+run. What each earlier release added is
 in the [changelog](CHANGELOG.md), and what upgrading to it asks of you is in
 the [upgrade guide](https://mahkassem.github.io/fairlead/docs/migrate.html).
 Recall on real CI failures, with every miss and its cause, is in the
@@ -261,6 +279,10 @@ how to build it from source ([Install](https://mahkassem.github.io/fairlead/docs
 PHP launcher downloads the release build for the platform on its first run,
 checks its sha256 before unpacking it, and caches it in `vendor/`
 ([Install](https://mahkassem.github.io/fairlead/docs/install.html#composer)).
+
+*Since 0.18.0:* the npm package retries a failed download, and
+`FAIRLEAD_BINARY` points it at a binary fetched some other way, such as from
+a CI cache ([Install](https://mahkassem.github.io/fairlead/docs/install.html#a-binary-fetched-another-way)).
 
 ## Quick start
 

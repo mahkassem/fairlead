@@ -670,9 +670,84 @@ fn an_external_rule_runs_at_the_check_stage_unless_told_otherwise() {
     let config: Config =
         toml::from_str("[[guard.external]]\nid = \"x\"\ncommand = [\"x\"]\n").unwrap();
     assert_eq!(
-        config.guard.external.items()[0].stages,
+        config.guard.external.items()[0].stages(),
         [fairlead_core::config::Stage::Check]
     );
+}
+
+#[test]
+fn a_preset_external_rule_needs_no_command_and_runs_at_commit_and_check() {
+    use fairlead_core::config::Stage;
+    let config: Config = toml::from_str("[[guard.external]]\npreset = \"gitleaks\"\n").unwrap();
+    let rule = &config.guard.external.items()[0];
+    assert_eq!(rule.rule_id(), "gitleaks");
+    assert_eq!(rule.stages(), [Stage::Commit, Stage::Check]);
+    assert!(fairlead_core::config::validate(&config).is_empty());
+    let keys = |text: &str| -> Vec<String> {
+        let config: Config = toml::from_str(text).unwrap();
+        fairlead_core::config::validate(&config)
+            .into_iter()
+            .map(|p| p.key)
+            .collect()
+    };
+    assert_eq!(
+        keys("[[guard.external]]\nid = \"x\"\n"),
+        ["guard.external[0].command"]
+    );
+    assert_eq!(
+        keys("[[guard.external]]\npreset = \"gitleaks\"\ncommand = [\"x\"]\n"),
+        ["guard.external[0].command"]
+    );
+}
+
+#[test]
+fn the_secret_paths_rule_is_on_by_default_and_turns_off_two_ways() {
+    let load = |text: &str| -> Config { toml::from_str(text).unwrap() };
+    let default = Config::default();
+    assert!(default.guard.paths.rules().is_some() && default.guard.paths.built_in());
+    assert!(load("[guard]\npaths = false\n")
+        .guard
+        .paths
+        .rules()
+        .is_none());
+    assert!(load("[guard.paths]\nenabled = false\n")
+        .guard
+        .paths
+        .rules()
+        .is_none());
+    let strict = load("[guard.paths]\nratchet = false\n");
+    assert!(!strict.guard.paths.built_in());
+    let dir = repo_with(
+        "secret-paths",
+        &[(
+            "fairlead.toml",
+            "[guard.paths]\ndeny = [\"**/secrets/**\"]\nallow = { replace = [] }\n",
+        )],
+    );
+    let rules = load_at(&dir, &LoadOptions::default())
+        .guard
+        .paths
+        .rules()
+        .unwrap();
+    assert_eq!(
+        rules.deny.items().len(),
+        11,
+        "the project's glob appends to the built-in ten"
+    );
+    assert_eq!(rules.deny.items().last().unwrap(), "**/secrets/**");
+    assert!(
+        rules.allow.items().is_empty(),
+        "replace drops the built-in allow list"
+    );
+    let dir = repo_with(
+        "secret-paths-off",
+        &[("fairlead.toml", "[guard]\npaths = false\n")],
+    );
+    assert!(load_at(&dir, &LoadOptions::default())
+        .guard
+        .paths
+        .rules()
+        .is_none());
 }
 
 #[test]
@@ -885,4 +960,13 @@ fn run_all_mixes_globs_and_kind_limited_entries_across_defaults_packs_and_sets()
         run_all[0].kinds(),
         Ok(Some(vec![fairlead_core::plan::Status::Added]))
     );
+}
+
+#[test]
+fn a_diff_rule_must_be_a_command_without_a_ratchet() {
+    let text = "[[guard.external]]\npreset = \"gitleaks\"\ndiff = true\n\n[[guard.external]]\nid = \"lint\"\ncommand = [\"lint\"]\nratchet = true\ndiff = true\n\n[[guard.external]]\nid = \"ok\"\ncommand = [\"lint\", \"{files}\"]\ndiff = true\n";
+    let dir = repo_with("diff-rule", &[("fairlead.toml", text)]);
+    let loaded = load(&dir, &LoadOptions::default()).unwrap();
+    let keys: Vec<&str> = loaded.problems.iter().map(|p| p.key.as_str()).collect();
+    assert_eq!(keys, ["guard.external[0].diff", "guard.external[1].diff"]);
 }

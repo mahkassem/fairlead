@@ -43,6 +43,18 @@ pub struct InsightsArgs {
     /// Print the insights as JSON.
     #[arg(long)]
     json: bool,
+    /// Where the time goes instead: the slowest steps, steps that never or
+    /// always fail, suites faster than their plan, reruns and cancellations.
+    #[arg(long)]
+    speed: bool,
+    /// A replay dataset (`replay fetch --data`), for CI job times, reruns and
+    /// cancelled runs; repeatable.
+    #[arg(long, value_name = "FILE")]
+    dataset: Vec<PathBuf>,
+    /// A ledger `ci ledger --out` wrote, whose flaky tests `--suggest`
+    /// proposes quarantine for; the cached ledgers are read too. Repeatable.
+    #[arg(long, value_name = "FILE")]
+    ledger: Vec<PathBuf>,
 }
 
 #[derive(Serialize, Default)]
@@ -283,10 +295,75 @@ fn gather(root: &Path, args: &InsightsArgs, cfg: &config::Config) -> Result<Insi
         }
     }
     if args.suggest {
+        out.suggestions
+            .extend(ledger_suggestions(root, args, &since)?);
         suggest(&mut out, cfg, &rules);
         out.suggestions.extend(bench_suggestion(root, cfg));
     }
     Ok(out)
+}
+
+/// The speed coach over the event log, the results and datasets given, and
+/// the replay report's plan time when no `done` recorded one.
+fn speed(
+    root: &Path,
+    args: &InsightsArgs,
+    cfg: &config::Config,
+) -> Result<crate::insights_speed::Speed, String> {
+    let since = args.since.clone().unwrap_or_else(since_default);
+    let mut inputs = crate::insights_speed::Inputs::default();
+    let log = EventLog::open(root).map(|l| l.read()).unwrap_or_default();
+    inputs.add_events(&log, &since);
+    for path in &args.results {
+        inputs.add_results(&read_json(path)?);
+    }
+    inputs.add_rows(crate::insights_speed::rows(&args.dataset)?);
+    let replay_plan = match &args.replay {
+        Some(p) => read_json(p)?["median_plan_seconds"].as_f64(),
+        None => None,
+    };
+    Ok(crate::insights_speed::coach(&inputs, cfg, replay_plan))
+}
+
+/// A `[[replay.quarantine]]` proposal for each flaky test the ledgers
+/// found, named once with how many ledgers found it.
+fn ledger_suggestions(
+    root: &Path,
+    args: &InsightsArgs,
+    since: &str,
+) -> Result<Vec<Suggestion>, String> {
+    let mut ledgers = Vec::new();
+    for p in &args.ledger {
+        ledgers.push(crate::ci_ledger::read(p)?);
+    }
+    if let Some(dir) = crate::ci_ledger::cache_dir(root) {
+        for entry in std::fs::read_dir(dir).into_iter().flatten().flatten() {
+            if let Ok(l) = crate::ci_ledger::read(&entry.path()) {
+                if l.made_at.as_str() >= since {
+                    ledgers.push(l);
+                }
+            }
+        }
+    }
+    let mut found: BTreeMap<(String, String), (fairlead_replay::ledger::Proposal, usize)> =
+        BTreeMap::new();
+    for p in ledgers.iter().flat_map(|l| &l.proposals) {
+        found
+            .entry((p.path.clone(), p.job.clone()))
+            .or_insert_with(|| (p.clone(), 0))
+            .1 += 1;
+    }
+    Ok(found
+        .into_values()
+        .map(|(p, n)| Suggestion {
+            change: p.entry(),
+            because: format!(
+                "`fairlead ci ledger` found it flaky in {n} ledger(s): {}; confirm it before adding it",
+                p.reason
+            ),
+            writes: false,
+        })
+        .collect())
 }
 
 /// The runner mode `fairlead test bench` last recommended, while the
@@ -503,6 +580,26 @@ pub fn run(args: InsightsArgs, cwd: &Path) -> ExitCode {
         }
     };
     let root = crate::graph_cmd::repo_root(cwd);
+    if args.speed {
+        return match speed(&root, &args, &loaded.config) {
+            Ok(s) if args.json => {
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(&serde_json::json!({ "speed": s }))
+                        .expect("speed prints")
+                );
+                ExitCode::SUCCESS
+            }
+            Ok(s) => {
+                print!("{}", crate::insights_speed::render(&s));
+                ExitCode::SUCCESS
+            }
+            Err(e) => {
+                eprintln!("{e}");
+                ExitCode::from(2)
+            }
+        };
+    }
     let made = match gather(&root, &args, &loaded.config) {
         Ok(m) => m,
         Err(e) => {

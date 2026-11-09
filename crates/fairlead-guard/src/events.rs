@@ -36,6 +36,12 @@ pub struct Event {
     pub rules: Vec<&'static str>,
     pub added: usize,
     pub ms: f64,
+    /// The write hook's: how much of `ms` loading the config took, and the
+    /// budget it ran under, so a `timed_out` reads against both.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub load_ms: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub budget_ms: Option<u32>,
     pub fairlead: &'static str,
     #[serde(skip_serializing_if = "std::ops::Not::not")]
     pub truncated: bool,
@@ -45,6 +51,10 @@ pub struct Event {
     /// A `done` run's steps, by id, outcome and seconds; never their output.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub steps: Vec<Step>,
+    /// How long a `done` run took to plan, which `insights --speed` weighs
+    /// against how long a suite takes to run whole.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub plan_seconds: Option<f64>,
     /// What an `offer` or `use` event is about, such as `skill:forms` or `lesson:settle`.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub items: Vec<String>,
@@ -111,6 +121,14 @@ pub struct Step {
     #[serde(skip_serializing_if = "std::ops::Not::not")]
     pub quarantined: bool,
     pub seconds: f64,
+    /// The CI stage the step belongs to, such as `draft` or `ready`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub stage: Option<String>,
+    /// Where it ran: the OS and CPU, such as `linux` and `x86_64`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub os: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub arch: Option<String>,
 }
 
 impl Event {
@@ -127,10 +145,13 @@ impl Event {
             rules: Vec::new(),
             added: 0,
             ms: (elapsed.as_secs_f64() * 10_000.0).round() / 10.0,
+            load_ms: None,
+            budget_ms: None,
             fairlead: env!("CARGO_PKG_VERSION"),
             truncated: false,
             tree: None,
             steps: Vec::new(),
+            plan_seconds: None,
             items: Vec::new(),
             tokens: None,
             waiting: Vec::new(),

@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 use clap::Args;
-use fairlead_core::config::{self, LoadOptions, Loaded};
+use fairlead_core::config::{self, LoadOptions, Loaded, Profile};
 use serde::Serialize;
 use serde_json::Value;
 
@@ -47,12 +47,18 @@ pub struct Item {
     /// The one thing that earns the missing points.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub fix: Option<String>,
+    /// An item the profile doesn't use, left out of the score.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub na: bool,
 }
 
 #[derive(Debug, Serialize)]
 pub struct Score {
     pub rubric: u32,
+    /// Out of 100: the points earned over the points the profile can earn.
     pub score: u32,
+    #[serde(skip_serializing_if = "Profile::is_full")]
+    pub profile: Profile,
     pub items: Vec<Item>,
 }
 
@@ -63,6 +69,19 @@ fn item(id: &'static str, max: u32, earned: u32, evidence: String, fix: &str) ->
         max,
         evidence,
         fix: (earned < max).then(|| fix.to_string()),
+        na: false,
+    }
+}
+
+/// An item the guard-only profile has nothing to score for.
+fn not_used(id: &'static str, max: u32) -> Item {
+    Item {
+        id,
+        points: 0,
+        max,
+        evidence: "the guard profile plans no tests".into(),
+        fix: None,
+        na: true,
     }
 }
 
@@ -227,16 +246,42 @@ fn done_item(events: &[Value], today: i64) -> Item {
     )
 }
 
-fn ci_item(root: &Path, loaded: &Loaded) -> Item {
-    let planned = std::fs::read_dir(root.join(".github/workflows"))
+fn workflows(root: &Path) -> Vec<String> {
+    std::fs::read_dir(root.join(".github/workflows"))
         .into_iter()
         .flatten()
         .filter_map(|e| std::fs::read_to_string(e.ok()?.path()).ok())
-        .any(|text| {
-            text.contains(crate::ci_workflow::MARKER)
-                || text.contains("fairlead ci ")
-                || text.contains("mahkassem/fairlead@")
-        });
+        .collect()
+}
+
+/// The guard profile has no plan to stage, so a workflow running the guard
+/// earns the whole item.
+fn guard_ci_item(root: &Path) -> Item {
+    let runs = workflows(root)
+        .iter()
+        .any(|t| t.contains("fairlead guard check") || t.contains("command: guard check"));
+    pass(
+        "ci",
+        10,
+        runs,
+        if runs {
+            "a workflow runs `fairlead guard check`".to_string()
+        } else {
+            "no workflow runs `fairlead guard check`".to_string()
+        },
+        "run `fairlead guard check` (and `fairlead pr check`) in a workflow",
+    )
+}
+
+fn ci_item(root: &Path, loaded: &Loaded) -> Item {
+    if loaded.config.profile == Profile::Guard {
+        return guard_ci_item(root);
+    }
+    let planned = workflows(root).iter().any(|text| {
+        text.contains(crate::ci_workflow::MARKER)
+            || text.contains("fairlead ci ")
+            || text.contains("mahkassem/fairlead@")
+    });
     let staged = loaded.config.stages.is_some();
     let earned = u32::from(planned) * 5 + u32::from(planned && staged) * 5;
     item(
@@ -375,6 +420,20 @@ pub fn score(dir: &Path, opts: &LoadOptions, replay: Option<&Path>) -> Score {
     let Ok(l) = &loaded else {
         return finish(items, events, report, today);
     };
+    if l.config.profile == Profile::Guard {
+        items.push(not_used("runners", 15));
+        items.push(hooks_item(&root, l));
+        items.push(done_item(&events, today));
+        items.push(ci_item(&root, l));
+        items.push(not_used("replay", 15));
+        items.push(not_used("recall", 15));
+        items.push(firing_item(&events, today));
+        items.push(skills_item(&root, l));
+        items.push(lessons_item(&root, l));
+        let mut s = total(items);
+        s.profile = Profile::Guard;
+        return s;
+    }
     if has_bun_runner(l) {
         items.push(runners_item(&root, l, 10));
         items.push(bench_item(&root, l));
@@ -406,17 +465,40 @@ fn finish(mut items: Vec<Item>, events: Vec<Value>, report: Option<Value>, today
     total(items)
 }
 
+/// Points out of 100. Items a profile doesn't use leave the rubric, and the
+/// rest scale up to 100, so `--min` means the same bar for every profile.
 fn total(items: Vec<Item>) -> Score {
+    let earned: u32 = items.iter().map(|i| i.points).sum();
+    let max: u32 = items.iter().filter(|i| !i.na).map(|i| i.max).sum();
+    let score = if max == 100 || max == 0 {
+        earned
+    } else {
+        (f64::from(earned) * 100.0 / f64::from(max)).round() as u32
+    };
     Score {
         rubric: RUBRIC,
-        score: items.iter().map(|i| i.points).sum(),
+        score,
+        profile: Profile::Full,
         items,
     }
 }
 
 pub fn render(s: &Score) -> String {
     let mut out = format!("readiness {}/100 (rubric {})\n", s.score, s.rubric);
+    let unused = s.items.iter().filter(|i| i.na).count();
+    if unused > 0 {
+        let earned: u32 = s.items.iter().map(|i| i.points).sum();
+        let max: u32 = s.items.iter().filter(|i| !i.na).map(|i| i.max).sum();
+        out.push_str(&format!(
+            "  guard profile: {earned}/{max} on the {} items it uses, scaled to 100\n",
+            s.items.len() - unused
+        ));
+    }
     for i in &s.items {
+        if i.na {
+            out.push_str(&format!("  [-]   n/a {:<8} {}\n", i.id, i.evidence));
+            continue;
+        }
         out.push_str(&format!(
             "  [{}] {:>2}/{:<2} {:<8} {}\n",
             if i.points == i.max { "x" } else { " " },

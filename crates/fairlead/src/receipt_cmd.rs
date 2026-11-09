@@ -15,6 +15,7 @@ use serde_json::Value;
 
 use crate::brief_cmd::{Brief, Store};
 use crate::plan_cmd::{make, Changes, Planned};
+use crate::receipt_stages::{RanStep, Unverifiable};
 
 const SHOWN: usize = 5;
 
@@ -35,6 +36,10 @@ pub struct ReceiptArgs {
     /// List every file and test instead of the first few.
     #[arg(long)]
     all: bool,
+    /// Print it as a block for the pull request body, which `pr check`
+    /// and `ci report` read back for the head's tree.
+    #[arg(long, conflicts_with = "json")]
+    pr: bool,
 }
 
 #[derive(clap::Args)]
@@ -66,6 +71,12 @@ pub struct Receipt {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tests_briefed: Option<usize>,
     pub gate: Gate,
+    /// Planned steps no `done` run on this tree reached.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub never_run: Vec<String>,
+    /// Steps this machine can't prove, and where they're proved instead.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub unverifiable: Vec<Unverifiable>,
     pub next: String,
 }
 
@@ -95,6 +106,9 @@ pub struct Gate {
     /// Tests and checks an unmet `[[needs]]` entry kept from running here.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub not_run: Vec<fairlead_guard::events::Unmet>,
+    /// Each step of the run with its stage and where it ran.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub ran: Vec<RanStep>,
 }
 
 /// The gate's state when its steps passed and whole suites wait.
@@ -115,6 +129,15 @@ pub fn run_next(args: NextArgs, cwd: &Path) -> ExitCode {
     match state(cwd, args.base.clone(), session.as_deref()) {
         Ok(s) => {
             println!("{}", next_line(&s));
+            if !s.changed.is_empty() {
+                if let Some(line) = pr_line(cwd) {
+                    println!("{line}");
+                }
+            }
+            // A cached ledger only: `next` never reaches the network.
+            if let Some(line) = crate::ledger_text::head_line(&crate::graph_cmd::repo_root(cwd)) {
+                println!("ci: {line}");
+            }
             ExitCode::SUCCESS
         }
         Err(e) => {
@@ -122,6 +145,23 @@ pub fn run_next(args: NextArgs, cwd: &Path) -> ExitCode {
             ExitCode::from(2)
         }
     }
+}
+
+/// The `[pr]` rules, so the branch, title and ticket are right before the
+/// pull request is opened rather than after CI reads them.
+fn pr_line(cwd: &Path) -> Option<String> {
+    let loaded = fairlead_core::config::load(
+        cwd,
+        &fairlead_core::config::LoadOptions::from_process(Vec::new()),
+    )
+    .ok()?;
+    let rules = crate::pr_cmd::summary(loaded.config.pr.as_ref()?);
+    (!rules.is_empty()).then(|| {
+        format!(
+            "  pull request: {}; `fairlead pr check` checks them",
+            rules.join("; ")
+        )
+    })
 }
 
 fn session(given: Option<String>) -> Option<String> {
@@ -199,6 +239,7 @@ fn gate(log: &str, tree: &str) -> Gate {
             seconds: 0.0,
             waiting: Vec::new(),
             not_run: Vec::new(),
+            ran: Vec::new(),
         };
     };
     let steps = e["steps"].as_array().cloned().unwrap_or_default();
@@ -219,6 +260,7 @@ fn gate(log: &str, tree: &str) -> Gate {
         seconds: steps.iter().filter_map(|s| s["seconds"].as_f64()).sum(),
         waiting: serde_json::from_value(e["waiting"].clone()).unwrap_or_default(),
         not_run: serde_json::from_value(e["unmet"].clone()).unwrap_or_default(),
+        ran: crate::receipt_stages::ran(&e),
     }
 }
 
@@ -279,7 +321,10 @@ fn receipt(args: &ReceiptArgs, cwd: &Path) -> Result<(), String> {
     if let Some(store) = Store::open(&root) {
         store.save_receipt(&made)?;
     }
-    let text = text(&made, args.all);
+    let text = match args.pr {
+        true => crate::pr_receipt::block(&made),
+        false => text(&made, args.all),
+    };
     if let Some(out) = &args.out {
         let body = if out.extension().is_some_and(|e| e == "json") {
             serde_json::to_string_pretty(&made).expect("receipt serializes") + "\n"
@@ -351,6 +396,9 @@ fn compare(s: &State, root: &Path, cwd: &Path) -> Result<Receipt, String> {
             path,
         })
         .collect();
+    let left_out: Vec<String> = s.gate.not_run.iter().map(|u| u.step.clone()).collect();
+    let never_run = crate::receipt_stages::never_run(&s.now, &s.gate.ran, &left_out);
+    let unverifiable = crate::receipt_stages::unverifiable(&s.now, &s.gate.not_run, &s.gate.ran);
     Ok(Receipt {
         version: 1,
         brief: s.brief.as_ref().map(|b| b.id.clone()),
@@ -363,6 +411,8 @@ fn compare(s: &State, root: &Path, cwd: &Path) -> Result<Receipt, String> {
         tests_now: s.now.plan.tests.len(),
         tests_briefed: briefed_tests.map(|t| t.len()),
         gate: s.gate.clone(),
+        never_run,
+        unverifiable,
         next: String::new(),
     })
 }
@@ -448,6 +498,11 @@ pub fn text(r: &Receipt, all: bool) -> String {
     }
     let gate = gate_line(&r.gate);
     out.push_str(&format!("gate     {gate}\n"));
+    out.push_str(&crate::receipt_stages::lines(
+        &r.gate.ran,
+        &r.never_run,
+        &r.unverifiable,
+    ));
     out.push_str(&r.next.replacen("next: ", "next     ", 1));
     out.push('\n');
     out

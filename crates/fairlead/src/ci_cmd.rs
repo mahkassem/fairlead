@@ -99,7 +99,16 @@ pub enum CiAction {
         /// Also keep one pull request comment up to date with it, over `ci.comment`.
         #[arg(long)]
         comment: bool,
+        /// A ledger `ci ledger --out` wrote: each failure's verdict, said
+        /// once for the run.
+        #[arg(long, value_name = "PATH")]
+        ledger: Option<PathBuf>,
     },
+    /// Is this red mine? Judge each failure of a commit's CI runs as own,
+    /// inherited, flaky or infra from the GitHub API, with the default
+    /// branch's red streaks, and keep the ledger for `next`, `resume`,
+    /// `brief` and `doctor`.
+    Ledger(crate::ci_ledger::LedgerArgs),
     /// Print a staged GitHub Actions workflow made from the config.
     Workflow {
         /// Write it to `.github/workflows/fairlead.yml` instead, replacing
@@ -164,7 +173,18 @@ pub fn run(action: CiAction, cwd: &Path) -> ExitCode {
             results,
             receipt,
             comment,
-        } => crate::ci_report::run(cwd, &plan, &results, receipt.as_deref(), comment),
+            ledger,
+        } => crate::ci_report::run(
+            cwd,
+            &plan,
+            &results,
+            crate::ci_report::Extras {
+                receipt: receipt.as_deref(),
+                ledger: ledger.as_deref(),
+            },
+            comment,
+        ),
+        CiAction::Ledger(args) => crate::ci_ledger::run(args, cwd),
         CiAction::Workflow { write, insights } => crate::ci_workflow::run(cwd, write, insights),
     };
     result.unwrap_or_else(|e| {
@@ -180,7 +200,7 @@ fn default_out() -> PathBuf {
         .join("fairlead-plan.json")
 }
 
-fn rev_parse(cwd: &Path, rev: &str) -> Option<String> {
+pub(crate) fn rev_parse(cwd: &Path, rev: &str) -> Option<String> {
     let out = Command::new("git")
         .arg("-C")
         .arg(cwd)

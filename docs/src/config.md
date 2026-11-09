@@ -65,6 +65,7 @@ fairlead.toml: tests.unreachd: unknown field `unreachd`, expected one of ...
 | Key | Default | Meaning |
 | --- | --- | --- |
 | `fairlead` | none | The oldest Fairlead version this config needs, such as `"0.2"`. *Since 0.7.0:* a config that an older binary can't read, because it uses keys added later, gets this version in the error instead of the unknown key. |
+| `profile` | `"full"` | *Since 0.18.0:* `guard` for the guard and the `[pr]` rules only, with no test plan: `done` runs `guard check` and `pr check`, and the score leaves the planner's items out. See [The guard only](install.md#the-guard-only) |
 | `phase` | none | *Since 0.15.0:* `early`, `testing` or `live`. Before a live deployment, a step with no `all_from` runs its whole suite only at the full stage ([The project's phase](plan.md#the-projects-phase)) |
 | `modules.discover` | `["workspaces"]` | Where modules come from |
 | `modules.define` | `[]` | Extra modules: `{ pattern = "services/{name}/src" }` |
@@ -81,12 +82,12 @@ fairlead.toml: tests.unreachd: unknown field `unreachd`, expected one of ...
 | `tests.match` | `**/*.{test,spec}.{ts,tsx,js,jsx,mjs,cjs,mts,cts}` | Test files |
 | `tests.exclude` | `**/node_modules/**` | Paths that are never test files |
 | `tests.unreached` | `"module"` | What a changed file nothing reaches selects: `module`, `all` or `warn` |
-| `tests.runners` | `[]` | `id`, `match`, `exclude` (files under `match` left to another runner), `invoke` (`once` or `per-module`), `cwd`, `command`. *Since 0.7.1:* `all_command` (the argv when everything runs) and `exclude_arg` (an argv fragment that leaves one file out), below. *Since 0.8.0:* `from`, the earliest [CI stage](ci.md#stages) it runs at, `ready` by default. *Since 0.15.0:* `all_from`, the earliest stage its whole suite runs at ([Whole suites](plan.md#whole-suites-at-a-later-stage)) |
+| `tests.runners` | `[]` | `id`, `match`, `exclude` (files under `match` left to another runner), `invoke` (`once` or `per-module`), `cwd`, `command`. *Since 0.7.1:* `all_command` (the argv when everything runs) and `exclude_arg` (an argv fragment that leaves one file out), below. *Since 0.8.0:* `from`, the earliest [CI stage](ci.md#stages) it runs at, `ready` by default. *Since 0.15.0:* `all_from`, the earliest stage its whole suite runs at ([Whole suites](plan.md#whole-suites-at-a-later-stage)). *Since 0.18.0:* `cheap = true`, so [CI history](done.md#ci-history) runs it first when it went red there |
 | `tests.owners` | `[]` | Tests that don't import what they test: `match`, `covers`, and `overrides_run_all` to let a covered `plan.run_all` path select only those tests |
 | `tests.classes` | `[]` | `class` (`unit`, `own`, `demand`, `canary`) for a `match` |
-| `checks` | `[]` | Steps that aren't tests: `id`, `command`, `paths`, `modules`, `files`. *Since 0.8.0:* `from`, the earliest [CI stage](ci.md#stages) it runs at, `draft` by default. *Since 0.15.0:* `all_from`, the earliest stage it runs over every file it matches |
+| `checks` | `[]` | Steps that aren't tests: `id`, `command`, `paths`, `modules`, `files`. *Since 0.8.0:* `from`, the earliest [CI stage](ci.md#stages) it runs at, `draft` by default. *Since 0.15.0:* `all_from`, the earliest stage it runs over every file it matches. *Since 0.18.0:* `cheap = true`, so [CI history](done.md#ci-history) runs it first, or adds it, when it went red there |
 | `quarantine` | `[]` | A test (`path`) or check (`check`) that fails on one platform whatever the change: `os`, `when` (`autocrlf`, `space-in-path`), `signature`, `reason`, `proved_in`, `until` ([Test plan](plan.md#tests-that-lie-on-one-platform)) |
-| `needs` | `[]` | What some tests and checks need from the machine: `id`, one of `tcp`, `command` or `env`, `tests` (globs), `checks` (ids), `proved_in`, `hint`, `timeout_ms`. *Since 0.15.0* in `doctor`; *Since 0.15.2:* `fairlead done` leaves out what an unmet need covers, and passes without it only when the need names `proved_in` ([Needs](done.md#needs)) |
+| `needs` | `[]` | What some tests and checks need from the machine: `id`, one of `tcp`, `command` or `env`, `tests` (globs), `checks` (ids), `proved_in`, `hint`, `timeout_ms`. *Since 0.15.0* in `doctor`; *Since 0.15.2:* `fairlead done` leaves out what an unmet need covers, and passes without it only when the need names `proved_in` ([Needs](done.md#needs)). *Since 0.18.0:* `os` (such as `["macos"]`) as a fourth kind of check, met only on an OS it names |
 | `plan.run_all` | lockfiles, root manifests, tsconfig, runner and CI config | A changed path matching one selects everything. *Since 0.8.0:* except a change that only moves dependency versions and a workflow run only by hand or on a schedule ([Changes that don't run everything](plan.md#changes-that-dont-run-everything)). *Since 0.13.0:* an entry `{ paths, on }` runs everything only for the kinds of change `on` names (`added`, `modified`, `deleted`, `renamed`); see [Run everything by kind of change](plan.md#run-everything-by-kind-of-change) |
 | `plan.lockfile` | `"all"` | `all`: a changed lockfile selects everything; `scope` (opt-in): a changed root `pnpm-lock.yaml` selects the workspace packages whose resolved dependencies changed |
 | `plan.whole_share` | `0.5` | *Since 0.15.0:* a change reaching at least this share of a suite whose whole run waits for a later stage waits with it |
@@ -94,7 +95,7 @@ fairlead.toml: tests.unreachd: unknown field `unreachd`, expected one of ...
 | `replay.provider` | `"github"` | Where CI history comes from |
 | `replay.window_days` | `90` | How far back replay looks |
 | `replay.min_failures` | `30` | Failures needed before a replay result counts |
-| `replay.failures` | `[]` | `runner`, `extractor` (`vitest`, `jest`, `bun`, `phpunit`, `pest`, `go`, `pytest`, `maven`, `gradle`, `regex`), `job`, `pattern` |
+| `replay.failures` | `[]` | `runner`, `extractor` (`vitest`, `jest`, `bun`, `phpunit`, `pest`, `go`, `pytest`, `maven`, `gradle`, `regex`), `job`, `pattern`. *Since 0.18.0:* [`ci ledger`](ci.md#is-this-red-mine-fairlead-ci-ledger) reads failing tests with the same entries, or with none, with the extractor a runner's command names |
 | `replay.checks` | `[]` | Map a CI `job` and `step` to a `check` |
 | `replay.ignore` | `[]` | CI job names (regexes) whose failures replay leaves out on purpose, such as a job that only aggregates others |
 | `replay.quarantine` | `[]` | Tests declared flaky in named jobs: `path`, `job`, `reason`, `until` ([Replay](replay.md#quarantine)) |
@@ -103,20 +104,25 @@ fairlead.toml: tests.unreachd: unknown field `unreachd`, expected one of ...
 | `guard.exclude` | `[]` | Tracked files no guard rule reads |
 | `guard.findings` | `"added"` | Which findings count at a commit: `added`, only those the change adds; `all`, every finding in a file it touches |
 | `guard.on_finding` | `"deny"` | `deny` stops the commit on those findings; `warn` shows them and lets it through |
-| `guard.budget_ms` | `40` | The write hook's own time; past it the edit goes ahead and the event log says `timed_out` |
+| `guard.budget_ms` | `40` | The write hook's own time, loading the config included; past it the edit goes ahead and the event log says `timed_out`. *Since 0.18.0:* each write event also records `load_ms` and `budget_ms`, and `doctor` names the budget beside the count |
 | `guard.events` | `"local"` | `local` records decisions in `.git/fairlead/events.jsonl`; `off` records nothing |
 | `guard.cite` | `{}` | A note appended to a rule's messages, by rule id |
 | `guard.size` | off | `files`, `exclude`, `file_lines`, `function_lines`, `test_hooks`, and `ratchet` (default `true`). See [Guard rules](guard.md) |
 | `guard.test_names` | off | `files`, `exclude`, `file`, `titles_without`, `title_calls`. See [Guard rules](guard.md#test-names) |
 | `guard.citations` | off | `files`, `exclude`, `pattern` (with a `code` group), `headings_in`. See [Guard rules](guard.md#citations) |
-| `guard.migrations` | off | `files`, `immutable` (default `true`), `base`, `unique_prefix`. See [Guard rules](guard.md#migrations) |
+| `guard.migrations` | off | `files`, `immutable` (default `true`), `base`, `unique_prefix`. *Since 0.18.0:* `fetch` (default `false`), fetch the base before comparing numbers: at a push always, at a commit when the last fetch is over ten minutes old. See [Guard rules](guard.md#migrations) |
+| `guard.paths` | on | *Since 0.18.0:* a commit may not add a file named like a secret. `deny` and `allow` (globs added to the built-in lists), `fixtures` (folder names whose matches only warn), `ratchet` (unset: tracked matches warn; `true`: held at the baseline; `false`: each fails), `enabled`. `guard.paths = false` turns it off. See [Secret paths](guard.md#secret-paths) |
 | `guard.commands` | `[]` | `match`, `reason`: commands an agent may not run; `unless`, a regex that lets a matched command through (*Since 0.8.0*). See [Guard rules](guard.md#commands) |
-| `guard.external` | `[]` | `id`, `command`, `stages` (default `["check"]`, or `commit`), `ratchet`. See [Guard rules](guard.md#external-rules) |
+| `guard.external` | `[]` | `id`, `command`, `stages` (default `["check"]`, or `commit`), `ratchet`. *Since 0.18.0:* `preset = "gitleaks"` in place of `command`, at `commit` and `check` by default, with the id `gitleaks` unless `id` is given. *Since 0.18.0:* `diff = true` counts only the findings a change adds, against the base's ([Before and after](guard.md#before-and-after)). See [Guard rules](guard.md#external-rules) and [gitleaks](guard.md#gitleaks) |
 | `hooks.claude` | `"shared"` | Where `fairlead hooks install` puts the Claude Code hooks: `shared`, `.claude/settings.json`; `local`, `.claude/settings.local.json` |
 | `done.tests` | `"planned"` | What `fairlead done` runs of the plan's test invocations: `planned` or `none`. See [The done gate](done.md) |
 | `done.checks` | `"planned"` | The same for the `[[checks]]` the plan selects |
 | `done.always` | `[]` | `[[checks]]` ids `fairlead done` runs for every change |
 | `done.guard` | `true` | Whether `fairlead done` ends with `fairlead guard check` |
+| `done.cheap_seconds` | `60` | *Since 0.18.0:* a runner or check whose median time is at most this counts as cheap for [CI history](done.md#ci-history) |
+| `done.pre_push` | `false` | *Since 0.18.0:* install the pre-push hook, `fairlead done --pre-push`, with no `[pr]` rules or migration fetch asking for it ([Before a push](done.md#before-a-push)) |
+| `pr` | off | *Since 0.18.0:* rules a change meets before review: `base`, `up_to_date` (default `true`), `branch`, `title`, `ticket` (`pattern`, `in`, `any`), `body_headings`, `labels` (`require`, `require_any`, `forbid`), and `[[pr.files]]` (`path`, `when`, `unless_label`, `why`). Checked by `done`, before a push and by `fairlead pr check` in CI. See [Pull request rules](pr.md) |
+| `pr.claims` | `true` | *Since 0.18.0:* a body that says the change was verified or tested needs a passing receipt for the head's tree ([Claims](pr.md#claims-and-receipts)) |
 | `done.on_stop` | `"ask"` | What the Claude Code Stop hook does while the tree hasn't passed: `off`, `ask` (send the agent back once per session and tree) or `require`. See [The done gate](done.md#the-stop-hook) |
 | `brief.per` | `"session"` | Whether a second `fairlead brief` in the same session adds its paths to the first (`session`) or stands alone (`call`). See [The brief](brief.md) |
 | `brief.nudge` | `true` | Whether `fairlead hooks install` adds the `PostToolUse` note after an edit made with no brief |

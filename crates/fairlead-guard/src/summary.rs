@@ -16,6 +16,10 @@ pub struct Summary {
     pub denies: BTreeMap<String, usize>,
     pub p50: Option<f64>,
     pub p95: Option<f64>,
+    /// The median time loading the config took, from calls that recorded it.
+    pub load_p50: Option<f64>,
+    /// The budget the newest call ran under, when it recorded one.
+    pub budget_ms: Option<u64>,
     pub commits: usize,
     pub commit_decisions: BTreeMap<String, usize>,
 }
@@ -51,6 +55,10 @@ pub fn summarize(log: &str) -> Summary {
         .take(WINDOW)
         .collect();
     let mut ms: Vec<f64> = Vec::new();
+    let mut load: Vec<f64> = Vec::new();
+    summary.budget_ms = writes
+        .iter()
+        .find_map(|e| e.get("budget_ms").and_then(Value::as_u64));
     for e in &writes {
         let d = decision(e);
         if d == "deny" {
@@ -68,8 +76,13 @@ pub fn summarize(log: &str) -> Summary {
         if let Some(t) = e.get("ms").and_then(Value::as_f64) {
             ms.push(t);
         }
+        if let Some(t) = e.get("load_ms").and_then(Value::as_f64) {
+            load.push(t);
+        }
     }
     ms.sort_by(f64::total_cmp);
+    load.sort_by(f64::total_cmp);
+    summary.load_p50 = percentile(&load, 50.0);
     summary.writes = writes.len();
     summary.p50 = percentile(&ms, 50.0);
     summary.p95 = percentile(&ms, 95.0);
@@ -106,12 +119,26 @@ pub fn render(s: &Summary) -> String {
             counts(&s.decisions)
         ));
         if let (Some(p50), Some(p95)) = (s.p50, s.p95) {
-            out.push_str(&format!("  latency: p50 {p50:.1} ms, p95 {p95:.1} ms\n"));
+            let load = s
+                .load_p50
+                .map(|l| format!(", of which loading the config p50 {l:.1} ms"))
+                .unwrap_or_default();
+            out.push_str(&format!(
+                "  latency: p50 {p50:.1} ms, p95 {p95:.1} ms{load}\n"
+            ));
         }
         if !s.denies.is_empty() {
             out.push_str(&format!("  denied by: {}\n", counts(&s.denies)));
         }
-        for (key, what) in [("timed_out", "ran out of time"), ("error", "hit an error")] {
+        // The budget is the guard's own, far shorter than the agent's hook
+        // timeout, so the line names it: a call over it was let through
+        // unchecked, not killed.
+        let budget = match s.budget_ms {
+            Some(b) => format!("the {b} ms budget"),
+            None => "the guard's budget".to_string(),
+        };
+        let over = format!("ran past {budget} (`guard.budget_ms`)");
+        for (key, what) in [("timed_out", over.as_str()), ("error", "hit an error")] {
             if let Some(n) = s.decisions.get(key) {
                 out.push_str(&format!("  {n} call(s) {what} and let the edit through\n"));
             }
@@ -143,7 +170,11 @@ mod tests {
         let mut lines: Vec<String> = (1..=20).map(|i| write("allow", i as f64, &[])).collect();
         lines.push(write("deny", 30.0, &["file-length", "item-code"]));
         lines.push(write("deny", 31.0, &["item-code"]));
-        lines.push(write("timed_out", 40.0, &[]));
+        lines.push(
+            serde_json::json!({ "stage": "write", "decision": "timed_out", "ms": 40.0,
+                "load_ms": 12.0, "budget_ms": 40 })
+            .to_string(),
+        );
         lines.push(write("error", 1.0, &[]));
         lines.push(r#"{"stage":"commit","decision":"allow","ms":7.0,"rules":[]}"#.into());
         lines.push(r#"{"stage":"commit","decision":"deny","ms":9.0,"rules":["history"]}"#.into());
@@ -152,12 +183,19 @@ mod tests {
         assert_eq!(
             out,
             "write hook: 24 call(s): 20 allow, 2 deny, 1 error, 1 timed_out\n\
-             \x20 latency: p50 11.0 ms, p95 31.0 ms\n\
+             \x20 latency: p50 11.0 ms, p95 31.0 ms, of which loading the config p50 12.0 ms\n\
              \x20 denied by: 2 item-code, 1 file-length\n\
-             \x20 1 call(s) ran out of time and let the edit through\n\
+             \x20 1 call(s) ran past the 40 ms budget (`guard.budget_ms`) and let the edit through\n\
              \x20 1 call(s) hit an error and let the edit through\n\
              commit stage: 2 run(s): 1 allow, 1 deny\n"
         );
+    }
+
+    #[test]
+    fn a_log_from_before_budgets_were_recorded_still_names_the_setting() {
+        let out = render(&summarize(&write("timed_out", 41.0, &[])));
+        assert!(out.contains("1 call(s) ran past the guard's budget (`guard.budget_ms`)"));
+        assert!(!out.contains("loading the config"));
     }
 
     #[test]

@@ -57,6 +57,7 @@ pub fn run() -> ExitCode {
     let Ok(loaded) = config::load(&dir, &LoadOptions::from_process(Vec::new())) else {
         return ExitCode::SUCCESS;
     };
+    let loaded_in = start.elapsed();
     let settings = loaded.config.guard.clone();
     let root = if loaded.files.is_empty() {
         crate::graph_cmd::repo_root(&dir)
@@ -82,6 +83,8 @@ pub fn run() -> ExitCode {
     let record = |decision: &'static str, outcome: Option<&Outcome>| {
         let Some(log) = &log else { return };
         let mut event = Event::new("write", decision, start.elapsed());
+        event.load_ms = Some((loaded_in.as_secs_f64() * 10_000.0).round() / 10.0);
+        event.budget_ms = Some(settings.budget_ms);
         event.event = Some("PreToolUse".into());
         event.tool = tool.clone();
         // So `skills report` can tell an agent whose use it can't see by its tools.
@@ -128,6 +131,12 @@ pub fn run() -> ExitCode {
 
 /// None for a call the guard has no rules for, which isn't logged.
 fn decide(call: &Value, settings: &config::Guard, root: &Path, dir: &Path) -> Option<Outcome> {
+    // The secret-path rule reads only the commit and check stages.
+    let without_paths = config::Guard {
+        paths: config::PathsSetting::Switch(false),
+        ..settings.clone()
+    };
+    let settings = &without_paths;
     let guard = Guard::new(settings, root).ok()?;
     if guard.is_empty() {
         // Logged all the same: the Stop hook reads whether a session edited.

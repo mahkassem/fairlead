@@ -64,6 +64,43 @@ pub fn config_for(cwd: &Path, changes: &Changes) -> Result<Config, String> {
         .map_err(|e| e.to_string())
 }
 
+/// Said once when a plan falls back to HEAD for want of a base branch.
+pub const NO_BASE: &str = "fairlead: no base branch found (`[pr] base`, the remote's default branch, `main` or `master`), so this plan covers only what changed since HEAD; pass --base to compare with a branch";
+
+/// The branch a change is compared with when none is given: `[pr] base`,
+/// its remote-tracking ref when fetched, else the remote's default branch,
+/// else `main` or `master`. None when none of them exists.
+pub fn default_base(root: &Path, config: Option<&Config>) -> Option<String> {
+    if let Some(base) = config
+        .and_then(|c| c.pr.as_ref())
+        .and_then(|p| p.base.as_deref())
+    {
+        let remote = fairlead_guard::fetch::remote_for(root, Some(base));
+        for rev in [remote.tracking.as_str(), base] {
+            if crate::head::commit(root, rev).is_ok() {
+                return Some(rev.to_string());
+            }
+        }
+    }
+    git::default_base(root).ok()
+}
+
+/// The commit a change is measured from: its merge base with `given`, else
+/// with the default base, else HEAD.
+pub fn merge_base_or_head(
+    root: &Path,
+    given: Option<&str>,
+    config: Option<&Config>,
+) -> Option<String> {
+    let base = given
+        .map(String::from)
+        .or_else(|| default_base(root, config));
+    match base {
+        Some(base) => git::merge_base(root, &base).ok(),
+        None => git::head(root),
+    }
+}
+
 pub struct Planned {
     pub plan: Plan,
     pub scan: Scan,
@@ -154,13 +191,21 @@ pub fn make(cwd: &Path, changes: &Changes) -> Result<Planned, String> {
     let changes_everything = changes.everything.clone();
     let (full_suites, stage) = (changes.full_suites, changes.stage);
     let (changes, base) = if changes.files.is_empty() {
-        let base = match &changes.base {
-            Some(b) => b.clone(),
-            None => git::default_base(&root)?,
+        let base = changes
+            .base
+            .clone()
+            .or_else(|| default_base(&root, Some(&loaded.config)));
+        let merge_base = match base {
+            Some(base) => git::merge_base(&root, &base).map_err(|e| {
+                format!("{e}\nno merge base with {base}: in a shallow clone, fetch more history (fetch-depth: 0) or pass --files")
+            })?,
+            None => {
+                let head = git::head(&root)
+                    .ok_or("no base branch found and no commit yet; pass --base or --files")?;
+                eprintln!("{NO_BASE}");
+                head
+            }
         };
-        let merge_base = git::merge_base(&root, &base).map_err(|e| {
-            format!("{e}\nno merge base with {base}: in a shallow clone, fetch more history (fetch-depth: 0) or pass --files")
-        })?;
         (git::changes(&root, &merge_base)?, Some(merge_base))
     } else {
         (explicit(&root, &cwd, &scan.tree, &changes.files)?, None)

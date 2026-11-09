@@ -163,9 +163,30 @@ fn brief(args: &BriefArgs, cwd: &Path) -> Result<(), String> {
             serde_json::to_string_pretty(&made).expect("brief serializes")
         );
     } else {
-        print!("{}", text(&made, args.all));
+        let mut out = text(&made, args.all);
+        let ci = ci_lines(&crate::graph_cmd::repo_root(cwd));
+        if let Some(at) = out.rfind("next     ") {
+            out.insert_str(at, &ci);
+        }
+        print!("{out}");
     }
     Ok(())
+}
+
+/// From a fresh cached ledger for HEAD, never the network: what CI's
+/// failures are, and the default branch's red streaks.
+fn ci_lines(root: &Path) -> String {
+    let Some((l, age)) = crate::ledger_text::fresh_for_head(root) else {
+        return String::new();
+    };
+    let mut out = format!(
+        "ci       {} (ledger {age} min old)\n",
+        crate::ledger_text::summary(&l)
+    );
+    for line in crate::ledger_text::streak_lines(&l) {
+        out.push_str(&format!("red      {line}\n"));
+    }
+    out
 }
 
 /// The brief for `paths`, kept in the session's store and offered as an
@@ -297,13 +318,15 @@ fn offer(root: &Path, brief: &Brief) {
     }
 }
 
-/// The merge base with `base`, or with the default branch.
+/// The merge base with `base`, or with the default base, or HEAD.
 pub fn base(root: &Path, base: Option<&str>) -> Option<String> {
-    let base = match base {
-        Some(b) => b.to_string(),
-        None => git::default_base(root).ok()?,
-    };
-    git::merge_base(root, &base).ok()
+    let config = fairlead_core::config::load(
+        root,
+        &fairlead_core::config::LoadOptions::from_process(Vec::new()),
+    )
+    .ok()
+    .map(|l| l.config);
+    crate::plan_cmd::merge_base_or_head(root, base, config.as_ref())
 }
 
 fn assemble(

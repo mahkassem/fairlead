@@ -1,10 +1,11 @@
 // dist 0.32.0's npm platform selection (MIT OR Apache-2.0), changed so a
-// musl system gets the musl build and a platform with no build installs
-// nothing instead of failing the install (mahkassem/fairlead#218).
-// scripts/npm_patch.py puts it in the npm package.
+// musl system gets the musl build, a platform with no build installs
+// nothing instead of failing the install (mahkassem/fairlead#218), and
+// FAIRLEAD_BINARY names a binary fetched some other way, used in place of
+// the download. scripts/npm_patch.py puts it in the npm package.
 const { Package } = require("./binary-install");
-const { execFileSync } = require("child_process");
-const { readdirSync, readFileSync } = require("fs");
+const { execFileSync, spawnSync } = require("child_process");
+const { readdirSync, readFileSync, statSync } = require("fs");
 const os = require("os");
 
 const error = (msg) => {
@@ -156,9 +157,31 @@ const getPackage = (host = currentHost()) => {
   return new Package(chosen.platform, pkg.name, url, artifactName, zipExt, bins);
 };
 
+// A binary placed by a step of its own, such as a CI cache or a mirror, for
+// a runner that can't or shouldn't download. Unset or empty is no binary.
+const given = () => process.env.FAIRLEAD_BINARY || null;
+
+const isFile = (p) => {
+  try {
+    return statSync(p).isFile();
+  } catch {
+    return false;
+  }
+};
+
 // The postinstall step. A platform with no build warns and succeeds, so a
 // project that never runs the tool still installs; running it says why.
+// With FAIRLEAD_BINARY set nothing is downloaded, even when the file isn't
+// there yet: a later step may put it there, and running the tool says so.
 const install = (suppressLogs, host) => {
+  const binary = given();
+  if (binary) {
+    if (!suppressLogs) {
+      const state = isFile(binary) ? "" : " (not there yet)";
+      console.error(`fairlead: using FAIRLEAD_BINARY=${binary}${state}; nothing downloaded`);
+    }
+    return;
+  }
   const urls = manifest().artifactDownloadUrls;
   if (!urls || !urls[0] || urls[0].length === 0) {
     console.warn("in demo mode, not installing binaries");
@@ -172,7 +195,18 @@ const install = (suppressLogs, host) => {
   return pkg.install(suppressLogs);
 };
 
+const runGiven = (binary) => {
+  if (!isFile(binary)) {
+    error(`FAIRLEAD_BINARY is ${binary}, which isn't a file; put the binary there or unset it`);
+  }
+  const result = spawnSync(binary, process.argv.slice(2), { stdio: "inherit" });
+  if (result.error) error(`can't run FAIRLEAD_BINARY=${binary}: ${result.error.message}`);
+  process.exit(result.status === null ? 1 : result.status);
+};
+
 const run = (binaryName, host) => {
+  const binary = given();
+  if (binary) return runGiven(binary);
   const pkg = getPackage(host);
   if (pkg.missing) error(pkg.missing);
   pkg.run(binaryName);

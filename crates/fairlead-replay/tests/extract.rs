@@ -345,3 +345,16 @@ fn artisan_test_parallel_on_a_real_laravel_app_is_read_as_phpunit() {
         ]
     );
 }
+
+#[test]
+fn the_excerpt_keeps_timeout_and_infrastructure_lines() {
+    let log = "setup\n##[error]Process completed with exit code 137.\nnoise\n  thrown: \"Exceeded timeout of 5000 ms for a test.\nmore\n";
+    let excerpt = fairlead_replay::dataset::log_excerpt(log);
+    assert_eq!(
+        excerpt,
+        [
+            "##[error]Process completed with exit code 137.",
+            "  thrown: \"Exceeded timeout of 5000 ms for a test."
+        ]
+    );
+}

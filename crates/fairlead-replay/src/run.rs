@@ -27,7 +27,8 @@ pub enum Outcome {
     Hit,
     /// Not in the plan, and nothing explains it away.
     Miss,
-    /// Another attempt of the same run passed the same job.
+    /// Another attempt of the same run passed the same job, or the job
+    /// failed on a timeout with no assertion failing.
     Flaky,
     /// A later run of the same change (a re-run or a rebase) passed the job.
     Unconfirmed,
@@ -588,7 +589,7 @@ fn replay_scheduled(r: &Replayer, row: &Row, failed: Vec<&Job>, all: &[&Row], ou
 }
 
 /// The newest earlier run of the same event and workflow that passed `job`.
-fn last_green<'a>(row: &Row, job: &Job, all: &[&'a Row]) -> Option<&'a Row> {
+pub fn last_green<'a>(row: &Row, job: &Job, all: &[&'a Row]) -> Option<&'a Row> {
     all.iter()
         .copied()
         .filter(|o| {
@@ -675,7 +676,8 @@ fn judge(r: &Replayer, row: &Row, base: &str, failed: Vec<&Job>, all: &[&Row], o
         .map(|job| (job, targets(job, &r.sources, &repo, &tests, &read)))
         .collect();
     for (job, found) in named {
-        let flaky = passed_on_another_attempt(row, job, all);
+        let flaky = passed_on_another_attempt(row, job, all)
+            || crate::signals::timed_out_without_assertion(&job.log);
         let mut retried = None;
         for target in found {
             let hit_by = in_plan(&plan, &target);
@@ -716,7 +718,9 @@ fn base_of(r: &Replayer, row: &Row) -> Option<String> {
     first_parent_before(r.clone, "refs/remotes/origin/HEAD", &row.created_at)
 }
 
-fn passed_on_another_attempt(row: &Row, job: &Job, all: &[&Row]) -> bool {
+/// Another attempt of the same run passed `job`: the same tree failed and
+/// then passed, so the failure isn't the change's.
+pub fn passed_on_another_attempt(row: &Row, job: &Job, all: &[&Row]) -> bool {
     all.iter().any(|other| {
         other.run_id == row.run_id
             && other.attempt != row.attempt

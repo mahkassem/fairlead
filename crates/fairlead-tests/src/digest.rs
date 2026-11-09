@@ -14,8 +14,9 @@ fn hex(bytes: &[u8]) -> String {
 
 /// Sections that never change a plan, left out of its digest altogether, so
 /// adding one doesn't change the digest of every plan made before it.
-const NOT_PLANNED: [&str; 10] = [
-    "guard", "hooks", "done", "brief", "ci", "memory", "skills", "agents", "stages", "needs",
+const NOT_PLANNED: [&str; 12] = [
+    "guard", "hooks", "done", "brief", "ci", "memory", "skills", "agents", "stages", "needs", "pr",
+    "profile",
 ];
 
 pub fn config_digest(config: &Config) -> String {
@@ -30,6 +31,7 @@ pub fn config_digest(config: &Config) -> String {
             let steps = list.and_then(|l| l.as_array_mut()).into_iter().flatten();
             for step in steps.filter_map(|s| s.as_object_mut()) {
                 step.remove("from");
+                step.remove("cheap");
             }
         };
         drop_from(map.get_mut("tests").and_then(|t| t.get_mut("runners")));
@@ -125,6 +127,7 @@ mod tests {
             exclude_arg: None,
             from,
             all_from: None,
+            cheap: false,
         };
         let mut config = Config::default();
         config.tests.runners = vec![runner(None)].into();

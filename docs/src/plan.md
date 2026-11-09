@@ -3,7 +3,7 @@
 `fairlead plan` works out which tests and checks the changes since a base commit can affect, and says why each one is in. It gates on recall: a plan must include every test the change can break. Selecting fewer tests is the goal, never the rule.
 
 ```sh
-fairlead plan                      # changes since the remote's default branch
+fairlead plan                      # changes since the merge base with `[pr] base` or the default branch
 fairlead plan --base main --json   # the plan as JSON (schema below)
 fairlead plan --files src/a.ts     # plan for these files or directories, no git needed
 fairlead test --explain test/a.test.ts   # why a test or check is in, or isn't
@@ -11,7 +11,11 @@ fairlead plan --head HEAD~3        # a past commit's plan, without checking it o
 fairlead test bench                # which Bun test mode is fastest on these tests
 ```
 
+## What changed
+
 The working tree is always the head: in CI that's the checked-out commit. The base is the merge base of `--base` (default: `origin/HEAD`, then `origin/main`, `origin/master`, `main`, `master`) and `HEAD`. If there's no merge base, as in a shallow clone, the plan fails with exit code 2 rather than planning nothing; fetch more history (`fetch-depth: 0`) or pass `--files`.
+
+*Since 0.18.0:* without `--base`, a project with [`[pr] base`](pr.md) plans from its merge base with that branch, its remote-tracking ref (`origin/develop`) when fetched, else the local branch, before the default branch: a branch cut from `develop` doesn't count `develop`'s own commits as its change. This is what `plan`, `done`, `next`, `receipt`, `brief` and the Stop hook compare with, so the commits a branch already holds count as much as the edits not yet committed, and untracked files count too. With none of those branches, as in a repository whose only branch is `trunk` with no remote, the plan says so in one line on stderr and covers what changed since HEAD, where it used to stop.
 
 ## Planning a past commit
 

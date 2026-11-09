@@ -34,6 +34,38 @@ fn done(dir: &Path, args: &[&str]) -> (i32, String) {
     run(dir, env!("CARGO_BIN_EXE_fairlead"), &all)
 }
 
+/// The Stop hook as Claude Code runs it: its exit code and stderr.
+fn stop(dir: &Path) -> (i32, String) {
+    use std::io::Write as _;
+    let mut child = Command::new(env!("CARGO_BIN_EXE_fairlead"))
+        .args(["guard", "stop"])
+        .current_dir(dir)
+        .env_clear()
+        .env("PATH", std::env::var_os("PATH").unwrap_or_default())
+        .env("HOME", dir)
+        .stdin(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .unwrap();
+    // A transcript with an edit, so the hook knows the session changed files.
+    let transcript = dir.join(".git/transcript.jsonl");
+    let edit = r#"{"message":{"content":[{"type":"tool_use","name":"Edit"}]}}"#;
+    std::fs::write(&transcript, edit).unwrap();
+    let input = serde_json::json!({
+        "session_id": "s", "cwd": dir, "hook_event_name": "Stop", "stop_hook_active": false,
+        "transcript_path": transcript
+    });
+    child
+        .stdin
+        .take()
+        .unwrap()
+        .write_all(input.to_string().as_bytes())
+        .unwrap();
+    let out = child.wait_with_output().unwrap();
+    let err = String::from_utf8_lossy(&out.stderr).into_owned();
+    (out.status.code().unwrap_or(-1), err)
+}
+
 /// A port nothing listens on.
 fn closed_port() -> u16 {
     TcpListener::bind("127.0.0.1:0")
@@ -118,6 +150,10 @@ fn an_unmet_need_proved_elsewhere_leaves_its_tests_and_checks_out_and_passes() {
     );
     assert!(!out.contains("ran api/"), "{out}");
     assert!(out.contains("done: passed unit"), "{out}");
+    assert!(
+        out.contains("done: passed, 1 steps; your change clean; environment: 2 skipped (postgres: proved in CI (api job))"),
+        "{out}"
+    );
     let (code, out) = done(&dir, &["--check"]);
     assert_eq!((code, out.trim()), (0, "done: passed for this tree"));
     let log = std::fs::read_to_string(dir.join(".git/fairlead/events.jsonl")).unwrap();
@@ -129,6 +165,13 @@ fn an_unmet_need_proved_elsewhere_leaves_its_tests_and_checks_out_and_passes() {
             {"need": "postgres", "step": "db-lint", "files": 0, "proved": true}
         ])
     );
+    let (code, err) = stop(&dir);
+    assert_eq!(code, 2, "the Stop hook says once what was left: {err}");
+    assert!(
+        err.contains("2 step(s) weren't run here because need \"postgres\" isn't met on this machine. Say so in the pull request"),
+        "{err}"
+    );
+    assert_eq!(stop(&dir).0, 0, "and then lets the agent stop");
     let _ = std::fs::remove_dir_all(&dir);
 }
 

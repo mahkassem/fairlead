@@ -1,8 +1,7 @@
 //! A replay over a synthetic git history with known failures reports
 //! exactly the expected hits, misses and other outcomes.
 
-use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::path::PathBuf;
 
 use fairlead_core::config::Config;
 use fairlead_replay::dataset::{Job, Row};
@@ -11,39 +10,8 @@ use fairlead_replay::report::report;
 use fairlead_replay::run::{replay, Replayer, Sources};
 use fairlead_replay::window::Window;
 
-fn git(dir: &Path, args: &[&str]) -> String {
-    let out = Command::new("git")
-        .args([
-            "-c",
-            "user.name=t",
-            "-c",
-            "user.email=t@example.com",
-            "-c",
-            "commit.gpgsign=false",
-        ])
-        .args(args)
-        .current_dir(dir)
-        .output()
-        .unwrap();
-    assert!(
-        out.status.success(),
-        "git {args:?}: {}",
-        String::from_utf8_lossy(&out.stderr)
-    );
-    String::from_utf8_lossy(&out.stdout).trim().to_string()
-}
-
-fn write(dir: &Path, path: &str, text: &str) {
-    let full = dir.join(path);
-    std::fs::create_dir_all(full.parent().unwrap()).unwrap();
-    std::fs::write(full, text).unwrap();
-}
-
-fn commit(dir: &Path, message: &str) -> String {
-    git(dir, &["add", "-A"]);
-    git(dir, &["commit", "-q", "-m", message]);
-    git(dir, &["rev-parse", "HEAD"])
-}
+mod common;
+use common::{commit, git, job, row, write, CONFIG};
 
 struct History {
     dir: PathBuf,
@@ -85,68 +53,6 @@ fn history() -> History {
         d,
     }
 }
-
-fn job(name: &str, conclusion: &str, log: &[&str]) -> Job {
-    Job {
-        name: name.into(),
-        conclusion: conclusion.into(),
-        failed_steps: Vec::new(),
-        annotations: Vec::new(),
-        annotations_capped: false,
-        log: log.iter().map(|s| s.to_string()).collect(),
-        image: None,
-    }
-}
-
-fn row(
-    run_id: u64,
-    attempt: u32,
-    pr: u64,
-    head: &str,
-    base: &str,
-    day: u32,
-    jobs: Vec<Job>,
-) -> Row {
-    let conclusion = if jobs.iter().any(Job::failed) {
-        "failure"
-    } else {
-        "success"
-    };
-    Row {
-        repo: "example/repo".into(),
-        run_id,
-        attempt,
-        event: "pull_request".into(),
-        workflow: "ci".into(),
-        pr: Some(pr),
-        head_sha: head.into(),
-        base_sha: Some(base.into()),
-        created_at: format!("2026-09-{day:02}T10:00:00Z"),
-        conclusion: conclusion.into(),
-        jobs,
-    }
-}
-
-const CONFIG: &str = r#"
-[[tests.runners]]
-id = "vitest"
-match = ["**"]
-command = ["vitest", "run", "{files}"]
-
-[[tests.runners]]
-id = "e2e"
-match = ["e2e/**"]
-command = ["playwright", "test", "{files}"]
-
-[[replay.failures]]
-runner = "vitest"
-extractor = "vitest"
-job = "^test$"
-
-[replay]
-ignore = ["^all-green$"]
-ignore_steps = ["^Install$"]
-"#;
 
 #[test]
 fn a_synthetic_history_replays_to_the_expected_outcomes() {

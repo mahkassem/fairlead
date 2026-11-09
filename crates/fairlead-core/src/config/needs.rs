@@ -25,6 +25,10 @@ pub struct Need {
     /// A variable that is set and not empty when the need is met.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub env: Option<String>,
+    /// The operating systems it holds on, such as `["macos"]`, for tests or
+    /// checks only those can run.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub os: Vec<super::Os>,
     /// Test files that need it.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub tests: Vec<String>,
@@ -104,11 +108,12 @@ pub(super) fn validate(config: &Config, problems: &mut Vec<Problem>) {
             !need.tcp.is_empty(),
             !need.command.is_empty(),
             need.env.is_some(),
+            !need.os.is_empty(),
         ];
         if kinds.iter().filter(|k| **k).count() != 1 {
             problems.push(problem(
                 key.clone(),
-                "needs exactly one of `tcp`, `command` or `env`",
+                "needs exactly one of `tcp`, `command`, `env` or `os`",
             ));
         }
         for (j, address) in need.tcp.iter().enumerate() {

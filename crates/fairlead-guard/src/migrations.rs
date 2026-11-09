@@ -17,6 +17,7 @@ pub struct Migrations {
     base: Option<String>,
     unique: bool,
     allow: Vec<HashSet<String>>,
+    fetch: bool,
 }
 
 fn finding(path: &str, rule: &'static str, message: String) -> Finding {
@@ -61,6 +62,7 @@ impl Migrations {
             base: c.base.clone(),
             unique: c.unique_prefix.is_some(),
             allow,
+            fetch: c.fetch,
         })
     }
 
@@ -70,6 +72,11 @@ impl Migrations {
 
     pub fn immutable(&self) -> bool {
         self.immutable
+    }
+
+    /// Whether numbers are compared with a freshly fetched base.
+    pub fn fetches(&self) -> bool {
+        self.fetch && self.unique
     }
 
     /// The literal directory each pattern starts with: `db/` for
@@ -121,6 +128,40 @@ impl Migrations {
                     path,
                     "migration-prefix",
                     format!("shares its number {n} with {}", others.join(", ")),
+                ));
+            }
+        }
+        out
+    }
+
+    /// Each migration in `added` whose number another file already has in
+    /// `taken`, the base's migrations this tree doesn't hold.
+    pub fn taken_findings(&self, added: &[String], taken: &[String], place: &str) -> Vec<Finding> {
+        if !self.unique {
+            return Vec::new();
+        }
+        let mut out = Vec::new();
+        for path in added.iter().filter(|p| self.covers(p)) {
+            let Some(n) = number(path) else { continue };
+            let others: Vec<&str> = taken
+                .iter()
+                .filter(|t| self.covers(t) && number(t) == Some(n) && name(t) != name(path))
+                .map(|t| name(t))
+                .filter(|other| {
+                    !self
+                        .allow
+                        .iter()
+                        .any(|g| g.contains(*other) && g.contains(name(path)))
+                })
+                .collect();
+            if !others.is_empty() {
+                out.push(finding(
+                    path,
+                    "migration-prefix",
+                    format!(
+                        "shares its number {n} with {} on {place}; renumber it after the newest there",
+                        others.join(", ")
+                    ),
                 ));
             }
         }
@@ -209,6 +250,22 @@ mod tests {
                 "db/001_x.sql:1 migration-prefix: shares its number 001 with 001_y.sql",
                 "db/001_y.sql:1 migration-prefix: shares its number 001 with 001_x.sql"
             ]
+        );
+    }
+
+    #[test]
+    fn a_number_the_base_already_took_is_a_finding_for_the_added_file() {
+        let m = migrations(vec![vec!["004_a.sql", "004_b.sql"]]);
+        let added = paths(&["db/005_mine.sql", "db/004_a.sql", "db/006_free.sql"]);
+        let taken = paths(&["db/005_theirs.sql", "db/004_b.sql", "db/005_mine.sql"]);
+        let found: Vec<String> = m
+            .taken_findings(&added, &taken, "origin/main")
+            .iter()
+            .map(|f| f.to_string())
+            .collect();
+        assert_eq!(
+            found,
+            ["db/005_mine.sql:1 migration-prefix: shares its number 005 with 005_theirs.sql on origin/main; renumber it after the newest there"]
         );
     }
 

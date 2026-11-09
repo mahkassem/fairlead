@@ -1,5 +1,6 @@
 // dist 0.32.0's npm installer (MIT OR Apache-2.0), with `install()` made
-// atomic (#211). scripts/npm_patch.py puts it in the npm package.
+// atomic (#211) and the download retried on a network or server failure.
+// scripts/npm_patch.py puts it in the npm package.
 const {
   createWriteStream,
   existsSync,
@@ -134,9 +135,18 @@ function download(urlString, maxRedirects) {
         }
         if (res.statusCode < 200 || res.statusCode >= 300) {
           res.resume();
-          return reject(new Error(`HTTP ${res.statusCode} from ${urlString}`));
+          const failed = new Error(`HTTP ${res.statusCode} from ${urlString}`);
+          failed.status = res.statusCode;
+          return reject(failed);
         }
         resolve(res);
+      });
+      // Fairlead: a connection that goes quiet fails, and is retried,
+      // instead of holding the install open.
+      req.setTimeout(STALL_MS, () => {
+        const stalled = new Error(`no data from ${urlString} for ${STALL_MS / 1000} s`);
+        stalled.code = "ETIMEDOUT";
+        req.destroy(stalled);
       });
       req.on("error", reject);
       req.end();
@@ -151,6 +161,58 @@ function download(urlString, maxRedirects) {
       doRequest();
     }
   });
+}
+
+// Fairlead: a download is tried again after each of these delays when it
+// fails on the network, times out or gets a 408, 429 or 5xx, so one dropped
+// connection on a CI runner doesn't fail the install. A 404 isn't retried.
+const RETRY_DELAYS_MS = [1000, 2000, 4000];
+const STALL_MS = 30000;
+
+const NETWORK = new Set([
+  "ECONNRESET", "ECONNREFUSED", "ECONNABORTED", "ETIMEDOUT", "EPIPE",
+  "EAI_AGAIN", "ENOTFOUND", "ENETUNREACH", "EHOSTUNREACH",
+]);
+
+const transient = (e) =>
+  e.status === undefined
+    ? NETWORK.has(e.code)
+    : e.status === 408 || e.status === 429 || e.status >= 500;
+
+// Writes the whole response to `file`, or fails: a body that ends short of
+// its content-length is a failed download, not a truncated archive.
+function fetchToFile(url, file) {
+  return download(url).then(
+    (res) =>
+      new Promise((resolve, reject) => {
+        const expected = Number(res.headers["content-length"]);
+        let received = 0;
+        const short = () => {
+          const e = new Error(`the connection closed after ${received} bytes of ${url}`);
+          e.code = "ECONNRESET";
+          return e;
+        };
+        res.on("data", (chunk) => (received += chunk.length));
+        res.on("aborted", () => reject(short()));
+        res.on("error", (e) => reject(e.code ? e : short()));
+        const sink = createWriteStream(file);
+        sink.on("error", reject);
+        sink.on("close", () =>
+          expected && received !== expected ? reject(short()) : resolve(),
+        );
+        res.pipe(sink);
+      }),
+  );
+}
+
+function withRetries(attempt, delays, log) {
+  const tryAt = (i) =>
+    attempt().catch((e) => {
+      if (i >= delays.length || !transient(e)) throw e;
+      log(`${e.message}; trying again in ${delays[i] / 1000} s`);
+      return new Promise((r) => setTimeout(r, delays[i])).then(() => tryAt(i + 1));
+    });
+  return tryAt(0);
 }
 
 class Package {
@@ -196,6 +258,7 @@ class Package {
     this.zipExt = zipExt;
     this.installDirectory = join(__dirname, "node_modules", ".bin_real");
     this.binaries = binaries;
+    this.retryDelays = RETRY_DELAYS_MS;
 
     if (!existsSync(this.installDirectory)) {
       mkdirSync(this.installDirectory, { recursive: true });
@@ -234,74 +297,19 @@ class Package {
       console.error(`Downloading release from ${this.url}`);
     }
 
-    return download(this.url)
-      .then((res) => {
-        return new Promise((resolve, reject) => {
-          mkdtemp(`${tmpDir}${sep}`, (err, directory) => {
-            if (err) return reject(err);
-            let tempFile = join(directory, this.filename);
-            const sink = res.pipe(createWriteStream(tempFile));
-            sink.on("error", (err) => reject(err));
-            sink.on("close", () => {
-              if (/\.tar\.*/.test(this.zipExt)) {
-                const result = spawnSync("tar", [
-                  "xf",
-                  tempFile,
-                  // The tarballs are stored with a leading directory
-                  // component; we strip one component in the
-                  // shell installers too.
-                  "--strip-components",
-                  "1",
-                  "-C",
-                  staging,
-                ]);
-                if (result.status == 0) {
-                  resolve();
-                } else if (result.error) {
-                  reject(result.error);
-                } else {
-                  reject(
-                    new Error(
-                      `An error occurred untarring the artifact: stdout: ${result.stdout}; stderr: ${result.stderr}`,
-                    ),
-                  );
-                }
-              } else if (this.zipExt == ".zip") {
-                let result;
-                if (this.platform.artifactName.includes("windows")) {
-                  // Windows does not have "unzip" by default on many installations, instead
-                  // we use Expand-Archive from powershell
-                  const unzip = expandArchive(tempFile, staging);
-                  result = spawnSync(unzip.file, unzip.args, unzip.options);
-                } else {
-                  result = spawnSync("unzip", [
-                    "-q",
-                    tempFile,
-                    "-d",
-                    staging,
-                  ]);
-                }
-
-                if (result.status == 0) {
-                  resolve();
-                } else if (result.error) {
-                  reject(result.error);
-                } else {
-                  reject(
-                    new Error(
-                      `An error occurred unzipping the artifact: stdout: ${result.stdout}; stderr: ${result.stderr}`,
-                    ),
-                  );
-                }
-              } else {
-                reject(
-                  new Error(`Unrecognized file extension: ${this.zipExt}`),
-                );
-              }
-            });
-          });
-        });
-      })
+    const fetched = new Promise((resolve, reject) => {
+      mkdtemp(`${tmpDir}${sep}`, (err, directory) => {
+        if (err) return reject(err);
+        const tempFile = join(directory, this.filename);
+        const log = (m) => console.error(m);
+        withRetries(() => fetchToFile(this.url, tempFile), this.retryDelays, log).then(
+          () => resolve(tempFile),
+          reject,
+        );
+      });
+    });
+    return fetched
+      .then((tempFile) => this.extract(tempFile, staging))
       .then(() => this.place(staging))
       .then(() => {
         if (!suppressLogs) {
@@ -312,6 +320,35 @@ class Package {
         rmSync(staging, { recursive: true, force: true });
         error(`Error fetching release: ${e.message}`);
       });
+  }
+
+  // dist's extraction, unchanged but for running once the file is whole.
+  extract(tempFile, staging) {
+    let result;
+    if (/\.tar\.*/.test(this.zipExt)) {
+      // The tarballs are stored with a leading directory component; we
+      // strip one component in the shell installers too.
+      result = spawnSync("tar", ["xf", tempFile, "--strip-components", "1", "-C", staging]);
+    } else if (this.zipExt == ".zip") {
+      if (this.platform.artifactName.includes("windows")) {
+        // Windows does not have "unzip" by default on many installations, instead
+        // we use Expand-Archive from powershell
+        const unzip = expandArchive(tempFile, staging);
+        result = spawnSync(unzip.file, unzip.args, unzip.options);
+      } else {
+        result = spawnSync("unzip", ["-q", tempFile, "-d", staging]);
+      }
+    } else {
+      return Promise.reject(new Error(`Unrecognized file extension: ${this.zipExt}`));
+    }
+    if (result.status == 0) return Promise.resolve();
+    if (result.error) return Promise.reject(result.error);
+    const what = /\.tar\.*/.test(this.zipExt) ? "untarring" : "unzipping";
+    return Promise.reject(
+      new Error(
+        `An error occurred ${what} the artifact: stdout: ${result.stdout}; stderr: ${result.stderr}`,
+      ),
+    );
   }
 
   // Moves a complete extraction into place. The folder the constructor
@@ -382,4 +419,5 @@ function expandArchive(zip, dest) {
 }
 
 module.exports.Package = Package;
+module.exports.transient = transient;
 module.exports.expandArchive = expandArchive;

@@ -53,6 +53,7 @@ next     done: `fairlead done` hasn't passed for this tree; no pull request yet?
 
 - **changed:** every file that differs from the brief's base, untracked files included, split into the ones the brief named and the rest.
 - **gate:** the newest `fairlead done` run for the tree as it is now, as the [receipt](receipt.md) reads it.
+- **ci:** *Since 0.18.0:* the first line of a [`fairlead ci ledger`](ci.md#is-this-red-mine-fairlead-ci-ledger) for HEAD under 30 minutes old, with its age; no line without one. `resume` never reaches the network.
 - **lessons:** lesson files under `memory.dir` added since the base.
 - **next:** the step [`fairlead next`](receipt.md) would name.
 
