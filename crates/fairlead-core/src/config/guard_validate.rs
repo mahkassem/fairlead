@@ -2,7 +2,7 @@
 //! turn something on, and rule ids that are unique.
 
 use super::validate::{duplicates, globs, problem, Problem};
-use super::Config;
+use super::{Config, Guard};
 
 pub(super) fn guard(config: &Config, problems: &mut Vec<Problem>) {
     let guard = &config.guard;
@@ -78,47 +78,7 @@ pub(super) fn guard(config: &Config, problems: &mut Vec<Problem>) {
             ));
         }
     }
-    let externals = guard.external.items();
-    let ids: Vec<String> = externals.iter().map(|e| e.rule_id()).collect();
-    for id in duplicates(ids.iter().map(String::as_str)) {
-        problems.push(problem(
-            "guard.external",
-            format!("rule id `{id}` is used more than once"),
-        ));
-    }
-    for (i, e) in externals.iter().enumerate() {
-        let key = format!("guard.external[{i}]");
-        let id = e.rule_id();
-        if GUARD_RULES.contains(&id.as_str()) || id.trim().is_empty() {
-            problems.push(problem(format!("{key}.id"), "must be a new rule id"));
-        }
-        match (e.preset, e.command.is_empty()) {
-            (None, true) => problems.push(problem(
-                format!("{key}.command"),
-                "is empty; give a command, or a `preset` such as \"gitleaks\"",
-            )),
-            (Some(p), false) => problems.push(problem(
-                format!("{key}.command"),
-                format!(
-                    "is set beside `preset = \"{}\"`, which runs the tool itself; keep one",
-                    p.name()
-                ),
-            )),
-            _ => {}
-        }
-        if e.stages().is_empty() {
-            problems.push(problem(
-                format!("{key}.stages"),
-                "names no stage, so it never runs",
-            ));
-        }
-        if e.diff && (e.preset.is_some() || e.ratchet) {
-            problems.push(problem(
-                format!("{key}.diff"),
-                "compares a command's findings with the base's; a preset or a ratchet already keeps old findings out",
-            ));
-        }
-    }
+    let ids = external_rules(guard, problems);
     let external_ids: Vec<&str> = ids.iter().map(String::as_str).collect();
     for rule in guard.cite.keys() {
         if !GUARD_RULES.contains(&rule.as_str()) && !external_ids.contains(&rule.as_str()) {
@@ -286,4 +246,51 @@ fn comment_rules(c: &super::CommentRules, problems: &mut Vec<Problem>) {
         c.agent_phrases.items(),
         problems,
     );
+}
+
+/// Each `[[guard.external]]` rule: a new id, one of a command or a preset,
+/// a stage to run at, and `diff` only on a command.
+fn external_rules(guard: &Guard, problems: &mut Vec<Problem>) -> Vec<String> {
+    let externals = guard.external.items();
+    let ids: Vec<String> = externals.iter().map(|e| e.rule_id()).collect();
+    for id in duplicates(ids.iter().map(String::as_str)) {
+        problems.push(problem(
+            "guard.external",
+            format!("rule id `{id}` is used more than once"),
+        ));
+    }
+    for (i, e) in externals.iter().enumerate() {
+        let key = format!("guard.external[{i}]");
+        let id = e.rule_id();
+        if GUARD_RULES.contains(&id.as_str()) || id.trim().is_empty() {
+            problems.push(problem(format!("{key}.id"), "must be a new rule id"));
+        }
+        match (e.preset, e.command.is_empty()) {
+            (None, true) => problems.push(problem(
+                format!("{key}.command"),
+                "is empty; give a command, or a `preset` such as \"gitleaks\"",
+            )),
+            (Some(p), false) => problems.push(problem(
+                format!("{key}.command"),
+                format!(
+                    "is set beside `preset = \"{}\"`, which runs the tool itself; keep one",
+                    p.name()
+                ),
+            )),
+            _ => {}
+        }
+        if e.stages().is_empty() {
+            problems.push(problem(
+                format!("{key}.stages"),
+                "names no stage, so it never runs",
+            ));
+        }
+        if e.diff && (e.preset.is_some() || e.ratchet) {
+            problems.push(problem(
+                format!("{key}.diff"),
+                "compares a command's findings with the base's; a preset or a ratchet already keeps old findings out",
+            ));
+        }
+    }
+    ids
 }

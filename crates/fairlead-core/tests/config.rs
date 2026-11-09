@@ -961,3 +961,12 @@ fn run_all_mixes_globs_and_kind_limited_entries_across_defaults_packs_and_sets()
         Ok(Some(vec![fairlead_core::plan::Status::Added]))
     );
 }
+
+#[test]
+fn a_diff_rule_must_be_a_command_without_a_ratchet() {
+    let text = "[[guard.external]]\npreset = \"gitleaks\"\ndiff = true\n\n[[guard.external]]\nid = \"lint\"\ncommand = [\"lint\"]\nratchet = true\ndiff = true\n\n[[guard.external]]\nid = \"ok\"\ncommand = [\"lint\", \"{files}\"]\ndiff = true\n";
+    let dir = repo_with("diff-rule", &[("fairlead.toml", text)]);
+    let loaded = load(&dir, &LoadOptions::default()).unwrap();
+    let keys: Vec<&str> = loaded.problems.iter().map(|p| p.key.as_str()).collect();
+    assert_eq!(keys, ["guard.external[0].diff", "guard.external[1].diff"]);
+}
