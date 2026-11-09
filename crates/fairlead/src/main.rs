@@ -45,6 +45,7 @@ mod needs;
 mod phase;
 mod plan_cmd;
 mod pr_cmd;
+mod pr_receipt;
 mod receipt_cmd;
 mod receipt_stages;
 mod replay_cmd;

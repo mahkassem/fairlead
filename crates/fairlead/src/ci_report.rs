@@ -123,14 +123,17 @@ pub fn run(
         read.push(r);
     }
     let results = merge(&plan, read)?;
-    let receipt = match receipt {
-        Some(p) => Some(
-            std::fs::read_to_string(cwd.join(p))
-                .map_err(|e| format!("could not read {}: {e}", p.display()))?,
-        ),
-        None => None,
+    // The receipt given, else the newest the pull request's body carries.
+    let shown = match receipt {
+        Some(p) => crate::pr_receipt::read_file(&cwd.join(p))?.pop(),
+        None => {
+            crate::pr_receipt::event_body().and_then(|b| fairlead_guard::claims::receipts(&b).pop())
+        }
     };
-    let mut body = markdown(&plan, results.as_ref(), receipt.as_deref());
+    let head = crate::pr_receipt::head_tree(&crate::graph_cmd::repo_root(cwd));
+    let receipt = shown.map(|r| (crate::pr_receipt::label(&r, head.as_deref()), r.text));
+    let receipt = receipt.as_ref().map(|(l, t)| (l.as_str(), t.as_str()));
+    let mut body = markdown(&plan, results.as_ref(), receipt);
     if let Some(path) = extras.ledger {
         let ledger = crate::ci_ledger::read(&cwd.join(path))?;
         body.push_str(&crate::ledger_text::markdown(&ledger));
@@ -224,7 +227,7 @@ pub fn merge(plan: &Plan, mut all: Vec<Results>) -> Result<Option<Results>, Stri
 
 /// The report: the headline, why the plan selected what it did, what ran,
 /// what failed with the command to run it again, and the receipt.
-pub fn markdown(plan: &Plan, results: Option<&Results>, receipt: Option<&str>) -> String {
+pub fn markdown(plan: &Plan, results: Option<&Results>, receipt: Option<(&str, &str)>) -> String {
     let mut out = format!("{MARKER}\n");
     let checks = plan.checks.len();
     let headline = match results {
@@ -353,8 +356,8 @@ pub fn markdown(plan: &Plan, results: Option<&Results>, receipt: Option<&str>) -
     if let Some(r) = results {
         out.push_str(&results_section(r));
     }
-    if let Some(text) = receipt {
-        out.push_str("<details><summary>Receipt</summary>\n\n```text\n");
+    if let Some((label, text)) = receipt {
+        out.push_str(&format!("<details><summary>{label}</summary>\n\n```text\n"));
         out.push_str(text.trim_end());
         out.push_str("\n```\n\n</details>\n");
     }

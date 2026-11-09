@@ -36,6 +36,10 @@ pub struct ReceiptArgs {
     /// List every file and test instead of the first few.
     #[arg(long)]
     all: bool,
+    /// Print it as a block for the pull request body, which `pr check`
+    /// and `ci report` read back for the head's tree.
+    #[arg(long, conflicts_with = "json")]
+    pr: bool,
 }
 
 #[derive(clap::Args)]
@@ -317,7 +321,10 @@ fn receipt(args: &ReceiptArgs, cwd: &Path) -> Result<(), String> {
     if let Some(store) = Store::open(&root) {
         store.save_receipt(&made)?;
     }
-    let text = text(&made, args.all);
+    let text = match args.pr {
+        true => crate::pr_receipt::block(&made),
+        false => text(&made, args.all),
+    };
     if let Some(out) = &args.out {
         let body = if out.extension().is_some_and(|e| e == "json") {
             serde_json::to_string_pretty(&made).expect("receipt serializes") + "\n"

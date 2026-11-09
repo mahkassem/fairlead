@@ -10,6 +10,7 @@ use std::time::{Duration, Instant};
 
 use clap::Subcommand;
 use fairlead_core::config::{self, LoadOptions, Pr};
+use fairlead_guard::claims::BodyReceipt;
 use fairlead_guard::fetch;
 use fairlead_guard::pr::{self, Facts, Failure, Report};
 use serde_json::Value;
@@ -27,11 +28,29 @@ pub enum PrAction {
         /// Ignore a GitHub event and check what this machine knows.
         #[arg(long)]
         local: bool,
+        /// A receipt for the body's claims, as `fairlead receipt --out`
+        /// wrote it (JSON) or a file holding `receipt --pr` blocks; the
+        /// body's own blocks count too. Repeatable.
+        #[arg(long, value_name = "FILE")]
+        receipt: Vec<std::path::PathBuf>,
     },
 }
 
 pub fn run(action: PrAction, cwd: &Path) -> ExitCode {
-    let PrAction::Check { local: force_local } = action;
+    let PrAction::Check {
+        local: force_local,
+        receipt,
+    } = action;
+    let mut given = Vec::new();
+    for path in &receipt {
+        match crate::pr_receipt::read_file(&cwd.join(path)) {
+            Ok(found) => given.extend(found),
+            Err(e) => {
+                eprintln!("pr: {e}");
+                return ExitCode::from(2);
+            }
+        }
+    }
     let loaded = match config::load(cwd, &LoadOptions::from_process(Vec::new())) {
         Ok(loaded) => loaded,
         Err(e) => {
@@ -53,8 +72,12 @@ pub fn run(action: PrAction, cwd: &Path) -> ExitCode {
     };
     let event = (!force_local).then(event_payload).flatten();
     let passed = match event {
-        Some(pull) => in_ci(&root, rules, &pull),
-        None => checked(rules, local_facts(&root, rules, false, false)),
+        Some(pull) => in_ci(&root, rules, &pull, &given),
+        None => {
+            let mut facts = local_facts(&root, rules, false, false);
+            facts.receipt_passed = local_receipt(&root, rules, &facts, &given);
+            checked(rules, facts)
+        }
     };
     if passed {
         ExitCode::SUCCESS
@@ -75,7 +98,39 @@ fn event_payload() -> Option<Value> {
 
 /// The pre-push hook's half: what this machine knows, the base fetched now.
 pub fn local(root: &Path, rules: &Pr) -> bool {
-    checked(rules, local_facts(root, rules, true, true))
+    let mut facts = local_facts(root, rules, true, true);
+    facts.receipt_passed = local_receipt(root, rules, &facts, &[]);
+    checked(rules, facts)
+}
+
+/// Whether this tree's gate has passed, by the done record or a receipt
+/// given or in the body; `None` when not, since `done` itself runs this
+/// before it records its own outcome.
+fn local_receipt(root: &Path, rules: &Pr, facts: &Facts, given: &[BodyReceipt]) -> Option<bool> {
+    let body = facts.body.as_deref()?;
+    if !rules.claims || fairlead_guard::claims::claims(body).is_empty() {
+        return None;
+    }
+    let tree = crate::done_cmd::tree_hash(root)?;
+    let log = fairlead_guard::events::EventLog::open(root)
+        .map(|l| l.read())
+        .unwrap_or_default();
+    let passed = crate::done_record::state(crate::done_record::last_done(&log, &tree).as_ref())
+        == crate::done_record::State::Passed;
+    let in_body = fairlead_guard::claims::receipts(body);
+    let receipted = given.iter().chain(&in_body).any(|r| r.passed_for(&tree));
+    (passed || receipted).then_some(true)
+}
+
+/// CI: whether the body's own receipts, or those given, passed for the
+/// head commit's tree; `None` when the head's tree can't be read.
+fn ci_receipt(root: &Path, head_sha: &str, body: &str, given: &[BodyReceipt]) -> Option<bool> {
+    if head_sha.is_empty() || !have(root, head_sha) {
+        return None;
+    }
+    let tree = crate::pr_receipt::tree_of(root, head_sha)?;
+    let in_body = fairlead_guard::claims::receipts(body);
+    Some(given.iter().chain(&in_body).any(|r| r.passed_for(&tree)))
 }
 
 /// Prints the report and says whether every rule that could be checked held.
@@ -268,7 +323,7 @@ fn have(root: &Path, sha: &str) -> bool {
 /// CI: the event gives the title, body, labels and both branches; git gives
 /// the history between them. Anything left unknown here fails, since CI is
 /// the last place to check it.
-fn in_ci(root: &Path, rules: &Pr, pull: &Value) -> bool {
+fn in_ci(root: &Path, rules: &Pr, pull: &Value, given: &[BodyReceipt]) -> bool {
     let base_sha = pull["base"]["sha"].as_str().unwrap_or_default();
     let head_sha = pull["head"]["sha"].as_str().unwrap_or_default();
     let mut facts = Facts {
@@ -284,6 +339,10 @@ fn in_ci(root: &Path, rules: &Pr, pull: &Value) -> bool {
         facts.contains_base = contains(root, base_sha, head_sha);
         facts.changed = git(root, &["merge-base", base_sha, head_sha])
             .and_then(|at| changed(root, &at, Some(head_sha)));
+    }
+    let body = facts.body.as_deref().unwrap_or_default();
+    if rules.claims && !fairlead_guard::claims::claims(body).is_empty() {
+        facts.receipt_passed = ci_receipt(root, head_sha, body, given);
     }
     let mut report = pr::check(rules, &facts);
     if !report.unchecked.is_empty() {

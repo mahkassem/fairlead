@@ -20,6 +20,9 @@ pub struct Facts {
     pub contains_base: Option<bool>,
     /// Paths the change adds or changes.
     pub changed: Option<Vec<String>>,
+    /// Whether a receipt for the head's tree passed; `None` when this place
+    /// can't tell.
+    pub receipt_passed: Option<bool>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -109,7 +112,34 @@ pub fn check(pr: &Pr, facts: &Facts) -> Report {
     base(pr, facts, &mut r);
     labels(pr, facts, &mut r);
     files(pr, facts, &mut r);
+    claims(pr, facts, &mut r);
     r
+}
+
+/// A body that says the change was verified needs a passing receipt for
+/// the head's tree. With no body there is no claim to tie.
+fn claims(pr: &Pr, facts: &Facts, r: &mut Report) {
+    let Some(body) = facts.body.as_deref().filter(|_| pr.claims) else {
+        return;
+    };
+    let said = crate::claims::claims(body);
+    if said.is_empty() {
+        r.passed += 1;
+        return;
+    }
+    let quoted: Vec<String> = said.iter().map(|c| format!("\"{c}\"")).collect();
+    match facts.receipt_passed {
+        Some(true) => r.passed += 1,
+        Some(false) => r.fail(
+            "pr-claims",
+            format!(
+                "the body says {}, and no receipt for the head's tree passed",
+                quoted.join(", ")
+            ),
+            "run `fairlead done` on the head and put `fairlead receipt --pr` in the body, or take the claim out".into(),
+        ),
+        None => r.skip("claims (no passing `fairlead done` for this tree yet)"),
+    }
 }
 
 fn names(pr: &Pr, facts: &Facts, r: &mut Report) {
@@ -341,6 +371,7 @@ mod tests {
             base: Some("main".into()),
             contains_base: Some(true),
             changed: Some(vec!["src/a.ts".into(), "changes/export.md".into()]),
+            receipt_passed: None,
         }
     }
 
@@ -349,7 +380,7 @@ mod tests {
         let report = check(&rules(), &all_known());
         assert!(report.failures.is_empty(), "{}", report.render());
         assert!(report.unchecked.is_empty());
-        assert_eq!(report.passed, 8);
+        assert_eq!(report.passed, 9, "the body claims nothing");
     }
 
     #[test]
@@ -362,6 +393,7 @@ mod tests {
             base: Some("develop".into()),
             contains_base: Some(false),
             changed: Some(vec!["src/a.ts".into()]),
+            receipt_passed: None,
         };
         let report = check(&rules(), &facts);
         let rules: Vec<&str> = report.failures.iter().map(|f| f.rule).collect();
@@ -439,5 +471,28 @@ mod tests {
             check(&rules(), &facts).failures.is_empty(),
             "outside `when`"
         );
+    }
+
+    #[test]
+    fn a_claim_needs_a_passing_receipt_for_the_head_and_none_is_not_checked() {
+        let pr = Pr::default();
+        let mut facts = Facts {
+            body: Some("Fixes the export. Verified locally.".into()),
+            ..Facts::default()
+        };
+        let report = check(&pr, &facts);
+        assert_eq!(report.unchecked.len(), 1, "{}", report.render());
+        facts.receipt_passed = Some(false);
+        let report = check(&pr, &facts);
+        assert_eq!(report.failures[0].rule, "pr-claims");
+        assert!(report.failures[0].what.contains("\"verified\""));
+        facts.receipt_passed = Some(true);
+        assert!(check(&pr, &facts).failures.is_empty());
+        let off = Pr {
+            claims: false,
+            ..Pr::default()
+        };
+        facts.receipt_passed = Some(false);
+        assert!(check(&off, &facts).failures.is_empty());
     }
 }

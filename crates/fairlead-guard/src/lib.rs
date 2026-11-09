@@ -5,6 +5,7 @@
 pub mod added;
 pub mod baseline;
 mod citations;
+pub mod claims;
 pub mod commands;
 mod comments;
 pub mod edit;

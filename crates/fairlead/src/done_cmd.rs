@@ -489,7 +489,7 @@ fn asked_before(log: &str, tree: &str, session: Option<&str>) -> bool {
 }
 
 /// The plan's tree hash for the working tree as it stands.
-fn tree_hash(root: &Path) -> Option<String> {
+pub fn tree_hash(root: &Path) -> Option<String> {
     if let Some(id) = git::clean_tree_id(root) {
         return Some(id);
     }

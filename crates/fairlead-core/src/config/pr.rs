@@ -29,6 +29,9 @@ pub struct Pr {
     pub labels: Labels,
     /// Files the change must add or change.
     pub files: Vec<RequiredFile>,
+    /// A body that claims the change was verified or tested needs a
+    /// passing receipt for the head's tree.
+    pub claims: bool,
 }
 
 impl Default for Pr {
@@ -42,6 +45,7 @@ impl Default for Pr {
             body_headings: Vec::new(),
             labels: Labels::default(),
             files: Vec::new(),
+            claims: true,
         }
     }
 }
