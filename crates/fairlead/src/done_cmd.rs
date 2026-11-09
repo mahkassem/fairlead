@@ -9,9 +9,10 @@ use std::time::Instant;
 
 use fairlead_core::config::{DoneTests, OnStop};
 use fairlead_core::plan::{Invocation, InvocationKind, Quarantined};
-use fairlead_guard::events::{Event, EventLog, Step};
+use fairlead_guard::events::{Event, EventLog, Step, Waiting};
 use fairlead_tests::{git, quarantine};
 
+use crate::done_record::{self as record, State};
 use crate::plan_cmd::{make, Changes};
 use crate::step::Outcome;
 
@@ -25,7 +26,8 @@ pub struct DoneArgs {
     /// Run every step even after one fails.
     #[arg(long)]
     keep_going: bool,
-    /// Only say whether the working tree as it stands has passed; exits 0 if it has.
+    /// Only say whether the working tree as it stands has passed, and if not, why
+    /// and what to run; exits 0 if it has.
     #[arg(long, conflicts_with_all = ["dry_run", "keep_going"])]
     check: bool,
     /// Run whole suites that wait for a later stage too.
@@ -51,14 +53,22 @@ fn gate(args: &DoneArgs, cwd: &Path) -> Result<ExitCode, String> {
     let tree = planned.plan.tree_hash.clone();
     let log = EventLog::open(&root);
     if args.check {
-        let passed = log
-            .as_ref()
-            .is_some_and(|l| last_outcome(&l.read(), &tree) == Some(true));
-        println!(
-            "done: {} for this tree",
-            if passed { "passed" } else { "not passed" }
-        );
-        return Ok(if passed {
+        let text = log.as_ref().map(|l| l.read()).unwrap_or_default();
+        let state = record::state(record::last_done(&text, &tree).as_ref());
+        let line = match &state {
+            State::Passed => "passed for this tree".to_string(),
+            State::Waits(waiting) => format!(
+                "not finished for this tree: its steps passed, but {}",
+                record::hold(waiting, &planned.config, &root)
+            ),
+            State::Failed(step) => format!(
+                "not passed for this tree: its last run failed{}; fix that and run `fairlead done` again",
+                step.as_ref().map(|s| format!(" at `{s}`")).unwrap_or_default()
+            ),
+            State::NotRun => "not passed for this tree: `fairlead done` hasn't run on the tree as it is now; run `fairlead done`".to_string(),
+        };
+        println!("done: {line}");
+        return Ok(if state == State::Passed {
             ExitCode::SUCCESS
         } else {
             ExitCode::FAILURE
@@ -112,6 +122,7 @@ fn gate(args: &DoneArgs, cwd: &Path) -> Result<ExitCode, String> {
         let mut event = Event::new("done", decision, started.elapsed());
         event.tree = Some(tree);
         event.steps = ran;
+        event.waiting = waiting.clone();
         // The log is a record; failing to write it never changes the outcome.
         let _ = log.append(&event);
     }
@@ -120,9 +131,9 @@ fn gate(args: &DoneArgs, cwd: &Path) -> Result<ExitCode, String> {
     }
     if passed && !waiting.is_empty() {
         println!(
-            "done: passed, {} steps; not finished: the change reaches most of {}, which ran nowhere yet. `fairlead done --full` runs it here",
+            "done: passed, {} steps; not finished: {}",
             steps.len(),
-            waiting.join(", ")
+            record::hold(&waiting, &planned.config, &root)
         );
         Ok(ExitCode::SUCCESS)
     } else if passed && not_provable > 0 {
@@ -143,7 +154,7 @@ fn gate(args: &DoneArgs, cwd: &Path) -> Result<ExitCode, String> {
 /// Whole suites the change reaches most of, which hold the gate open until a
 /// run with `--full`: once anything is deployed. Before that, the scheduled
 /// run is enough.
-fn waiting(planned: &crate::plan_cmd::Planned) -> Vec<String> {
+fn waiting(planned: &crate::plan_cmd::Planned) -> Vec<Waiting> {
     let early = planned.config.phase == Some(fairlead_core::config::Phase::Early);
     if early {
         return Vec::new();
@@ -153,7 +164,12 @@ fn waiting(planned: &crate::plan_cmd::Planned) -> Vec<String> {
         .deferred
         .iter()
         .filter(|d| !d.why.is_stage() && d.reached > 0)
-        .map(|d| d.id.clone())
+        .map(|d| Waiting {
+            id: d.id.clone(),
+            reached: d.reached,
+            selected: d.selected,
+            by_rule: d.by_rule,
+        })
         .collect()
 }
 
@@ -287,17 +303,22 @@ fn stop_reason(dir: &Path, asked: bool) -> Option<String> {
     }
     let tree = tree_hash(&root)?;
     let log = EventLog::open(&root)?;
-    let why = match last_outcome(&log.read(), &tree) {
-        Some(true) => return None,
-        Some(false) => "its last `fairlead done` failed",
-        None => "`fairlead done` hasn't passed for the tree as it is now",
+    let why = match record::state(record::last_done(&log.read(), &tree).as_ref()) {
+        State::Passed => return None,
+        State::Waits(waiting) => format!(
+            "the last `fairlead done` passed its steps, but {}",
+            record::hold(&waiting, &loaded.config, &root)
+        ),
+        State::Failed(step) => format!(
+            "its last `fairlead done` failed{}. Fix that and run `fairlead done` again before stopping.",
+            step.map(|s| format!(" at `{s}`")).unwrap_or_default()
+        ),
+        State::NotRun => "`fairlead done` hasn't run on the tree as it is now. Run `fairlead done` and fix what it reports before stopping.".to_string(),
     };
     let mut event = Event::new("stop", "block", std::time::Duration::ZERO);
     event.tree = Some(tree);
     let _ = log.append(&event);
-    Some(format!(
-        "fairlead: this change isn't finished: {why}. Run `fairlead done` and fix what it reports before stopping."
-    ))
+    Some(format!("fairlead: this change isn't finished: {why}"))
 }
 
 /// The plan's tree hash for the working tree as it stands.
@@ -308,33 +329,4 @@ fn tree_hash(root: &Path) -> Option<String> {
     let root = std::fs::canonicalize(root).ok()?;
     let tree = fairlead_lang::tree::Tree::scan(&fairlead_lang::tree::plain(&root));
     Some(fairlead_tests::digest::worktree_hash(&tree))
-}
-
-/// Whether the newest `done` run for `tree` passed, if one ran.
-pub fn last_outcome(log: &str, tree: &str) -> Option<bool> {
-    log.lines()
-        .rev()
-        .filter_map(|l| serde_json::from_str::<serde_json::Value>(l).ok())
-        .find(|e| e["stage"] == "done" && e["tree"] == tree)
-        .map(|e| e["decision"] == "pass")
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn the_newest_done_for_a_tree_decides_and_other_trees_are_ignored() {
-        let log = [
-            r#"{"stage":"done","tree":"t1","decision":"fail"}"#,
-            r#"{"stage":"write","decision":"deny"}"#,
-            r#"{"stage":"done","tree":"t1","decision":"pass"}"#,
-            r#"{"stage":"done","tree":"t2","decision":"fail"}"#,
-            "not json",
-        ]
-        .join("\n");
-        assert_eq!(last_outcome(&log, "t1"), Some(true));
-        assert_eq!(last_outcome(&log, "t2"), Some(false));
-        assert_eq!(last_outcome(&log, "t3"), None);
-    }
 }

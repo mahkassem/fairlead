@@ -51,6 +51,24 @@ pub struct Event {
     /// A `tokens` event's counts for the session so far: numbers only.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tokens: Option<Tokens>,
+    /// A `deferred` run's whole suites that wait, with what the change reaches of each.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub waiting: Vec<Waiting>,
+}
+
+/// A whole suite a `done` run left for later: its id and counts only.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, serde::Deserialize)]
+pub struct Waiting {
+    pub id: String,
+    pub reached: usize,
+    pub selected: usize,
+    /// Of `reached`, those reached through a `[[graph.edges]]` rule.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub by_rule: usize,
+}
+
+fn is_zero(n: &usize) -> bool {
+    *n == 0
 }
 
 /// Token counts and cost for one session from one source, as totals so far:
@@ -98,6 +116,7 @@ impl Event {
             steps: Vec::new(),
             items: Vec::new(),
             tokens: None,
+            waiting: Vec::new(),
         }
     }
 
@@ -116,6 +135,7 @@ impl Event {
             rules: Vec::new(),
             steps: Vec::new(),
             items: Vec::new(),
+            waiting: Vec::new(),
             truncated: true,
             ..self.clone()
         };

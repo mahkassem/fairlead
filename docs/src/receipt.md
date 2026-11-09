@@ -41,6 +41,7 @@ One line, from the state of the change:
 | Changed, no brief for the session | `fairlead brief <paths>` |
 | Briefed, the gate hasn't passed for this tree | `fairlead done`, and `gh pr create --draft` if no pull request is open yet |
 | The gate failed | the failing step's command, then `fairlead done` |
+| The gate's steps passed and a whole suite waits (*Unreleased*) | `fairlead done --full`, with what holds the suite, why, and the other way forward ([Whole suites](plan.md#the-projects-phase)) |
 | The gate passed, no receipt for this tree | `fairlead receipt`, then `gh pr ready` |
 | The gate passed and the receipt is written | `gh pr ready` if the pull request is a draft |
 

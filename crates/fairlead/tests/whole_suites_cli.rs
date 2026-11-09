@@ -301,3 +301,67 @@ fn explain_plan_and_done_agree_on_a_spec_a_graph_edge_reaches() {
     assert!(why.contains(share), "{why}");
     std::fs::remove_dir_all(&dir).unwrap();
 }
+
+/// The Stop hook's answer, as Claude Code would run it.
+fn stop(dir: &Path, session: &str) -> (i32, String) {
+    use std::io::Write as _;
+    let mut child = command(dir, env!("CARGO_BIN_EXE_fairlead"), &["guard", "stop"])
+        .stdin(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .unwrap();
+    let input = serde_json::json!({
+        "session_id": session, "cwd": dir, "hook_event_name": "Stop", "stop_hook_active": false
+    });
+    child
+        .stdin
+        .take()
+        .unwrap()
+        .write_all(input.to_string().as_bytes())
+        .unwrap();
+    let out = child.wait_with_output().unwrap();
+    (
+        out.status.code().unwrap_or(-1),
+        String::from_utf8_lossy(&out.stderr).into_owned(),
+    )
+}
+
+#[test]
+fn a_waiting_suite_in_testing_says_what_holds_it_why_and_the_ways_forward() {
+    let config = format!("phase = \"testing\"\n{RUNNERS}");
+    let dir = repo("testing", &config, &[("src/b.ts", "export const b = 2;\n")]);
+    std::fs::create_dir_all(dir.join(".github/workflows")).unwrap();
+    std::fs::write(
+        dir.join(".github/workflows/nightly.yml"),
+        "on:\n  schedule:\n    - cron: '17 19 * * 1-5'\njobs:\n  plan:\n    steps:\n      - run: fairlead ci plan --out plan.json\n",
+    )
+    .unwrap();
+    git(&dir, &["add", "-A"]);
+    git(&dir, &["commit", "-qm", "schedule"]);
+    let hold = "e2e waits: `phase = \"testing\"` holds a change that reaches most of a waiting suite (2 of 3 test files) until `fairlead done --full` passes on this tree, because testers use the deployed build. Run `fairlead done --full` here, or, if nobody outside the team uses a deployed build, set `phase = \"early\"` and let the scheduled run (nightly.yml) prove it.";
+    let (code, out) = fairlead(&dir, &["done", "--base", "main"]);
+    assert_eq!(code, 0, "{out}");
+    assert!(out.contains(&format!("not finished: {hold}")), "{out}");
+    let (code, out) = fairlead(&dir, &["done", "--base", "main", "--check"]);
+    assert_eq!(code, 1, "the testing phase stays strict: {out}");
+    assert_eq!(
+        out.trim(),
+        format!("done: not finished for this tree: its steps passed, but {hold}")
+    );
+    let (code, err) = stop(&dir, "s");
+    assert_eq!(code, 2, "{err}");
+    assert!(
+        err.contains(&format!(
+            "the last `fairlead done` passed its steps, but {hold}"
+        )),
+        "{err}"
+    );
+    assert!(!err.contains("failed"), "{err}");
+    let (_, _) = fairlead(&dir, &["brief", "--base", "main", "src/b.ts"]);
+    let (_, next) = fairlead(&dir, &["next", "--base", "main"]);
+    assert_eq!(
+        next.trim(),
+        format!("next: done --full: the gate's steps passed, but {hold}")
+    );
+    std::fs::remove_dir_all(&dir).unwrap();
+}

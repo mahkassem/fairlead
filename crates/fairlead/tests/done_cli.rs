@@ -87,7 +87,13 @@ fn a_passing_gate_is_recorded_for_the_tree_and_an_edit_makes_it_stale() {
     assert_eq!((code, out.trim()), (0, "done: passed for this tree"));
     std::fs::write(dir.join("a.ts"), "export const a = 3;\n").unwrap();
     let (code, out) = done(&dir, &["--check"]);
-    assert_eq!((code, out.trim()), (1, "done: not passed for this tree"));
+    assert_eq!(
+        (code, out.trim()),
+        (
+            1,
+            "done: not passed for this tree: `fairlead done` hasn't run on the tree as it is now; run `fairlead done`"
+        )
+    );
     let log = std::fs::read_to_string(dir.join(".git/fairlead/events.jsonl")).unwrap();
     let last: serde_json::Value = serde_json::from_str(log.lines().last().unwrap()).unwrap();
     assert_eq!(last["stage"], "done");

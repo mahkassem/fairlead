@@ -33,7 +33,7 @@ guard  = true
 
 A check `done.always` names needs no `paths` or `modules`, since it always runs.
 
-*Since 0.15.0:* a suite whose whole run waits for a later stage ([Whole suites](plan.md#whole-suites-at-a-later-stage)) runs only the tests the change reaches, and the gate prints one line for what it left out. When the change reaches most of such a suite, the gate passes the steps it ran but isn't finished: the record says `deferred`, `done --check` stays false and the Stop hook sends the agent back, until `fairlead done --full`, which runs every whole suite, passes on the same tree. In a project whose `phase` is `early`, nothing is deployed, so the gate passes and the scheduled run proves the suite.
+*Since 0.15.0:* a suite whose whole run waits for a later stage ([Whole suites](plan.md#whole-suites-at-a-later-stage)) runs only the tests the change reaches, and the gate prints one line for what it left out. When the change reaches most of such a suite, the gate passes the steps it ran but isn't finished: the record says `deferred`, `done --check` stays false and the Stop hook sends the agent back, until `fairlead done --full`, which runs every whole suite, passes on the same tree. In a project whose `phase` is `early`, nothing is deployed, so the gate passes and the scheduled run proves the suite. In `testing`, deferred holds until `done --full`; use `early` when nobody outside the team uses the build. *Unreleased:* every line that reports a held suite names it, the phase that holds it, the share the change reaches, and the ways forward ([The project's phase](plan.md#the-projects-phase)); `done --check` says why a tree hasn't passed (not run on this tree, failed at a named step, or a suite waits) rather than only that it hasn't.
 
 ## The record
 

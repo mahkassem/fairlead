@@ -171,8 +171,14 @@ The trade-off: a change the import graph can't follow, such as a dependency bump
 | `phase` | Steps with no `all_from` | `fairlead done` when a change reaches most of a waiting suite |
 | --- | --- | --- |
 | `early`: nothing is deployed | every whole suite waits for the full stage | passes; the scheduled run proves it |
-| `testing`: testers use it, nothing is live | every whole suite waits for the full stage | passes the steps it ran, records `deferred`, and `done --check` stays false until a `done --full` passes on the same tree |
+| `testing`: testers use it, nothing is live | every whole suite waits for the full stage | passes the steps it ran, records `deferred`, and `done --check` stays false until a `done --full` passes on the same tree, since testers use the deployed build |
 | `live`, or not set | run as each step says | as for `testing` |
+
+In `testing`, a deferred suite holds the gate until `fairlead done --full` passes on the tree; when nobody outside the team uses a deployed build, `early` is the phase to set. *Unreleased:* `done`, `done --check`, `next` and the Stop hook say so whenever a suite holds the gate: which suite waits, the phase that holds it, what the change reaches of it (and how many through a `[[graph.edges]]` rule), and the ways forward, naming the scheduled workflow that runs the full stage when one exists:
+
+```text
+done: passed, 5 steps; not finished: e2e waits: `phase = "testing"` holds a change that reaches most of a waiting suite (120 of 120 test files, 120 through a `[[graph.edges]]` rule) until `fairlead done --full` passes on this tree, because testers use the deployed build. Run `fairlead done --full` here, or, if nobody outside the team uses a deployed build, set `phase = "early"` and let the scheduled run (nightly.yml) prove it.
+```
 
 A step's own `all_from` wins over the phase: `all_from = "ready"` keeps a fast unit suite whole on every pull request in an early project. The brief prints the phase and what it asks of the change, and `fairlead doctor` reads the workflows for a deploy to people (a `production` environment, `helm upgrade`, `kubectl apply` and the like) and says when it disagrees with `phase`. It never changes the config.
 
