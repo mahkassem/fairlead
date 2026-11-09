@@ -124,6 +124,44 @@ fn a_failing_step_stops_the_gate_and_is_recorded_as_a_failure() {
 }
 
 #[test]
+fn a_failed_step_says_whether_it_could_start_and_its_first_error_line() {
+    let dir = repo("why");
+    let boot = "echo 'Error: connect ECONNREFUSED 127.0.0.1:5432' >&2; exit 3";
+    std::fs::write(
+        dir.join("fairlead.toml"),
+        CONFIG.replace("test ! -f FAIL", boot),
+    )
+    .unwrap();
+    let (code, out) = done(&dir, &[]);
+    assert_eq!(code, 1, "{out}");
+    let line = out
+        .lines()
+        .find(|l| l.starts_with("done: failed unit"))
+        .unwrap();
+    assert!(
+        line.ends_with(
+            "s: could not start (exit 3 before any test ran): Error: connect ECONNREFUSED 127.0.0.1:5432"
+        ),
+        "{line}"
+    );
+    let ran = "echo '2 passed, 1 failed'; echo 'Error: expected 2, got 3'; exit 1";
+    std::fs::write(
+        dir.join("fairlead.toml"),
+        CONFIG.replace("test ! -f FAIL", ran),
+    )
+    .unwrap();
+    let (_, out) = done(&dir, &[]);
+    let line = out
+        .lines()
+        .find(|l| l.starts_with("done: failed unit"))
+        .unwrap();
+    assert!(
+        line.ends_with("s: exit 1 after its tests ran: Error: expected 2, got 3"),
+        "{line}"
+    );
+}
+
+#[test]
 fn done_always_must_name_a_check() {
     let dir = repo("bad");
     std::fs::write(

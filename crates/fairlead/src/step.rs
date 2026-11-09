@@ -27,9 +27,25 @@ pub fn run(
     held: Option<&Quarantined>,
     keep: bool,
 ) -> (Outcome, String) {
+    let (outcome, log, _) = run_saying_why(who, root, inv, held, keep);
+    (outcome, log)
+}
+
+/// `run`, with why a failed step failed when it did (see `why_failed`).
+pub fn run_saying_why(
+    who: &str,
+    root: &Path,
+    inv: &Invocation,
+    held: Option<&Quarantined>,
+    keep: bool,
+) -> (Outcome, String, Option<String>) {
     let Some((program, args)) = inv.argv.split_first() else {
         eprintln!("{who}: {} has no command", inv.id);
-        return (Outcome::Failed, String::new());
+        return (
+            Outcome::Failed,
+            String::new(),
+            Some("it has no command".into()),
+        );
     };
     let mut cmd = fairlead_core::process::command(program, &root.join(&inv.cwd));
     cmd.args(args);
@@ -42,14 +58,16 @@ pub fn run(
         Ok(done) => done,
         Err(e) => {
             eprintln!("{who}: couldn't start {program}: {e}");
-            return (Outcome::Failed, String::new());
+            let why = format!("could not start: {program}: {e}");
+            return (Outcome::Failed, String::new(), Some(why));
         }
     };
     if status.success() {
-        return (Outcome::Passed, log);
+        return (Outcome::Passed, log, None);
     }
+    let why = Some(why_failed(inv, &log, status.code()));
     let Some(q) = held else {
-        return (Outcome::Failed, log);
+        return (Outcome::Failed, log, why);
     };
     match excused(q, inv, &log, &Here::detect(root)) {
         Ok(()) => {
@@ -58,13 +76,89 @@ pub fn run(
                 q.target,
                 quarantine::line(q)
             );
-            (Outcome::Held, log)
+            (Outcome::Held, log, None)
         }
-        Err(why) => {
-            eprintln!("{who}: {} failed, and the failure counts: {why}", q.target);
-            (Outcome::Failed, log)
+        Err(counts) => {
+            eprintln!(
+                "{who}: {} failed, and the failure counts: {counts}",
+                q.target
+            );
+            (Outcome::Failed, log, why)
         }
     }
+}
+
+/// Why a step that exited non-zero failed, in a few words, from its output:
+/// a runner whose output shows no test result couldn't start, one that
+/// shows them failed so many tests, and either way the first line that
+/// reads as an error.
+pub fn why_failed(inv: &Invocation, log: &str, code: Option<i32>) -> String {
+    let exit = code.map_or_else(|| "killed by a signal".to_string(), |c| format!("exit {c}"));
+    let plain = ansi().replace_all(log, "");
+    let lines: Vec<&str> = plain
+        .lines()
+        .map(str::trim)
+        .filter(|l| !l.is_empty())
+        .collect();
+    let error = lines
+        .iter()
+        .find(|l| {
+            let l = l.to_lowercase();
+            [
+                "error",
+                "refused",
+                "not found",
+                "enoent",
+                "cannot",
+                "can't",
+                "no such",
+            ]
+            .iter()
+            .any(|w| l.contains(w))
+        })
+        .or(lines.last())
+        .map(|l| {
+            let cut: String = l.chars().take(160).collect();
+            format!(": {cut}")
+        })
+        .unwrap_or_else(|| ", with no output".to_string());
+    if inv.kind == InvocationKind::Check {
+        return format!("{exit}{error}");
+    }
+    if !results().is_match(&plain) {
+        return format!("could not start ({exit} before any test ran){error}");
+    }
+    let failed = extractor_for(&inv.argv).map_or(0, |e| {
+        let mut tests: Vec<_> = extract(&e, log)
+            .into_iter()
+            .map(|p| (p.path, p.title))
+            .collect();
+        tests.sort();
+        tests.dedup();
+        tests.len()
+    });
+    match failed {
+        0 => format!("{exit} after its tests ran{error}"),
+        1 => format!("1 test failed ({exit})"),
+        n => format!("{n} tests failed ({exit})"),
+    }
+}
+
+fn ansi() -> &'static regex::Regex {
+    static RE: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
+    RE.get_or_init(|| regex::Regex::new(r"\x1b\[[0-9;?]*[A-Za-z]").expect("valid"))
+}
+
+/// A line any common runner prints once a test has run: a count of passed
+/// or failed tests, TAP's `ok N`, Go's `--- PASS`, or a check mark.
+fn results() -> &'static regex::Regex {
+    static RE: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
+    RE.get_or_init(|| {
+        regex::Regex::new(
+            r"(?im)\b\d+\s+(pass|passed|passing|fail|failed|failing|tests?|specs?|examples?)\b|^\s*(not )?ok \d|^\s*--- (PASS|FAIL)|^\s*(PASS|FAIL)\s|[✓✔✗✘×]",
+        )
+        .expect("valid")
+    })
 }
 
 /// Whether a failed invocation is the one failure `q` expects on the machine
@@ -255,5 +349,39 @@ mod tests {
             Some(Extractor::Go)
         ));
         assert!(extractor_for(&argv(&["./scripts/check"])).is_none());
+    }
+
+    #[test]
+    fn a_failure_says_whether_any_test_ran_and_its_first_error_line() {
+        let run = |argv: &[&str]| Invocation {
+            id: "api".into(),
+            kind: InvocationKind::Runner,
+            cwd: ".".into(),
+            argv: argv.iter().map(|a| a.to_string()).collect(),
+            quarantined: None,
+        };
+        let boot =
+            "\x1b[31m$ bun test api/a.test.ts\x1b[0m\nerror: connect ECONNREFUSED 127.0.0.1:5432\n";
+        assert_eq!(
+            why_failed(&run(&["bun", "test"]), boot, Some(1)),
+            "could not start (exit 1 before any test ran): error: connect ECONNREFUSED 127.0.0.1:5432"
+        );
+        let after = "api/a.test.ts:\n(pass) a > b\n 3 pass\n 0 fail\nerror: coverage below 80%\n";
+        assert_eq!(
+            why_failed(&run(&["./run-api"]), after, Some(2)),
+            "exit 2 after its tests ran: error: coverage below 80%"
+        );
+        assert_eq!(
+            why_failed(&run(&["./run-api"]), "", None),
+            "could not start (killed by a signal before any test ran), with no output"
+        );
+        let check = Invocation {
+            kind: InvocationKind::Check,
+            ..run(&["tsc"])
+        };
+        assert_eq!(
+            why_failed(&check, "src/a.ts(1,7): error TS2322: no\n", Some(2)),
+            "exit 2: src/a.ts(1,7): error TS2322: no"
+        );
     }
 }

@@ -92,14 +92,15 @@ fn gate(args: &DoneArgs, cwd: &Path) -> Result<ExitCode, String> {
             held.iter()
                 .find(|q| q.kind == s.kind && &q.target == target)
         });
-        let (outcome, _) = crate::step::run("done", &root, s, entry, false);
+        let (outcome, _, why) = crate::step::run_saying_why("done", &root, s, entry, true);
         let seconds = (at.elapsed().as_secs_f64() * 10.0).round() / 10.0;
         let (word, name) = match (outcome, entry) {
             (Outcome::Passed, _) => ("passed", s.id.clone()),
             (Outcome::Held, Some(q)) => ("not provable here:", format!("{} ({})", s.id, q.target)),
             _ => ("failed", s.id.clone()),
         };
-        println!("done: {word} {name} in {seconds} s");
+        let why = why.map(|w| format!(": {w}")).unwrap_or_default();
+        println!("done: {word} {name} in {seconds} s{why}");
         ran.push(Step {
             id: s.id.clone(),
             passed: outcome == Outcome::Passed,

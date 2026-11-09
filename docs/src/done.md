@@ -19,7 +19,11 @@ In order:
 3. The checks `done.always` names that the plan didn't select. Run outside a plan, a check's `{files}` stands for the change's files.
 4. `fairlead guard check` over the whole tree, as CI runs it.
 
-Each step prints its command, then whether it passed and how long it took. The gate stops at the first failure unless `--keep-going` is given; either way it passes only when every step passed.
+Each step prints its command, then whether it passed and how long it took. The gate stops at the first failure unless `--keep-going` is given; either way it passes only when every step passed. *Unreleased:* a failed step also says why, read from its output, which is still printed as it comes: `could not start (exit 1 before any test ran)` when a runner's output shows no test result, such as a suite that needs a database that isn't up; `3 tests failed (exit 1)` when it names failed tests in a format Fairlead reads; otherwise the exit status after its tests ran; each with the first line that reads as an error:
+
+```text
+done: failed api in 0.5 s: could not start (exit 1 before any test ran): error: connect ECONNREFUSED 127.0.0.1:5432
+```
 
 *Since 0.7.0:* a test or check a [`[[quarantine]]` entry](plan.md#tests-that-lie-on-one-platform) holds on this machine is the exception. When it fails with the output its entry expects, the step is *not provable here*: it doesn't fail the gate, and the gate's last line says how many steps weren't provable, so the agent can say so in the pull request. Any other failure, or any failure after the entry's date, counts. This covers a `done.always` check too. A command in a step is found the way a shell finds it, so on Windows a `.cmd` shim such as `npm` or `pnpm` starts.
 
