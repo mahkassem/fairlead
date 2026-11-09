@@ -312,7 +312,8 @@ pub fn stop() -> ExitCode {
         .unwrap_or_default();
     let asked = call["stop_hook_active"].as_bool().unwrap_or(false);
     crate::tokens::record_from_hook(&dir, &call);
-    match stop_reason(&dir, asked, call["session_id"].as_str()) {
+    let transcript = call["transcript_path"].as_str().map(Path::new);
+    match stop_reason(&dir, asked, call["session_id"].as_str(), transcript) {
         Some(reason) => {
             eprintln!("{reason}");
             ExitCode::from(2)
@@ -324,7 +325,12 @@ pub fn stop() -> ExitCode {
 /// Why the agent should keep going, or none to let it stop. Under `ask` it
 /// sends a session back once per tree: Claude Code clears
 /// `stop_hook_active` every turn, so that alone asks again each turn.
-fn stop_reason(dir: &Path, asked: bool, session: Option<&str>) -> Option<String> {
+fn stop_reason(
+    dir: &Path,
+    asked: bool,
+    session: Option<&str>,
+    transcript: Option<&Path>,
+) -> Option<String> {
     let loaded = fairlead_core::config::load(
         dir,
         &fairlead_core::config::LoadOptions::from_process(Vec::new()),
@@ -338,12 +344,17 @@ fn stop_reason(dir: &Path, asked: bool, session: Option<&str>) -> Option<String>
     let log = EventLog::open(&root)?;
     let text = log.read();
     // A session that edited nothing, such as a nested `claude -p` asked a
-    // question, has nothing to finish. Without the write log it can't tell.
+    // question, has nothing to finish. Its transcript says so best; without
+    // one, the write log does; without either it can't tell.
     let logged = loaded.config.guard.events == fairlead_core::config::Events::Local;
-    if let Some(session) = session.filter(|_| logged) {
-        if !edited_since_pass(&text, session) {
-            return None;
-        }
+    let edited = match transcript.and_then(may_have_edited) {
+        Some(edited) => edited,
+        None => session
+            .filter(|_| logged)
+            .is_none_or(|s| edited_since_pass(&text, s)),
+    };
+    if !edited {
+        return None;
     }
     let base = git::default_base(&root).ok()?;
     let merge_base = git::merge_base(&root, &base).ok()?;
@@ -379,6 +390,38 @@ fn stop_reason(dir: &Path, asked: bool, session: Option<&str>) -> Option<String>
         ""
     };
     Some(format!("fairlead: this change isn't finished: {why}{once}"))
+}
+
+/// Tools that can change files. A shell command can, and an agent the
+/// session starts can use any of them.
+const EDITING: [&str; 7] = [
+    "Edit",
+    "Write",
+    "MultiEdit",
+    "NotebookEdit",
+    "Bash",
+    "Task",
+    "Agent",
+];
+
+/// Whether the session's transcript shows a tool use that can change files,
+/// or none when it can't be read. A line that doesn't parse is skipped.
+fn may_have_edited(transcript: &Path) -> Option<bool> {
+    let text = std::fs::read_to_string(transcript).ok()?;
+    Some(
+        text.lines()
+            .filter_map(|l| serde_json::from_str::<serde_json::Value>(l).ok())
+            .any(|e| {
+                e["message"]["content"]
+                    .as_array()
+                    .into_iter()
+                    .flatten()
+                    .any(|c| {
+                        c["type"] == "tool_use"
+                            && c["name"].as_str().is_some_and(|n| EDITING.contains(&n))
+                    })
+            }),
+    )
 }
 
 /// Whether the write hook logged an edit by `session` after the newest

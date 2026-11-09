@@ -183,6 +183,10 @@ fn stop(dir: &Path, active: bool) -> (i32, String) {
 }
 
 fn stop_as(dir: &Path, session: &str, active: bool) -> (i32, String) {
+    stop_with(dir, session, active, None)
+}
+
+fn stop_with(dir: &Path, session: &str, active: bool, transcript: Option<&Path>) -> (i32, String) {
     use std::io::Write as _;
     let mut child = Command::new(env!("CARGO_BIN_EXE_fairlead"))
         .args(["guard", "stop"])
@@ -194,9 +198,12 @@ fn stop_as(dir: &Path, session: &str, active: bool) -> (i32, String) {
         .stderr(std::process::Stdio::piped())
         .spawn()
         .unwrap();
-    let input = serde_json::json!({
+    let mut input = serde_json::json!({
         "session_id": session, "cwd": dir, "hook_event_name": "Stop", "stop_hook_active": active
     });
+    if let Some(path) = transcript {
+        input["transcript_path"] = serde_json::json!(path);
+    }
     child
         .stdin
         .take()
@@ -312,6 +319,44 @@ fn a_session_that_edited_nothing_since_the_last_pass_is_let_stop() {
         stop_as(&dir, "unlogged", false).0,
         2,
         "with no write log it can't tell, so it asks as before"
+    );
+}
+
+#[test]
+fn the_transcript_decides_whether_a_session_could_have_edited() {
+    let dir = repo("transcript");
+    let line = |content: serde_json::Value| {
+        serde_json::json!({"type": "assistant", "message": {"role": "assistant", "content": content}})
+            .to_string()
+    };
+    let shell = dir.join("shell.jsonl");
+    let tool = serde_json::json!([{"type": "tool_use", "id": "t1", "name": "Bash", "input": {"command": "sed -i s/1/2/ a.ts"}}]);
+    std::fs::write(&shell, format!("{}\nnot json\n", line(tool))).unwrap();
+    let (code, err) = stop_with(&dir, "sh", false, Some(&shell));
+    assert_eq!(
+        code, 2,
+        "a shell command could have edited, logged or not: {err}"
+    );
+    let talk = dir.join("talk.jsonl");
+    let text = serde_json::json!([{"type": "text", "text": "an answer"}]);
+    std::fs::write(&talk, line(text) + "\n").unwrap();
+    edit(&dir, "talk");
+    assert_eq!(
+        stop_with(&dir, "talk", false, Some(&talk)).0,
+        0,
+        "a transcript with no tool use lets it stop"
+    );
+    let missing = dir.join("missing.jsonl");
+    assert_eq!(
+        stop_with(&dir, "quiet", false, Some(&missing)).0,
+        0,
+        "no transcript: no logged edit lets it stop"
+    );
+    edit(&dir, "busy");
+    assert_eq!(
+        stop_with(&dir, "busy", false, Some(&missing)).0,
+        2,
+        "no transcript: a logged edit sends it back"
     );
 }
 
