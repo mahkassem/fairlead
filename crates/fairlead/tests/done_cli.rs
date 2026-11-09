@@ -172,9 +172,36 @@ fn stop_as(dir: &Path, session: &str, active: bool) -> (i32, String) {
     )
 }
 
+/// An edit by `session` as the write hook sees it, which logs it.
+fn edit(dir: &Path, session: &str) {
+    use std::io::Write as _;
+    let mut child = Command::new(env!("CARGO_BIN_EXE_fairlead"))
+        .args(["guard", "hook"])
+        .current_dir(dir)
+        .env_clear()
+        .env("PATH", std::env::var_os("PATH").unwrap_or_default())
+        .env("HOME", dir)
+        .stdin(std::process::Stdio::piped())
+        .spawn()
+        .unwrap();
+    let input = serde_json::json!({
+        "session_id": session, "cwd": dir, "hook_event_name": "PreToolUse",
+        "tool_name": "Write",
+        "tool_input": { "file_path": dir.join("a.ts"), "content": "export const a = 9;\n" }
+    });
+    child
+        .stdin
+        .take()
+        .unwrap()
+        .write_all(input.to_string().as_bytes())
+        .unwrap();
+    assert!(child.wait().unwrap().success());
+}
+
 #[test]
 fn the_stop_hook_sends_an_agent_back_until_the_tree_it_leaves_has_passed() {
     let dir = repo("stop");
+    edit(&dir, "s");
     let (code, err) = stop(&dir, false);
     assert_eq!(code, 2, "a change with no gate: {err}");
     assert!(err.contains("Run `fairlead done`"), "{err}");
@@ -185,6 +212,7 @@ fn the_stop_hook_sends_an_agent_back_until_the_tree_it_leaves_has_passed() {
     );
     assert_eq!(done(&dir, &[]).0, 0);
     assert_eq!(stop(&dir, false).0, 0, "the tree passed");
+    edit(&dir, "s");
     std::fs::write(dir.join("a.ts"), "export const a = 4;\n").unwrap();
     assert_eq!(
         stop(&dir, false).0,
@@ -196,6 +224,8 @@ fn the_stop_hook_sends_an_agent_back_until_the_tree_it_leaves_has_passed() {
 #[test]
 fn ask_sends_a_session_back_once_per_tree_though_each_turn_clears_stop_hook_active() {
     let dir = repo("once");
+    edit(&dir, "one");
+    edit(&dir, "two");
     let (code, err) = stop_as(&dir, "one", false);
     assert_eq!(code, 2, "{err}");
     assert!(
@@ -216,6 +246,38 @@ fn ask_sends_a_session_back_once_per_tree_though_each_turn_clears_stop_hook_acti
 }
 
 #[test]
+fn a_session_that_edited_nothing_since_the_last_pass_is_let_stop() {
+    let dir = repo("nested");
+    let (code, err) = stop_as(&dir, "nested", false);
+    assert_eq!(code, 0, "a nested `claude -p` that only read stops: {err}");
+    edit(&dir, "agent");
+    assert_eq!(
+        stop_as(&dir, "agent", false).0,
+        2,
+        "the session that edited is asked"
+    );
+    assert_eq!(stop_as(&dir, "nested", false).0, 0);
+    assert_eq!(done(&dir, &[]).0, 0);
+    std::fs::write(dir.join("a.ts"), "export const a = 6;\n").unwrap();
+    assert_eq!(
+        stop_as(&dir, "agent", false).0,
+        0,
+        "no edit by this session since the pass"
+    );
+    let config = std::fs::read_to_string(dir.join("fairlead.toml")).unwrap();
+    std::fs::write(
+        dir.join("fairlead.toml"),
+        config.replace("[done]", "[guard]\nevents = \"off\"\n\n[done]"),
+    )
+    .unwrap();
+    assert_eq!(
+        stop_as(&dir, "unlogged", false).0,
+        2,
+        "with no write log it can't tell, so it asks as before"
+    );
+}
+
+#[test]
 fn require_keeps_sending_it_back_and_off_or_no_change_never_does() {
     let dir = repo("require");
     let config = std::fs::read_to_string(dir.join("fairlead.toml")).unwrap();
@@ -224,6 +286,7 @@ fn require_keeps_sending_it_back_and_off_or_no_change_never_does() {
         format!("{config}on_stop = \"require\"\n"),
     )
     .unwrap();
+    edit(&dir, "s");
     assert_eq!(stop(&dir, true).0, 2, "require ignores stop_hook_active");
     std::fs::write(
         dir.join("fairlead.toml"),

@@ -130,7 +130,14 @@ pub fn run() -> ExitCode {
 fn decide(call: &Value, settings: &config::Guard, root: &Path, dir: &Path) -> Option<Outcome> {
     let guard = Guard::new(settings, root).ok()?;
     if guard.is_empty() {
-        return None;
+        // Logged all the same: the Stop hook reads whether a session edited.
+        return match hook::request(call) {
+            Request::Write { path, .. } | Request::Edit { path, .. } => {
+                Some(Outcome::allow(relative(root, &dir.join(path))))
+            }
+            Request::Patch { files } => Some(Outcome::allow(files.first().map(|f| f.path.clone()))),
+            _ => None,
+        };
     }
     let warn = settings.on_finding == config::OnFinding::Warn;
     match hook::request(call) {

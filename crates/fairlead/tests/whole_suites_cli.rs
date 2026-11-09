@@ -348,6 +348,18 @@ fn a_waiting_suite_in_testing_says_what_holds_it_why_and_the_ways_forward() {
         out.trim(),
         format!("done: not finished for this tree: its steps passed, but {hold}")
     );
+    let edit = serde_json::json!({
+        "session_id": "s", "cwd": dir, "hook_event_name": "PreToolUse",
+        "tool_name": "Edit",
+        "tool_input": { "file_path": dir.join("src/b.ts"), "old_string": "2", "new_string": "2" }
+    });
+    let mut hook = command(&dir, env!("CARGO_BIN_EXE_fairlead"), &["guard", "hook"])
+        .stdin(std::process::Stdio::piped())
+        .spawn()
+        .unwrap();
+    std::io::Write::write_all(&mut hook.stdin.take().unwrap(), edit.to_string().as_bytes())
+        .unwrap();
+    assert!(hook.wait().unwrap().success());
     let (code, err) = stop(&dir, "s");
     assert_eq!(code, 2, "{err}");
     assert!(

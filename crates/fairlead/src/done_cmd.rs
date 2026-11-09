@@ -297,6 +297,16 @@ fn stop_reason(dir: &Path, asked: bool, session: Option<&str>) -> Option<String>
         return None;
     }
     let root = crate::graph_cmd::repo_root(dir);
+    let log = EventLog::open(&root)?;
+    let text = log.read();
+    // A session that edited nothing, such as a nested `claude -p` asked a
+    // question, has nothing to finish. Without the write log it can't tell.
+    let logged = loaded.config.guard.events == fairlead_core::config::Events::Local;
+    if let Some(session) = session.filter(|_| logged) {
+        if !edited_since_pass(&text, session) {
+            return None;
+        }
+    }
     let base = git::default_base(&root).ok()?;
     let merge_base = git::merge_base(&root, &base).ok()?;
     // Nothing changed means nothing to gate, as for a session that only read.
@@ -304,8 +314,6 @@ fn stop_reason(dir: &Path, asked: bool, session: Option<&str>) -> Option<String>
         return None;
     }
     let tree = tree_hash(&root)?;
-    let log = EventLog::open(&root)?;
-    let text = log.read();
     let ask = on_stop == OnStop::Ask;
     if ask && asked_before(&text, &tree, session) {
         return None;
@@ -332,6 +340,24 @@ fn stop_reason(dir: &Path, asked: bool, session: Option<&str>) -> Option<String>
         ""
     };
     Some(format!("fairlead: this change isn't finished: {why}{once}"))
+}
+
+/// Whether the write hook logged an edit by `session` after the newest
+/// passing `done` run. A shell command is logged only when refused, and a
+/// refused one changed nothing.
+fn edited_since_pass(log: &str, session: &str) -> bool {
+    let events: Vec<serde_json::Value> = log
+        .lines()
+        .filter_map(|l| serde_json::from_str(l).ok())
+        .collect();
+    let since = events
+        .iter()
+        .rposition(|e| e["stage"] == "done" && e["decision"] == "pass")
+        .map_or(0, |i| i + 1);
+    events[since..].iter().any(|e| {
+        let shell = matches!(e["tool"].as_str(), Some("Bash" | "run_shell_command"));
+        e["stage"] == "write" && e["session"] == session && (e["file"].is_string() || !shell)
+    })
 }
 
 /// Whether the hook already sent `session` back for `tree`.
