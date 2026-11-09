@@ -452,7 +452,10 @@ pub fn start_walk(cx: &Context) -> Walk {
         }
     };
     for path in cx.changed.iter().filter(|p| !cx.ignored.contains(*p)) {
-        if let Some(id) = graph.id(path) {
+        // Fairlead's own config, trimmed, changes the plan, not what a file
+        // that reads it by name does.
+        let own_config = crate::trims::is_config(path) && cx.trims.quiet.contains(path);
+        if let Some(id) = graph.id(path).filter(|_| !own_config) {
             starts.push((id, Via::Start));
         }
         if is_manifest(cx, path) && !cx.trims.quiet.contains(path) {
