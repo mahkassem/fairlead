@@ -121,10 +121,7 @@ fn gate(args: &DoneArgs, cwd: &Path) -> Result<ExitCode, String> {
     for d in deferred.filter(|d| !d.why.is_stage()) {
         println!("done: {}", d.advice());
     }
-    let elsewhere = match skips.len() {
-        0 => String::new(),
-        _ => "; what an unmet need covers wasn't run here and is proved where it says".into(),
-    };
+    let elsewhere = environment(&skips);
     if passed && !waiting.is_empty() {
         println!(
             "done: passed, {} steps{elsewhere}; not finished: {}",
@@ -151,6 +148,30 @@ fn gate(args: &DoneArgs, cwd: &Path) -> Result<ExitCode, String> {
         eprintln!("done: not passed; fix the failing step and run `fairlead done` again");
         Ok(ExitCode::FAILURE)
     }
+}
+
+/// The summary's account of what the machine, not the change, kept from
+/// running: "your change clean; environment: 2 skipped (postgres: proved
+/// in CI)".
+fn environment(skips: &[crate::done_needs::Skip]) -> String {
+    if skips.is_empty() {
+        return String::new();
+    }
+    let mut needs: Vec<String> = Vec::new();
+    for s in skips {
+        let line = match &s.proved_in {
+            Some(at) => format!("{}: proved in {at}", s.need),
+            None => format!("{}: proved nowhere yet", s.need),
+        };
+        if !needs.contains(&line) {
+            needs.push(line);
+        }
+    }
+    format!(
+        "; your change clean; environment: {} skipped ({})",
+        skips.len(),
+        needs.join("; ")
+    )
 }
 
 /// Before a push of a tree that has passed: only the push checks run, and
@@ -477,8 +498,13 @@ fn stop_reason(
     if ask && asked_before(&text, &tree, session) {
         return None;
     }
-    let why = match record::state(record::last_done(&text, &tree).as_ref()) {
-        State::Passed => return None,
+    let last = record::last_done(&text, &tree);
+    let why = match record::state(last.as_ref()) {
+        State::Passed => match last.as_ref().and_then(left_elsewhere) {
+            // Once per tree, whatever `on_stop` asks: the steps passed.
+            Some(left) if !asked_before(&text, &tree, session) => left,
+            _ => return None,
+        },
         State::Waits(waiting) => format!(
             "the last `fairlead done` passed its steps, but {}",
             record::hold(&waiting, &loaded.config, &root)
@@ -500,6 +526,23 @@ fn stop_reason(
         ""
     };
     Some(format!("fairlead: this change isn't finished: {why}{once}"))
+}
+
+/// For a pass that left steps to where an unmet need is proved, what to
+/// tell the person: the change isn't proved until that place has run them.
+fn left_elsewhere(event: &serde_json::Value) -> Option<String> {
+    let unmet = event["unmet"].as_array().filter(|u| !u.is_empty())?;
+    let mut needs: Vec<&str> = unmet.iter().filter_map(|u| u["need"].as_str()).collect();
+    needs.dedup();
+    Some(format!(
+        "the last `fairlead done` passed, but {} step(s) weren't run here because need {} isn't met on this machine. Say so in the pull request and keep it a draft until they pass where the need says they're proved; then stop.",
+        unmet.len(),
+        needs
+            .iter()
+            .map(|n| format!("\"{n}\""))
+            .collect::<Vec<_>>()
+            .join(", ")
+    ))
 }
 
 /// Tools that can change files. A shell command can, and an agent the
