@@ -15,6 +15,7 @@ use serde_json::Value;
 
 use crate::brief_cmd::{Brief, Store};
 use crate::plan_cmd::{make, Changes, Planned};
+use crate::receipt_stages::{RanStep, Unverifiable};
 
 const SHOWN: usize = 5;
 
@@ -66,6 +67,12 @@ pub struct Receipt {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tests_briefed: Option<usize>,
     pub gate: Gate,
+    /// Planned steps no `done` run on this tree reached.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub never_run: Vec<String>,
+    /// Steps this machine can't prove, and where they're proved instead.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub unverifiable: Vec<Unverifiable>,
     pub next: String,
 }
 
@@ -95,6 +102,9 @@ pub struct Gate {
     /// Tests and checks an unmet `[[needs]]` entry kept from running here.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub not_run: Vec<fairlead_guard::events::Unmet>,
+    /// Each step of the run with its stage and where it ran.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub ran: Vec<RanStep>,
 }
 
 /// The gate's state when its steps passed and whole suites wait.
@@ -225,6 +235,7 @@ fn gate(log: &str, tree: &str) -> Gate {
             seconds: 0.0,
             waiting: Vec::new(),
             not_run: Vec::new(),
+            ran: Vec::new(),
         };
     };
     let steps = e["steps"].as_array().cloned().unwrap_or_default();
@@ -245,6 +256,7 @@ fn gate(log: &str, tree: &str) -> Gate {
         seconds: steps.iter().filter_map(|s| s["seconds"].as_f64()).sum(),
         waiting: serde_json::from_value(e["waiting"].clone()).unwrap_or_default(),
         not_run: serde_json::from_value(e["unmet"].clone()).unwrap_or_default(),
+        ran: crate::receipt_stages::ran(&e),
     }
 }
 
@@ -377,6 +389,9 @@ fn compare(s: &State, root: &Path, cwd: &Path) -> Result<Receipt, String> {
             path,
         })
         .collect();
+    let left_out: Vec<String> = s.gate.not_run.iter().map(|u| u.step.clone()).collect();
+    let never_run = crate::receipt_stages::never_run(&s.now, &s.gate.ran, &left_out);
+    let unverifiable = crate::receipt_stages::unverifiable(&s.now, &s.gate.not_run, &s.gate.ran);
     Ok(Receipt {
         version: 1,
         brief: s.brief.as_ref().map(|b| b.id.clone()),
@@ -389,6 +404,8 @@ fn compare(s: &State, root: &Path, cwd: &Path) -> Result<Receipt, String> {
         tests_now: s.now.plan.tests.len(),
         tests_briefed: briefed_tests.map(|t| t.len()),
         gate: s.gate.clone(),
+        never_run,
+        unverifiable,
         next: String::new(),
     })
 }
@@ -474,6 +491,11 @@ pub fn text(r: &Receipt, all: bool) -> String {
     }
     let gate = gate_line(&r.gate);
     out.push_str(&format!("gate     {gate}\n"));
+    out.push_str(&crate::receipt_stages::lines(
+        &r.gate.ran,
+        &r.never_run,
+        &r.unverifiable,
+    ));
     out.push_str(&r.next.replacen("next: ", "next     ", 1));
     out.push('\n');
     out

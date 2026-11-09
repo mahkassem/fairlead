@@ -42,7 +42,8 @@ fn check_with_retry(need: &Need, root: &Path, env: &dyn Fn(&str) -> Option<Strin
     let started = Instant::now();
     let (mut met, mut saw) = check(need, root, env);
     let mut tries = 1;
-    if !met {
+    // An OS doesn't start up; only a service is worth a second try.
+    if !met && need.os.is_empty() {
         std::thread::sleep(RETRY_AFTER);
         (met, saw) = check(need, root, env);
         tries = 2;
@@ -68,6 +69,9 @@ pub fn check(need: &Need, root: &Path, env: &dyn Fn(&str) -> Option<String>) -> 
     if !need.command.is_empty() {
         return command(&need.command, root, timeout);
     }
+    if !need.os.is_empty() {
+        return on_os(&need.os, std::env::consts::OS);
+    }
     let seen: Vec<(bool, String)> = need
         .tcp
         .iter()
@@ -79,6 +83,15 @@ pub fn check(need: &Need, root: &Path, env: &dyn Fn(&str) -> Option<String>) -> 
     let met = seen.iter().any(|(up, _)| *up);
     let saw: Vec<String> = seen.into_iter().map(|(_, s)| s).collect();
     (met, saw.join(", "))
+}
+
+/// Whether this is one of the operating systems a need names.
+fn on_os(wanted: &[fairlead_core::config::Os], here: &str) -> (bool, String) {
+    let names: Vec<&str> = wanted.iter().map(|o| o.name()).collect();
+    match names.contains(&here) {
+        true => (true, format!("this is {here}")),
+        false => (false, format!("this is {here}, not {}", names.join(" or "))),
+    }
 }
 
 /// The address with each `{env:NAME}` filled in, or the first unset name.
@@ -264,6 +277,19 @@ mod tests {
         assert_eq!(saw, "{env:HOST}:25 skipped, HOST unset");
         let set = |name: &str| (name == "HOST").then(|| "127.0.0.1".to_string());
         assert_eq!(expand("{env:HOST}:25", &set), Ok("127.0.0.1:25".into()));
+    }
+
+    #[test]
+    fn an_os_need_is_met_only_on_an_os_it_names() {
+        use fairlead_core::config::Os;
+        assert_eq!(on_os(&[Os::Macos], "macos"), (true, "this is macos".into()));
+        assert_eq!(
+            on_os(&[Os::Macos, Os::Windows], "linux"),
+            (false, "this is linux, not macos or windows".into())
+        );
+        let n = need("id = \"mac\"\nos = [\"macos\"]");
+        let here = std::env::consts::OS == "macos";
+        assert_eq!(check(&n, Path::new("."), &none).0, here);
     }
 
     #[test]

@@ -189,6 +189,13 @@ fn run_steps(
             passed: outcome == Outcome::Passed,
             quarantined: outcome == Outcome::Held,
             seconds,
+            stage: Some(
+                crate::stage::from_of(&planned.config, &s.id, &s.kind)
+                    .name()
+                    .into(),
+            ),
+            os: Some(std::env::consts::OS.into()),
+            arch: Some(std::env::consts::ARCH.into()),
         });
         if outcome == Outcome::Failed && !keep_going {
             break;

@@ -121,6 +121,14 @@ pub struct Step {
     #[serde(skip_serializing_if = "std::ops::Not::not")]
     pub quarantined: bool,
     pub seconds: f64,
+    /// The CI stage the step belongs to, such as `draft` or `ready`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub stage: Option<String>,
+    /// Where it ran: the OS and CPU, such as `linux` and `x86_64`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub os: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub arch: Option<String>,
 }
 
 impl Event {
