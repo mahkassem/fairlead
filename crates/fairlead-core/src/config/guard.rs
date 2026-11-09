@@ -166,6 +166,11 @@ pub struct ExternalRule {
     pub stages: Option<Vec<Stage>>,
     #[serde(default)]
     pub ratchet: bool,
+    /// Count only the findings the change adds: the command runs on the
+    /// base too, and a finding there with the same file and message, line
+    /// numbers aside, doesn't count.
+    #[serde(default)]
+    pub diff: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]

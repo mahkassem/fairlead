@@ -8,6 +8,7 @@ mod citations;
 pub mod claims;
 pub mod commands;
 mod comments;
+pub mod diffed;
 pub mod edit;
 pub mod events;
 pub mod external;
@@ -28,6 +29,7 @@ pub mod secret_paths;
 mod size;
 pub mod stages;
 pub mod summary;
+pub mod worktree;
 
 pub use finding::{sort, Finding, Measure};
 pub use rules::{Guard, Preset, Source};

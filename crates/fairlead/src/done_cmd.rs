@@ -256,8 +256,14 @@ pub fn steps(planned: &crate::plan_cmd::Planned) -> Result<Vec<Invocation>, Stri
         });
         Ok(())
     };
+    // A diff rule counts only what the change adds, so it needs the base.
+    let diffs = planned.config.guard.external.items().iter().any(|e| e.diff);
+    let base = planned.plan.base.as_deref().filter(|_| diffs);
     if planned.config.done.guard || guard_only(planned) {
-        fairlead("guard", &["guard", "check"])?;
+        match base {
+            Some(base) => fairlead("guard", &["guard", "check", "--base", base])?,
+            None => fairlead("guard", &["guard", "check"])?,
+        }
     }
     if planned.config.pr.is_some() {
         fairlead("pr", &["pr", "check", "--local"])?;

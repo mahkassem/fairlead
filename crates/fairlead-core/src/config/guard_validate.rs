@@ -112,6 +112,12 @@ pub(super) fn guard(config: &Config, problems: &mut Vec<Problem>) {
                 "names no stage, so it never runs",
             ));
         }
+        if e.diff && (e.preset.is_some() || e.ratchet) {
+            problems.push(problem(
+                format!("{key}.diff"),
+                "compares a command's findings with the base's; a preset or a ratchet already keeps old findings out",
+            ));
+        }
     }
     let external_ids: Vec<&str> = ids.iter().map(String::as_str).collect();
     for rule in guard.cite.keys() {

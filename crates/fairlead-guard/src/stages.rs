@@ -7,6 +7,7 @@ use std::path::Path;
 
 use fairlead_core::config::Stage;
 
+use crate::diffed::Base;
 use crate::finding::Finding;
 use crate::git::{self, Against, Staged};
 use crate::migrations::Migrations;
@@ -30,24 +31,80 @@ fn warm(m: &Migrations, root: &Path) {
 }
 
 /// Runs each external rule for `stage`; a preset's missing tool is a note.
+/// A diff rule runs against `base`, and with none at the check stage it is
+/// left out with a note; at a first commit everything is new.
 fn external(
     guard: &Guard,
     root: &Path,
     stage: Stage,
     files: &[String],
+    base: Option<&Base>,
     out: &mut TreeRules,
 ) -> Result<Vec<Finding>, String> {
     let mut found = Vec::new();
+    let note_once = |note: String, out: &mut TreeRules| {
+        if !out.notes.contains(&note) {
+            out.notes.push(note);
+        }
+    };
     for e in guard.external.iter().filter(|e| e.runs_at(stage)) {
-        let (more, note) = e.run_at(root, stage, files)?;
-        found.extend(more);
-        if let Some(note) = note {
-            if !out.notes.iter().any(|n| n == note) {
-                out.notes.push(note.to_string());
+        match (e.diff, base) {
+            (true, Some(base)) => {
+                let (more, note) = crate::diffed::run(e, root, base);
+                found.extend(more?);
+                if let Some(note) = note {
+                    note_once(note, out);
+                }
+            }
+            (true, None) if stage == Stage::Check => note_once(
+                format!(
+                    "{}: a diff rule runs at check only with --base, against the base's findings",
+                    e.id
+                ),
+                out,
+            ),
+            _ => {
+                let (more, note) = e.run_at(root, stage, files)?;
+                found.extend(more);
+                if let Some(note) = note {
+                    note_once(note.to_string(), out);
+                }
             }
         }
     }
     Ok(found)
+}
+
+/// What a diff rule at check compares with: the merge base with `rev`, the
+/// files changed since it, and their renames.
+fn check_base(guard: &Guard, root: &Path, rev: Option<&str>) -> Result<Option<Base>, String> {
+    let wanted = guard
+        .external
+        .iter()
+        .any(|e| e.diff && e.runs_at(Stage::Check));
+    let Some(rev) = rev.filter(|_| wanted) else {
+        return Ok(None);
+    };
+    let at = git::merge_base(root, rev)?;
+    let changes = git::changes(root, Against::Rev(&at))?;
+    Ok(Some(Base {
+        renames: renames(changes.iter().map(|c| (c.status, &c.before, &c.path))),
+        files: changes
+            .iter()
+            .filter(|c| c.status != 'D')
+            .map(|c| c.path.clone())
+            .collect(),
+        rev: at,
+    }))
+}
+
+fn renames<'a>(
+    changes: impl Iterator<Item = (char, &'a Option<String>, &'a String)>,
+) -> std::collections::HashMap<String, String> {
+    changes
+        .filter(|(status, _, _)| *status == 'R')
+        .filter_map(|(_, before, path)| Some((path.clone(), before.clone()?)))
+        .collect()
 }
 
 /// The check stage: migrations over every tracked path, their history
@@ -87,7 +144,8 @@ pub fn tree(
         out.warnings.extend(found.warnings);
     }
     let known: HashSet<&str> = tracked.iter().map(String::as_str).collect();
-    let found = external(guard, root, Stage::Check, &[], &mut out)?;
+    let diff_base = check_base(guard, root, base)?;
+    let found = external(guard, root, Stage::Check, &[], diff_base.as_ref(), &mut out)?;
     out.findings.extend(
         found
             .into_iter()
@@ -120,7 +178,13 @@ pub fn staged(guard: &Guard, root: &Path, staged: &[Staged]) -> Result<TreeRules
     let paths: Vec<String> = staged.iter().map(|s| s.path.clone()).collect();
     let staged_set: HashSet<&str> = paths.iter().map(String::as_str).collect();
     if !paths.is_empty() {
-        let found = external(guard, root, Stage::Commit, &paths, &mut out)?;
+        let head = git::merge_base(root, "HEAD").ok();
+        let base = head.map(|rev| Base {
+            rev,
+            renames: renames(staged.iter().map(|s| (s.status, &s.before, &s.path))),
+            files: paths.clone(),
+        });
+        let found = external(guard, root, Stage::Commit, &paths, base.as_ref(), &mut out)?;
         out.findings.extend(
             found
                 .into_iter()

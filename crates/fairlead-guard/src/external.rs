@@ -16,6 +16,8 @@ pub struct External {
     command: Vec<String>,
     stages: Vec<Stage>,
     pub ratchet: bool,
+    /// Only what the change adds counts, against the base's findings.
+    pub diff: bool,
 }
 
 impl External {
@@ -27,7 +29,13 @@ impl External {
             command: c.command.clone(),
             stages: c.stages(),
             ratchet: c.ratchet,
+            diff: c.diff,
         }
+    }
+
+    /// Whether the command names its files, so it can run on a few.
+    pub fn takes_files(&self) -> bool {
+        self.command.iter().any(|a| a == "{files}")
     }
 
     pub fn runs_at(&self, stage: Stage) -> bool {
