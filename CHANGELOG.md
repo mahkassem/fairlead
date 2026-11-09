@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+One release in three parts. A guard for any stack: secret file names, gitleaks, migration numbers against a fresh base and `[pr]` rules, with `init --profile guard` for a repository the test planner doesn't read. An answer to "is this red mine?" while a pull request is red: `fairlead ci ledger`, the default branch's red streaks and `insights --speed`. And a done gate whose pass can be trusted: it plans the branch from its merge base, runs first the cheap steps CI shows going red, runs before a push, counts only what a change adds to a foreign linter's findings, and leaves a receipt per stage and platform that the pull request's claims are held to.
+
 ### New
 
 - A guard that works on any stack from day one. `fairlead init --profile guard` writes `profile = "guard"` with only the guard: the secret-path rule, the gitleaks preset and, when the tree holds Laravel, Rails, Prisma or SQL migrations, a `[guard.migrations]` table for them, then adds the git hook. In that profile `fairlead done` runs only `guard check` and `pr check`, `doctor` prints `profile: guard`, and `doctor --score` marks the test-plan items `n/a` and scales the rest to 100. See [The guard only](https://mahkassem.github.io/fairlead/docs/install.html#the-guard-only).

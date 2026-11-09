@@ -314,3 +314,27 @@ fn a_project_that_extends_next_is_told_the_end_to_end_rule_moved() {
     assert_eq!(code, 0, "{out}");
     assert!(!out.contains("next-e2e"), "{out}");
 }
+
+#[test]
+fn an_earlier_push_entry_is_moved_onto_done_pre_push() {
+    let dir = scratch("push-entry");
+    put(&dir, "fairlead.toml", "[pr]\nup_to_date = false\n");
+    put(
+        &dir,
+        "lefthook.yml",
+        "pre-commit:\n  commands:\n    fairlead-guard:\n      run: fairlead guard check --staged\npre-push:\n  commands:\n    fairlead-push:\n      run: fairlead guard check --push\n",
+    );
+    let (code, out) = fairlead(&dir, &["migrate", "--write"]);
+    assert_eq!(code, 0, "{out}");
+    let lefthook = read(&dir, "lefthook.yml");
+    assert!(
+        lefthook.contains("      run: fairlead done --pre-push\n"),
+        "{lefthook}"
+    );
+    assert!(
+        lefthook.contains("      run: fairlead guard check --staged\n"),
+        "{lefthook}"
+    );
+    let (code, out) = fairlead(&dir, &["migrate", "--check"]);
+    assert_eq!(code, 0, "{out}");
+}

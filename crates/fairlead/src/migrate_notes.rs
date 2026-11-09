@@ -309,7 +309,7 @@ pub const RELEASES: &[(&str, &[Note])] = &[
         }],
     ),
     (
-        "0.16.0",
+        "0.18.0",
         &[Note {
             text: "The guard's secret-path rule is on with no config: a commit may not add a file named like a secret, such as `.env`, `*.jks`, `*.p12`, `*.pem`, `*.key` or `client_secret*`, and `.env.example`, `*.pub` and the like are allowed. Files already tracked are warnings at `guard check` until `[guard.paths]` sets `ratchet`, and files under test and fixture folders are always warnings. Add a path to `[guard.paths] allow` to keep it, or set `guard.paths = false` to turn the rule off (see Secret paths).",
             applies: always,
@@ -355,11 +355,17 @@ pub const SINCE: &[(&str, &str)] = &[
     ("checks.all_from", "0.15"),
     ("plan.whole_share", "0.15"),
     ("stages.nightly", "0.15"),
-    ("profile", "0.16"),
-    ("pr", "0.16"),
-    ("guard.paths", "0.16"),
-    ("guard.external.preset", "0.16"),
-    ("guard.migrations.fetch", "0.16"),
+    ("profile", "0.18"),
+    ("pr", "0.18"),
+    ("guard.paths", "0.18"),
+    ("guard.external.preset", "0.18"),
+    ("guard.migrations.fetch", "0.18"),
+    ("guard.external.diff", "0.18"),
+    ("needs.os", "0.18"),
+    ("tests.runners.cheap", "0.18"),
+    ("checks.cheap", "0.18"),
+    ("done.cheap_seconds", "0.18"),
+    ("done.pre_push", "0.18"),
 ];
 
 /// Top-level tables every released config format has had.

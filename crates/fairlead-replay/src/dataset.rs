@@ -30,7 +30,7 @@ pub struct Row {
     /// `success`, `failure`, or `cancelled` for a run a later push or a
     /// person stopped, recorded with no jobs.
     pub conclusion: String,
-    /// From the run's start to its last update; none in rows fetched before 0.17.
+    /// From the run's start to its last update; none in rows fetched before 0.18.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub seconds: Option<u64>,
     pub jobs: Vec<Job>,
@@ -53,7 +53,7 @@ pub struct Job {
     /// failed job's log header; none for a passing job or a self-hosted runner.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub image: Option<String>,
-    /// From the job's start to its end; none in rows fetched before 0.17.
+    /// From the job's start to its end; none in rows fetched before 0.18.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub seconds: Option<u64>,
 }
