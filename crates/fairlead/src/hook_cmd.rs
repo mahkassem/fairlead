@@ -131,6 +131,12 @@ pub fn run() -> ExitCode {
 
 /// None for a call the guard has no rules for, which isn't logged.
 fn decide(call: &Value, settings: &config::Guard, root: &Path, dir: &Path) -> Option<Outcome> {
+    // The secret-path rule reads only the commit and check stages.
+    let without_paths = config::Guard {
+        paths: config::PathsSetting::Switch(false),
+        ..settings.clone()
+    };
+    let settings = &without_paths;
     let guard = Guard::new(settings, root).ok()?;
     if guard.is_empty() {
         // Logged all the same: the Stop hook reads whether a session edited.

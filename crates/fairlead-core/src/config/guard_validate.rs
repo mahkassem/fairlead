@@ -46,8 +46,25 @@ pub(super) fn guard(config: &Config, problems: &mut Vec<Problem>) {
         }
     }
     if let super::PathsSetting::Rules(p) = &guard.paths {
-        globs("guard.paths.deny", p.deny.items(), problems);
-        globs("guard.paths.allow", p.allow.items(), problems);
+        // The built-in lists are held valid by a test; compiling them on
+        // every load cost the write hook most of its time.
+        let own = |items: &[String], built_in: &[&str]| -> Vec<String> {
+            items
+                .iter()
+                .filter(|g| !built_in.contains(&g.as_str()))
+                .cloned()
+                .collect()
+        };
+        globs(
+            "guard.paths.deny",
+            &own(p.deny.items(), &super::guard::SECRET_DENY),
+            problems,
+        );
+        globs(
+            "guard.paths.allow",
+            &own(p.allow.items(), &super::guard::SECRET_ALLOW),
+            problems,
+        );
     }
     if let Some(t) = &guard.test_names {
         test_names(t, problems);
@@ -293,4 +310,30 @@ fn external_rules(guard: &Guard, problems: &mut Vec<Problem>) -> Vec<String> {
         }
     }
     ids
+}
+
+#[cfg(test)]
+mod tests {
+    use super::super::guard::{SECRET_ALLOW, SECRET_DENY};
+
+    #[test]
+    fn the_built_in_secret_lists_compile_so_loading_need_not_check_them() {
+        for glob in SECRET_DENY.iter().chain(SECRET_ALLOW.iter()) {
+            assert!(crate::pattern::Pattern::new(glob).is_ok(), "{glob}");
+        }
+    }
+
+    #[test]
+    fn a_projects_own_bad_secret_glob_is_still_a_problem() {
+        let config: super::super::Config =
+            toml::from_str("[guard.paths]\ndeny = [\"[\"]\n").unwrap();
+        let mut problems = Vec::new();
+        super::guard(&config, &mut problems);
+        assert!(
+            problems
+                .iter()
+                .any(|p| p.key.starts_with("guard.paths.deny")),
+            "{problems:?}"
+        );
+    }
 }
