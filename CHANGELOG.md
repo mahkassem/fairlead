@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### New
+
+- `fairlead done` reads `[[needs]]` ([#284](https://github.com/mahkassem/fairlead/issues/284), the first gate step of #259). A suite that needs a service this machine doesn't run, such as API tests that each boot a database, failed the gate, and skipping it by hand left `done --check`, `next` and the Stop hook reporting it as not passed. The gate now checks each need its steps touch, once, as `doctor` does; when one isn't met it leaves out the test files the need covers (a whole suite only when the need covers all of it) and the checks it names, and prints one line saying what wasn't run, why, where it's proved and how to run it here. A need with `proved_in` lets the gate pass without them, in any phase, and the `done` event and the receipt record what was left out; one without `proved_in` keeps the gate open and says to meet it or set `proved_in`.
+
 ### Fixed
 
 - An untracked folder holding a `CACHEDIR.TAG` file (the Cache Directory Tagging spec's signature), such as a build tool's output, no longer joins a plan's changed paths, the graph or the tree hash `fairlead done` records ([#282](https://github.com/mahkassem/fairlead/issues/282)). Its files selected tests through a dynamic import's whole module, and another tool writing into it made a passing `done` stale though no source had changed. `test --explain` now says when a file that isn't source reaches a test only through a whole module, and how to keep build output out.

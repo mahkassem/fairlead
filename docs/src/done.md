@@ -101,4 +101,16 @@ needs: 3 checked in 628 ms
   browser: met: BROWSER_PATH is set (0 ms)
 ```
 
-A `command` need runs a command from the config, as `[[checks]]` do, so `doctor` runs it too. The done gate doesn't read `[[needs]]` yet: a test that needs a missing service still fails `fairlead done`. What the gate will do with a need that isn't met is in #259.
+A `command` need runs a command from the config, as `[[checks]]` do, so `doctor` runs it too.
+
+*Unreleased:* `fairlead done` reads `[[needs]]` ([#284](https://github.com/mahkassem/fairlead/issues/284), the first gate step of #259). It checks each need the plan's steps touch, once, the way `doctor` does, and when one isn't met:
+
+- A test invocation that names its files runs without the files the need's `tests` cover, and is left out when none is left. One that runs its whole suite, naming no file, is left out only when the need covers every test it would run; otherwise it runs.
+- A check the need's `checks` names is left out.
+- With `proved_in`, what was left out counts as passed for `done`, `done --check`, `next` and the Stop hook, in any phase, since that place proves it before a merge. Without it, the gate doesn't pass, and says to meet the need or set `proved_in`.
+- The gate prints one line for each need and step, and the `done` event and the receipt record which need left what out of which step:
+
+```text
+done: api: 5 files not run here: need "postgres" not met (localhost:5432 refused); proved in CI (api job). To run them here: Start Postgres on 5432
+done: db-lint: not run here: need "postgres" not met (localhost:5432 refused), and the need names no `proved_in`, so the gate can't pass. Meet it or set its `proved_in` to where these are proved, then run `fairlead done` again
+```

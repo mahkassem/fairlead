@@ -22,6 +22,12 @@ pub enum State {
     Passed,
     /// Its steps passed, and whole suites wait for `done --full`.
     Waits(Vec<Waiting>),
+    /// A need isn't met here and names no `proved_in`, so what it covers
+    /// in this step wasn't run.
+    Unmet {
+        need: String,
+        step: String,
+    },
     /// Failed, at this step when the record names one.
     Failed(Option<String>),
     NotRun,
@@ -36,6 +42,13 @@ pub fn state(event: Option<&Value>) -> State {
         Some("deferred") => {
             State::Waits(serde_json::from_value(e["waiting"].clone()).unwrap_or_default())
         }
+        _ if unproved(e).is_some() => {
+            let u = unproved(e).expect("checked");
+            State::Unmet {
+                need: u["need"].as_str().unwrap_or("").to_string(),
+                step: u["step"].as_str().unwrap_or("").to_string(),
+            }
+        }
         _ => State::Failed(
             e["steps"]
                 .as_array()
@@ -45,6 +58,31 @@ pub fn state(event: Option<&Value>) -> State {
                 .and_then(|s| s["id"].as_str().map(String::from)),
         ),
     }
+}
+
+/// The first unmet need a failed run's record names with no `proved_in`,
+/// unless a step itself failed first.
+fn unproved(e: &Value) -> Option<&Value> {
+    let failed = e["steps"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .any(|s| s["passed"] == false && s["quarantined"] != true);
+    if failed {
+        return None;
+    }
+    e["unmet"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .find(|u| u["proved"] == false)
+}
+
+/// Why a step wasn't run, and the two ways forward.
+pub fn unmet_line(need: &str, step: &str) -> String {
+    format!(
+        "`{step}` wasn't run here because need \"{need}\" isn't met and names no `proved_in`; meet it (`fairlead doctor` checks it) or set its `proved_in` to where it's proved, then run `fairlead done` again"
+    )
 }
 
 /// Why whole suites hold the gate open, and the ways forward: the phase

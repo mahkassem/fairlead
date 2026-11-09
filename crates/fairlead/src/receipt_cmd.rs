@@ -92,6 +92,9 @@ pub struct Gate {
     /// For a run whose steps passed while whole suites wait: those suites.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub waiting: Vec<fairlead_guard::events::Waiting>,
+    /// Tests and checks an unmet `[[needs]]` entry kept from running here.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub not_run: Vec<fairlead_guard::events::Unmet>,
 }
 
 /// The gate's state when its steps passed and whole suites wait.
@@ -195,6 +198,7 @@ fn gate(log: &str, tree: &str) -> Gate {
             held: 0,
             seconds: 0.0,
             waiting: Vec::new(),
+            not_run: Vec::new(),
         };
     };
     let steps = e["steps"].as_array().cloned().unwrap_or_default();
@@ -214,11 +218,18 @@ fn gate(log: &str, tree: &str) -> Gate {
         held: steps.iter().filter(|s| s["quarantined"] == true).count(),
         seconds: steps.iter().filter_map(|s| s["seconds"].as_f64()).sum(),
         waiting: serde_json::from_value(e["waiting"].clone()).unwrap_or_default(),
+        not_run: serde_json::from_value(e["unmet"].clone()).unwrap_or_default(),
     }
 }
 
 /// The one step that's due, in the words the Stop hook and the note use too.
 pub(crate) fn next_line(s: &State) -> String {
+    let unproved = s.gate.not_run.iter().find(|u| !u.proved);
+    if let (Some(u), "failed", None) = (unproved, s.gate.state.as_str(), &s.gate.failed_step) {
+        if !s.changed.is_empty() && s.brief.is_some() {
+            return format!("next: {}", crate::done_record::unmet_line(&u.need, &u.step));
+        }
+    }
     if s.gate.state == WAITS && !s.changed.is_empty() && s.brief.is_some() {
         let root = &s.now.scan.tree.root;
         let hold = crate::done_record::hold(&s.gate.waiting, &s.now.config, root);
@@ -450,10 +461,11 @@ pub(crate) fn gate_line(g: &Gate) -> String {
             g.at.as_deref().map_or("?", |a| a.get(11..16).unwrap_or(a)),
             g.steps,
             if g.steps == 1 { "" } else { "s" },
-            if g.held > 0 {
-                format!(", {} held", g.held)
-            } else {
-                String::new()
+            match (g.held, g.not_run.len()) {
+                (0, 0) => String::new(),
+                (held, 0) => format!(", {held} held"),
+                (0, n) => format!(", {n} left to where an unmet need is proved"),
+                (held, n) => format!(", {held} held, {n} left to where an unmet need is proved"),
             },
             g.seconds
         ),

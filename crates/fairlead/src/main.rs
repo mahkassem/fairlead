@@ -16,6 +16,7 @@ mod context_cmd;
 mod coverage_cmd;
 mod doctor_version;
 mod done_cmd;
+mod done_needs;
 mod done_record;
 mod escapes;
 mod find_cmd;

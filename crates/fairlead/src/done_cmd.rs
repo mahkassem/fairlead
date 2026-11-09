@@ -55,26 +55,17 @@ fn gate(args: &DoneArgs, cwd: &Path) -> Result<ExitCode, String> {
     if args.check {
         let text = log.as_ref().map(|l| l.read()).unwrap_or_default();
         let state = record::state(record::last_done(&text, &tree).as_ref());
-        let line = match &state {
-            State::Passed => "passed for this tree".to_string(),
-            State::Waits(waiting) => format!(
-                "not finished for this tree: its steps passed, but {}",
-                record::hold(waiting, &planned.config, &root)
-            ),
-            State::Failed(step) => format!(
-                "not passed for this tree: its last run failed{}; fix that and run `fairlead done` again",
-                step.as_ref().map(|s| format!(" at `{s}`")).unwrap_or_default()
-            ),
-            State::NotRun => "not passed for this tree: `fairlead done` hasn't run on the tree as it is now; run `fairlead done`".to_string(),
-        };
-        println!("done: {line}");
+        println!("done: {}", check_line(&state, &planned, &root));
         return Ok(if state == State::Passed {
             ExitCode::SUCCESS
         } else {
             ExitCode::FAILURE
         });
     }
-    let steps = steps(&planned)?;
+    let (steps, skips) = crate::done_needs::apply(&planned, steps(&planned)?, &root)?;
+    for skip in &skips {
+        println!("done: {}", skip.line());
+    }
     if args.dry_run {
         for s in &steps {
             println!("done: ({}) {}", s.cwd, s.argv.join(" "));
@@ -82,17 +73,101 @@ fn gate(args: &DoneArgs, cwd: &Path) -> Result<ExitCode, String> {
         println!("done: {} steps", steps.len());
         return Ok(ExitCode::SUCCESS);
     }
-    let held = held(&planned, &steps);
     let started = Instant::now();
+    let ran = run_steps(&planned, &steps, &root, args.keep_going);
+    let unproved = skips.iter().find(|s| s.proved_in.is_none());
+    let passed = ran.len() == steps.len()
+        && ran.iter().all(|s| s.passed || s.quarantined)
+        && unproved.is_none();
+    let not_provable = ran.iter().filter(|s| s.quarantined).count();
+    let all_ran = ran.len() == steps.len();
+    let waiting = waiting(&planned);
+    let decision = match (passed, waiting.is_empty()) {
+        (false, _) => "fail",
+        (true, true) => "pass",
+        (true, false) => "deferred",
+    };
+    if let Some(log) = &log {
+        let mut event = Event::new("done", decision, started.elapsed());
+        event.tree = Some(tree);
+        event.steps = ran;
+        event.waiting = waiting.clone();
+        event.unmet = skips.iter().map(|s| s.record()).collect();
+        // The log is a record; failing to write it never changes the outcome.
+        let _ = log.append(&event);
+    }
+    for d in planned.plan.deferred.iter().filter(|d| !d.why.is_stage()) {
+        println!("done: {}", d.advice());
+    }
+    let elsewhere = match skips.len() {
+        0 => String::new(),
+        _ => "; what an unmet need covers wasn't run here and is proved where it says".into(),
+    };
+    if passed && !waiting.is_empty() {
+        println!(
+            "done: passed, {} steps{elsewhere}; not finished: {}",
+            steps.len(),
+            record::hold(&waiting, &planned.config, &root)
+        );
+        Ok(ExitCode::SUCCESS)
+    } else if passed && not_provable > 0 {
+        println!(
+            "done: passed, {} steps{elsewhere}; {not_provable} failed as quarantined, so not provable here: say so in the pull request",
+            steps.len()
+        );
+        Ok(ExitCode::SUCCESS)
+    } else if passed {
+        println!("done: passed, {} steps{elsewhere}", steps.len());
+        Ok(ExitCode::SUCCESS)
+    } else if let (Some(skip), true) = (unproved, all_ran) {
+        eprintln!(
+            "done: not passed: {}",
+            record::unmet_line(&skip.need, &skip.step)
+        );
+        Ok(ExitCode::FAILURE)
+    } else {
+        eprintln!("done: not passed; fix the failing step and run `fairlead done` again");
+        Ok(ExitCode::FAILURE)
+    }
+}
+
+/// What `done --check` says about the tree.
+fn check_line(state: &State, planned: &crate::plan_cmd::Planned, root: &Path) -> String {
+    match state {
+        State::Passed => "passed for this tree".to_string(),
+        State::Waits(waiting) => format!(
+            "not finished for this tree: its steps passed, but {}",
+            record::hold(waiting, &planned.config, root)
+        ),
+        State::Unmet { need, step } => {
+            format!("not passed for this tree: {}", record::unmet_line(need, step))
+        }
+        State::Failed(step) => format!(
+            "not passed for this tree: its last run failed{}; fix that and run `fairlead done` again",
+            step.as_ref().map(|s| format!(" at `{s}`")).unwrap_or_default()
+        ),
+        State::NotRun => "not passed for this tree: `fairlead done` hasn't run on the tree as it is now; run `fairlead done`".to_string(),
+    }
+}
+
+/// Runs the steps in order, each saying how it went, until one fails
+/// unless `keep_going`.
+fn run_steps(
+    planned: &crate::plan_cmd::Planned,
+    steps: &[Invocation],
+    root: &Path,
+    keep_going: bool,
+) -> Vec<Step> {
+    let held = held(planned, steps);
     let mut ran = Vec::new();
-    for s in &steps {
+    for s in steps {
         let at = Instant::now();
         println!("done: ({}) {}", s.cwd, s.argv.join(" "));
         let entry = s.quarantined.as_ref().and_then(|target| {
             held.iter()
                 .find(|q| q.kind == s.kind && &q.target == target)
         });
-        let (outcome, _, why) = crate::step::run_saying_why("done", &root, s, entry, true);
+        let (outcome, _, why) = crate::step::run_saying_why("done", root, s, entry, true);
         let seconds = (at.elapsed().as_secs_f64() * 10.0).round() / 10.0;
         let (word, name) = match (outcome, entry) {
             (Outcome::Passed, _) => ("passed", s.id.clone()),
@@ -107,49 +182,11 @@ fn gate(args: &DoneArgs, cwd: &Path) -> Result<ExitCode, String> {
             quarantined: outcome == Outcome::Held,
             seconds,
         });
-        if outcome == Outcome::Failed && !args.keep_going {
+        if outcome == Outcome::Failed && !keep_going {
             break;
         }
     }
-    let passed = ran.len() == steps.len() && ran.iter().all(|s| s.passed || s.quarantined);
-    let not_provable = ran.iter().filter(|s| s.quarantined).count();
-    let waiting = waiting(&planned);
-    let decision = match (passed, waiting.is_empty()) {
-        (false, _) => "fail",
-        (true, true) => "pass",
-        (true, false) => "deferred",
-    };
-    if let Some(log) = &log {
-        let mut event = Event::new("done", decision, started.elapsed());
-        event.tree = Some(tree);
-        event.steps = ran;
-        event.waiting = waiting.clone();
-        // The log is a record; failing to write it never changes the outcome.
-        let _ = log.append(&event);
-    }
-    for d in planned.plan.deferred.iter().filter(|d| !d.why.is_stage()) {
-        println!("done: {}", d.advice());
-    }
-    if passed && !waiting.is_empty() {
-        println!(
-            "done: passed, {} steps; not finished: {}",
-            steps.len(),
-            record::hold(&waiting, &planned.config, &root)
-        );
-        Ok(ExitCode::SUCCESS)
-    } else if passed && not_provable > 0 {
-        println!(
-            "done: passed, {} steps; {not_provable} failed as quarantined, so not provable here: say so in the pull request",
-            steps.len()
-        );
-        Ok(ExitCode::SUCCESS)
-    } else if passed {
-        println!("done: passed, {} steps", steps.len());
-        Ok(ExitCode::SUCCESS)
-    } else {
-        eprintln!("done: not passed; fix the failing step and run `fairlead done` again");
-        Ok(ExitCode::FAILURE)
-    }
+    ran
 }
 
 /// Whole suites the change reaches most of, which hold the gate open until a
@@ -325,6 +362,7 @@ fn stop_reason(dir: &Path, asked: bool, session: Option<&str>) -> Option<String>
             "the last `fairlead done` passed its steps, but {}",
             record::hold(&waiting, &loaded.config, &root)
         ),
+        State::Unmet { need, step } => format!("{}.", record::unmet_line(&need, &step)),
         State::Failed(step) => format!(
             "its last `fairlead done` failed{}. Fix that and run `fairlead done` again before stopping.",
             step.map(|s| format!(" at `{s}`")).unwrap_or_default()
