@@ -1,6 +1,6 @@
 # Pull request rules
 
-*Unreleased:* what a change has to meet before anyone reviews it, such as a
+*Since 0.18.0:* what a change has to meet before anyone reviews it, such as a
 branch name, a ticket key, the base it targets or a release note, declared
 once in `[pr]` and checked in three places: `fairlead done`, the pre-push
 hook, and `fairlead pr check` in CI. A check that only CI runs fails after
@@ -51,7 +51,7 @@ fairlead pr check --local  # ignore a CI event and check what this machine knows
   `pre-push`, which runs `fairlead guard check --push`: the
   [migration numbers](guard.md#migrations) and then these rules, with the
   base fetched first (3 seconds, then the local ref with a warning).
-  *Unreleased:* the entry runs `fairlead done --pre-push`, which runs the
+  *Since 0.18.0:* the entry runs `fairlead done --pre-push`, which runs the
   change's plan and then `guard check --push` ([Before a push](done.md#before-a-push)).
 - **In CI**, `fairlead pr check` reads the pull request from the event file
   GitHub Actions names in `GITHUB_EVENT_PATH`: its title, body, labels, base
@@ -68,7 +68,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - uses: mahkassem/fairlead@v0.15.2
+      - uses: mahkassem/fairlead@v0.18.0
         with:
           command: pr check
 ```
@@ -78,7 +78,7 @@ change, which no push does.
 
 ## Claims and receipts
 
-*Unreleased:* "verified" in a pull request body should mean a gate passed on
+*Since 0.18.0:* "verified" in a pull request body should mean a gate passed on
 the code being reviewed. `fairlead receipt --pr` prints the
 [receipt](receipt.md) as a block for the body, marked with the tree it's for
 and the gate's state:

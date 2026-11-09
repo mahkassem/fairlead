@@ -36,7 +36,7 @@ project or container image that never runs Fairlead still installs; running
 `fairlead` there exits 1 and prints the `cargo install` line that builds it
 from source ([#218](https://github.com/mahkassem/fairlead/issues/218)).
 
-*Unreleased:* a download that fails on the network, stalls for 30 seconds or
+*Since 0.18.0:* a download that fails on the network, stalls for 30 seconds or
 gets a 408, 429 or 5xx answer is tried again after 1, 2 and 4 seconds, and
 each retry prints a line. A body that ends short of its length counts as a
 failure, so a cut connection is retried instead of leaving a broken archive.
@@ -44,7 +44,7 @@ A 404, such as a version with no release, isn't retried.
 
 ### A binary fetched another way
 
-*Unreleased:* where the runner can't or shouldn't download, such as CI with
+*Since 0.18.0:* where the runner can't or shouldn't download, such as CI with
 a cache or a mirror, set `FAIRLEAD_BINARY` to the binary's path. The install
 then downloads nothing, and every `fairlead` run through the package runs
 that file with the same arguments:
@@ -251,7 +251,7 @@ and writes it only with `--pack`.
 
 ### The guard only
 
-*Unreleased:* for a stack the test planner doesn't read, such as Laravel,
+*Since 0.18.0:* for a stack the test planner doesn't read, such as Laravel,
 Rails, Flutter or Swift, or a team that wants the guard before anything
 else:
 

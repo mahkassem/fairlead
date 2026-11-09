@@ -21,7 +21,7 @@ next     ready: the gate passed and the receipt is written; `gh pr ready` if the
 
 ## Stages and platforms
 
-*Unreleased:* a pass on a laptop says nothing about the code on another OS, or about the stages it didn't run. The receipt says, after the gate line, where each step of the newest `fairlead done` run on this tree ran, by CI stage and platform, and plainly what it didn't prove:
+*Since 0.18.0:* a pass on a laptop says nothing about the code on another OS, or about the stages it didn't run. The receipt says, after the gate line, where each step of the newest `fairlead done` run on this tree ran, by CI stage and platform, and plainly what it didn't prove:
 
 ```text
 gate     failed for this tree at lint
@@ -70,4 +70,4 @@ The session comes from `--session` or `CLAUDE_CODE_SESSION_ID`, as for the brief
 
 *Since 0.8.0:* `next` also says when to open the pull request as a draft and when to mark it ready, so a CI that runs only fast checks on a draft runs the rest once it's marked ready. Fairlead never runs `gh` and doesn't ask whether a pull request is open, so the line reads right either way. A [`[[guard.commands]]` rule](guard.md#commands) can refuse `gh pr create` without `--draft`.
 
-*Unreleased:* when a [`fairlead ci ledger`](ci.md#is-this-red-mine-fairlead-ci-ledger) for HEAD is under 30 minutes old, `next` adds a second line, `ci: 2 of 3 failures inherited: red on main since abc1234 (2026-11-07); 1 own (ledger 4 min old; …)`. It reads only that cached file; `next` still never runs `gh` or reaches the network. `ci ledger` is the command that reads the GitHub API, and it may run `gh auth token` for a token.
+*Since 0.18.0:* when a [`fairlead ci ledger`](ci.md#is-this-red-mine-fairlead-ci-ledger) for HEAD is under 30 minutes old, `next` adds a second line, `ci: 2 of 3 failures inherited: red on main since abc1234 (2026-11-07); 1 own (ledger 4 min old; …)`. It reads only that cached file; `next` still never runs `gh` or reaches the network. `ci ledger` is the command that reads the GitHub API, and it may run `gh auth token` for a token.

@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.18.0 (2026-11-09)
 
 One release in three parts. A guard for any stack: secret file names, gitleaks, migration numbers against a fresh base and `[pr]` rules, with `init --profile guard` for a repository the test planner doesn't read. An answer to "is this red mine?" while a pull request is red: `fairlead ci ledger`, the default branch's red streaks and `insights --speed`. And a done gate whose pass can be trusted: it plans the branch from its merge base, runs first the cheap steps CI shows going red, runs before a push, counts only what a change adds to a foreign linter's findings, and leaves a receipt per stage and platform that the pull request's claims are held to.
 

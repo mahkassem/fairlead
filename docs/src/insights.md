@@ -32,7 +32,7 @@ The event log is local, so the first five sections reflect the machine `insights
 | Suggestion | Evidence | `--write` |
 |---|---|---|
 | an `[[tests.owners]]` rule | two or more escapes or replay misses needed the same rule | no: add it, then replay to see what it costs in plan size |
-| a `[[replay.quarantine]]` entry | a recurring test in the replay report; *Unreleased:* or a test a [`ci ledger`](ci.md#is-this-red-mine-fairlead-ci-ledger) found flaky, from the cached ledgers made since `--since` and any `--ledger FILE`, each named once with how many ledgers found it | no: a person confirms it's flaky and gives the reason |
+| a `[[replay.quarantine]]` entry | a recurring test in the replay report; *Since 0.18.0:* or a test a [`ci ledger`](ci.md#is-this-red-mine-fairlead-ci-ledger) found flaky, from the cached ledgers made since `--since` and any `--ledger FILE`, each named once with how many ledgers found it | no: a person confirms it's flaky and gives the reason |
 | drop or narrow a skill route | offered in ten measured sessions and never used | no |
 | `guard.on_finding = "deny"` | twenty warned writes, and no finding reached a commit | yes |
 | a runner's `command` in another Bun test mode | *Since 0.14.0:* the last [`fairlead test bench`](plan.md#measuring-buns-test-modes) recommended that mode for the runner, with each mode's mean time in the suggestion | no: the times are one machine's, so a person decides |
@@ -41,7 +41,7 @@ The event log is local, so the first five sections reflect the machine `insights
 
 ## Speed
 
-*Unreleased:* `fairlead insights --speed` says where the time goes, from what Fairlead already records: `fairlead done`'s per-step seconds and the time it took to plan, from the event log since `--since`; the invocations of each `--results` file; and the CI jobs, reruns and cancelled runs of each `--dataset FILE`, a [`replay fetch`](replay.md#replay-fetch) dataset. Without a plan time from `done`, a `--replay` report's median planning time stands in. Each line carries its numbers and one change to try; `--json` prints them under `speed`. Nothing is written.
+*Since 0.18.0:* `fairlead insights --speed` says where the time goes, from what Fairlead already records: `fairlead done`'s per-step seconds and the time it took to plan, from the event log since `--since`; the invocations of each `--results` file; and the CI jobs, reruns and cancelled runs of each `--dataset FILE`, a [`replay fetch`](replay.md#replay-fetch) dataset. Without a plan time from `done`, a `--replay` report's median planning time stands in. Each line carries its numbers and one change to try; `--json` prints them under `speed`. Nothing is written.
 
 | Line | When | Suggestion |
 |---|---|---|

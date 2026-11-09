@@ -12,7 +12,7 @@ change passes through: as an agent writes a file, at commit, and in CI.
 
 The check and commit stages also run the migration rules and the external rules configured for them.
 
-*Unreleased:* the [secret-path rule](#secret-paths) is on with no config, so
+*Since 0.18.0:* the [secret-path rule](#secret-paths) is on with no config, so
 a commit may not add a file named like a secret even in a repository that
 configured nothing else. For a stack the test planner doesn't read,
 [`fairlead init --profile guard`](install.md#the-guard-only) writes a config
@@ -158,7 +158,7 @@ falls back to HEAD. `unique_prefix` makes each
 file's leading number unique, apart from the listed groups; the commit stage
 fails only on a number the commit newly shares.
 
-*Unreleased:* a number is taken when another branch has already landed it.
+*Since 0.18.0:* a number is taken when another branch has already landed it.
 Two agents working at once each pick the next free number on their own
 branch, and the commit stage can't see the other's until the base is
 fetched. `fetch = true` fetches the base before comparing:
@@ -190,7 +190,7 @@ caught when the second one rebases.
 
 ## Secret paths
 
-*Unreleased:* a commit may not add a file whose name says it holds a
+*Since 0.18.0:* a commit may not add a file whose name says it holds a
 secret: a keystore, a private key, an env file, a provisioning profile.
 gitleaks reads what files say; this rule reads names, so it also catches a
 binary keystore no content scanner can read. It's on with no config:
@@ -284,7 +284,7 @@ when the hook runs, the file isn't written yet.
 
 ### Before and after
 
-*Unreleased:* a linter adopted on an old codebase reports thousands of
+*Since 0.18.0:* a linter adopted on an old codebase reports thousands of
 findings nobody will fix in one change. `diff = true` fails only on the
 findings the change adds:
 
@@ -321,7 +321,7 @@ diff = true
 
 ### gitleaks
 
-*Unreleased:* [gitleaks](https://github.com/gitleaks/gitleaks) finds secrets
+*Since 0.18.0:* [gitleaks](https://github.com/gitleaks/gitleaks) finds secrets
 in what files say. Fairlead runs it and reads its report; it doesn't detect
 secrets itself.
 
@@ -463,9 +463,9 @@ The commit stage runs through [lefthook](https://github.com/evilmartians/lefthoo
 install adds a `fairlead-guard` command running `fairlead guard check --staged`
 (through the package runner where Fairlead is a package dependency)
 to `pre-commit` in `lefthook.yml` (or `lefthook.yaml`, `.lefthook.yml`,
-`.lefthook.yaml`, whichever is there). *Unreleased:* with
+`.lefthook.yaml`, whichever is there). *Since 0.18.0:* with
 `guard.migrations.fetch` or [`[pr]` rules](pr.md), it also adds
-`fairlead-push` to `pre-push`. *Unreleased:* it runs `fairlead done --pre-push`, the plan and then the push checks ([Before a push](done.md#before-a-push)), and `hooks install --git` moves an entry that runs `fairlead guard check --push` onto it; `done.pre_push = true` adds it without either. It adds lines at the indentation around
+`fairlead-push` to `pre-push`. *Since 0.18.0:* it runs `fairlead done --pre-push`, the plan and then the push checks ([Before a push](done.md#before-a-push)), and `hooks install --git` moves an entry that runs `fairlead guard check --push` onto it; `done.pre_push = true` adds it without either. It adds lines at the indentation around
 them, under `commands`, or as an item where the config uses `jobs`, and never
 rewrites the rest, so comments and layout stay. A `pre-commit` or `commands`
 written on one line (`pre-commit: {}`) is refused, to be added by hand.
@@ -482,7 +482,7 @@ install made is removed.
 `fairlead doctor` reads the event log and reports the newest 500 write-hook
 calls by decision, the rules that denied, the hook's p50 and p95 time, any
 calls that ran out of time or hit an error, and the commit stage's runs.
-*Unreleased:* a call over the budget reads `1 call(s) ran past the 40 ms
+*Since 0.18.0:* a call over the budget reads `1 call(s) ran past the 40 ms
 budget (guard.budget_ms) and let the edit through`, and the latency line adds
 how long loading the config took at the median, so a slow config shows as
 one. With the gitleaks preset it prints `gitleaks: 8.24.3, for gitleaks`, or

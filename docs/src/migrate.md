@@ -68,7 +68,7 @@ workflow's pin, then from the config's floor.
 | What | When it changes | How |
 |---|---|---|
 | Claude Code hooks in `.claude/settings.json` and `settings.local.json`, and, since 0.9.0, Codex hooks in `.codex/hooks.json` and Gemini CLI hooks in `.gemini/settings.json` | Fairlead's entries aren't the ones this release's `hooks install` would write for your config | Fairlead's entries are replaced with this release's, and every other setting and hook stays as it was. Uninstall still restores the file from before Fairlead, byte for byte, when nobody else changed it. |
-| The commit stage in `lefthook.yml`, and *Unreleased:* the push entry | It runs another command than this release writes, such as `fairlead` by name where the project has its own copy, or `fairlead guard check --push` where this release runs `fairlead done --pre-push` | The `run:` line is replaced in place, with its indentation, quotes and comments kept |
+| The commit stage in `lefthook.yml`, and *Since 0.18.0:* the push entry | It runs another command than this release writes, such as `fairlead` by name where the project has its own copy, or `fairlead guard check --push` where this release runs `fairlead done --pre-push` | The `run:` line is replaced in place, with its indentation, quotes and comments kept |
 | The `fairlead = "X.Y"` floor in the project config | The floor is older than a table or key the config uses, such as `[done]` (0.6) or `[guard]` (0.4) | The floor is raised to that release, so a teammate on an older binary is told which version to install |
 | `package.json` | `dependencies`, `devDependencies` or `optionalDependencies` pins an older release, as `0.4.2`, `^0.4.2`, `~0.4.2` or `>=0.4.2` | The version moves to this release and keeps its `^` or `~` |
 | Workflows under `.github/workflows/` | A step uses `mahkassem/fairlead@vX.Y.Z`, or passes `version: vX.Y.Z`, for an older release | Both move to this release |
@@ -392,6 +392,29 @@ files stop; with no transcript it reads the write hook's events, and with
 ([The Stop hook](done.md#the-stop-hook)). An untracked folder
 holding a `CACHEDIR.TAG` stays out of plans and the tree hash, and an edit
 to `fairlead.toml` no longer reaches tests through a file that names it.
+
+### To 0.18.0
+
+0.18.0 also carries what was planned as 0.16 and 0.17; there is no 0.16.0
+or 0.17.0. `fairlead migrate --write` moves the floor, and moves a lefthook
+`guard check --push` entry onto `fairlead done --pre-push`.
+
+- **The secret-path rule is on with no config.** A commit may not add a
+  file named like a secret (`.env`, `.env.*`, `*.jks`, `*.p12`, `*.pem`,
+  `*.key`, `client_secret*` and the like). Files already tracked are
+  warnings at `guard check` until `[guard.paths]` sets `ratchet`, and files
+  under test and fixture folders are always warnings, so upgrading turns
+  nothing red. Keep a path with `[guard.paths] allow`, or turn the rule off
+  with `guard.paths = false` ([Secret paths](guard.md)). A secret already
+  committed stays in history: rotate it.
+- **Run `fairlead ci workflow --write` again** if Fairlead generated your
+  workflow, to add the `ledger` job that answers "is this red mine?" when a
+  job fails ([Plans in CI](ci.md)).
+- **`fairlead done` plans from the merge base** with `[pr] base`, else the
+  default branch, and says so in one line when it finds neither.
+- **A `[pr]` table** is new and off until you add it ([Pull requests](pr.md)).
+  With one, a body that says "verified" or "tested" needs a passing
+  receipt for the head's tree; `[pr] claims = false` turns that off.
 
 ## Going back to an older release
 
