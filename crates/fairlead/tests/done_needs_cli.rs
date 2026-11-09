@@ -104,8 +104,12 @@ fn an_unmet_need_proved_elsewhere_leaves_its_tests_and_checks_out_and_passes() {
     let dir = repo("proved", &config(port, PROVED));
     let (code, out) = done(&dir, &[]);
     assert_eq!(code, 0, "{out}");
+    // Windows retries a refused connection until the timeout, so it reads as timed out there.
+    let line = |why: &str| {
+        format!("done: api: 2 files not run here: need \"postgres\" not met (127.0.0.1:{port} {why}); proved in CI (api job). To run them here: Start Postgres on 5432")
+    };
     assert!(
-        out.contains(&format!("done: api: 2 files not run here: need \"postgres\" not met (127.0.0.1:{port} refused); proved in CI (api job). To run them here: Start Postgres on 5432")),
+        out.contains(&line("refused")) || out.contains(&line("timed out")),
         "{out}"
     );
     assert!(
