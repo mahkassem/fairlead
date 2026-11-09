@@ -37,6 +37,10 @@ fn go_manifests_in_run_all(cx: &Context) -> bool {
         .any(|p| p.contains("go.mod") || p.contains("go.sum"))
 }
 
+fn has_needs(cx: &Context) -> bool {
+    !cx.loaded.config.needs.items().is_empty()
+}
+
 fn has_claude_hooks(cx: &Context) -> bool {
     cx.claude_hooks
 }
@@ -297,6 +301,13 @@ pub const RELEASES: &[(&str, &[Note])] = &[
     ("0.14.2", &[]),
     ("0.15.0", &[]),
     ("0.15.1", &[]),
+    (
+        "0.15.2",
+        &[Note {
+            text: "`fairlead done` reads `[[needs]]`: a need that isn't met leaves out the tests and checks it covers, and the gate passes without them only when the need names `proved_in`. Give each need whose tests CI proves a `proved_in` (see Needs).",
+            applies: has_needs,
+        }],
+    ),
 ];
 
 /// Config tables and keys by the release that added them. The top-level

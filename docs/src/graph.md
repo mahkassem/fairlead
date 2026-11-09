@@ -25,7 +25,7 @@ fairlead graph hubs                  # the files that link the most changes to t
 
 Single-file components are sources too. In a `.vue` or `.svelte` file every `<script>` block is read, `<script setup>` and Svelte's `context="module"` included, and in an `.astro` file its `---` frontmatter and its `<script>` blocks. Each block is parsed as its `lang` says (`ts`, `tsx`, `js`), else as JavaScript in Vue and Svelte and TypeScript in Astro, and a `<script src="…">` counts as an import. The component file is the node, so `import Card from './Card.vue'` resolves to it like any other import, and a change to a component reaches the tests that import it, directly or through other components.
 
-An `import()` or `require()` whose argument isn't a plain string is counted as an unknown dynamic import; the planner treats the file as depending on its whole module. *Unreleased:* a folder holding a `CACHEDIR.TAG` (the Cache Directory Tagging spec's signature) is left out of the graph, as `node_modules` is, so a build tool's cache in the tree reaches no test that way.
+An `import()` or `require()` whose argument isn't a plain string is counted as an unknown dynamic import; the planner treats the file as depending on its whole module. *Since 0.15.2:* a folder holding a `CACHEDIR.TAG` (the Cache Directory Tagging spec's signature) is left out of the graph, as `node_modules` is, so a build tool's cache in the tree reaches no test that way.
 
 ### Named imports through re-exports
 

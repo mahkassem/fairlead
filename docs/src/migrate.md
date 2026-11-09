@@ -377,6 +377,22 @@ phase line, which missed a production deploy whose workflow names the
 environment on its own line (`environment:` then `name: production`) and so
 suggested `phase = "early"` for a live repository.
 
+### To 0.15.2
+
+Migrate updates nothing in your files. 0.15.2 makes `fairlead done` read
+`[[needs]]`: a need that isn't met leaves out the tests and checks it
+covers, and the gate passes without them only when the need names
+`proved_in`. Give each need whose tests CI proves a `proved_in`, or the
+gate stays open on a machine without it ([Needs](done.md#needs)).
+
+The Stop hook asks a session once per tree under `done.on_stop = "ask"`,
+and lets a session whose transcript shows no tool use that can change
+files stop; with no transcript it reads the write hook's events, and with
+`guard.events = "off"` as well it keeps the old behaviour
+([The Stop hook](done.md#the-stop-hook)). An untracked folder
+holding a `CACHEDIR.TAG` stays out of plans and the tree hash, and an edit
+to `fairlead.toml` no longer reaches tests through a file that names it.
+
 ## Going back to an older release
 
 Install the older release, then run its `hooks uninstall` and
