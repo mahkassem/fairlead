@@ -410,9 +410,15 @@ fn no_rules_bad_input_another_tool_or_a_path_outside_the_project_all_go_ahead() 
     let dir = repo("quiet", "", &[("src/a.ts", lines(2))]);
     let write = json!({"file_path": dir.join("src/a.ts"), "content": lines(9)});
     assert_eq!(hook(&dir, call(&dir, "Write", write)), None);
-    assert!(
-        events(&dir).is_empty(),
-        "a project with no rules logs nothing"
+    let logged = events(&dir);
+    assert_eq!(
+        logged.len(),
+        1,
+        "a project with no rules logs only that an edit was made, for the Stop hook: {logged:?}"
+    );
+    assert_eq!(
+        (&logged[0]["decision"], &logged[0]["file"]),
+        (&json!("allow"), &json!("src/a.ts"))
     );
 
     let dir = repo("outside", SIZE, &[]);

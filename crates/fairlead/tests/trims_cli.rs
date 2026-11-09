@@ -196,3 +196,42 @@ fn a_config_edit_and_a_dispatch_only_workflow_run_no_tests() {
     );
     assert_eq!(plan_of(&dir)["all"], true);
 }
+
+#[test]
+fn a_config_edit_reaches_no_test_through_a_file_that_reads_it() {
+    let dir = project("config-read");
+    write(
+        &dir,
+        "packages/app/src/settings.ts",
+        "export const file = '../../../fairlead.toml';\n",
+    );
+    write(
+        &dir,
+        "packages/app/test/settings.test.ts",
+        "import { file } from '../src/settings';\n",
+    );
+    git(&dir, &["add", "-A"]);
+    git(&dir, &["commit", "-q", "-m", "reads the config"]);
+    write(
+        &dir,
+        "fairlead.toml",
+        &format!(
+            "{}\n[[checks]]\nid = \"config\"\ncommand = [\"true\"]\npaths = [\"fairlead.toml\"]\n",
+            std::fs::read_to_string(dir.join("fairlead.toml")).unwrap()
+        ),
+    );
+    let plan = plan_of(&dir);
+    assert_eq!(plan["all"], false);
+    assert!(
+        tests(&plan).is_empty(),
+        "the file naming the config doesn't pull its tests in: {plan}"
+    );
+    assert_eq!(plan["checks"][0]["id"], "config", "a check naming it runs");
+    assert!(
+        plan["warnings"][0]["message"]
+            .as_str()
+            .unwrap()
+            .contains("it reaches no test through a file that reads it"),
+        "{plan}"
+    );
+}

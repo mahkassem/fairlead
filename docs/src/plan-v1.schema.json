@@ -80,6 +80,12 @@
     "Deferred": {
       "description": "A runner or check whose `from` stage is later than the plan's.",
       "properties": {
+        "by_rule": {
+          "description": "How many of `reached` the change reaches through a `[[graph.edges]]`\nrule, so a share no import explains names its cause.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
         "from": {
           "$ref": "#/$defs/CiStage"
         },

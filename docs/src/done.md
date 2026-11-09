@@ -22,7 +22,11 @@ In order:
 
 *Unreleased:* with `profile = "guard"` ([The guard only](install.md#the-guard-only)) there's no plan, so the gate runs only steps 4 and 5.
 
-Each step prints its command, then whether it passed and how long it took. The gate stops at the first failure unless `--keep-going` is given; either way it passes only when every step passed.
+Each step prints its command, then whether it passed and how long it took. The gate stops at the first failure unless `--keep-going` is given; either way it passes only when every step passed. *Since 0.15.2:* a failed step also says why, read from its output, which is still printed as it comes: `could not start (exit 1 before any test ran)` when a runner's output shows no test result, such as a suite that needs a database that isn't up; `3 tests failed (exit 1)` when it names failed tests in a format Fairlead reads; otherwise the exit status after its tests ran; each with the first line that reads as an error:
+
+```text
+done: failed api in 0.5 s: could not start (exit 1 before any test ran): error: connect ECONNREFUSED 127.0.0.1:5432
+```
 
 *Since 0.7.0:* a test or check a [`[[quarantine]]` entry](plan.md#tests-that-lie-on-one-platform) holds on this machine is the exception. When it fails with the output its entry expects, the step is *not provable here*: it doesn't fail the gate, and the gate's last line says how many steps weren't provable, so the agent can say so in the pull request. Any other failure, or any failure after the entry's date, counts. This covers a `done.always` check too. A command in a step is found the way a shell finds it, so on Windows a `.cmd` shim such as `npm` or `pnpm` starts.
 
@@ -36,7 +40,7 @@ guard  = true
 
 A check `done.always` names needs no `paths` or `modules`, since it always runs.
 
-*Since 0.15.0:* a suite whose whole run waits for a later stage ([Whole suites](plan.md#whole-suites-at-a-later-stage)) runs only the tests the change reaches, and the gate prints one line for what it left out. When the change reaches most of such a suite, the gate passes the steps it ran but isn't finished: the record says `deferred`, `done --check` stays false and the Stop hook sends the agent back, until `fairlead done --full`, which runs every whole suite, passes on the same tree. In a project whose `phase` is `early`, nothing is deployed, so the gate passes and the scheduled run proves the suite.
+*Since 0.15.0:* a suite whose whole run waits for a later stage ([Whole suites](plan.md#whole-suites-at-a-later-stage)) runs only the tests the change reaches, and the gate prints one line for what it left out. When the change reaches most of such a suite, the gate passes the steps it ran but isn't finished: the record says `deferred`, `done --check` stays false and the Stop hook sends the agent back, until `fairlead done --full`, which runs every whole suite, passes on the same tree. In a project whose `phase` is `early`, nothing is deployed, so the gate passes and the scheduled run proves the suite. In `testing`, deferred holds until `done --full`; use `early` when nobody outside the team uses the build. *Since 0.15.2:* every line that reports a held suite names it, the phase that holds it, the share the change reaches, and the ways forward ([The project's phase](plan.md#the-projects-phase)); `done --check` says why a tree hasn't passed (not run on this tree, failed at a named step, or a suite waits) rather than only that it hasn't.
 
 ## The record
 
@@ -49,10 +53,11 @@ Every run appends a `done` event to `.git/fairlead/events.jsonl`: the plan's tre
 `fairlead hooks install` also adds a Claude Code `Stop` hook, `fairlead guard stop`, unless `done.on_stop = "off"`. When the agent ends its turn, the hook checks whether the tree it leaves has passed `fairlead done`. It never runs the gate itself, which would outlast the hook's timeout; it reads the record.
 
 - **Nothing changed** from the default branch's merge base: it lets the stop through, as for a session that only read.
+- *Since 0.15.2:* **The session can't have edited anything**: it lets the stop through, so a nested `claude -p` asked a question in the checkout, which loads the same hooks, answers once and isn't sent back. It reads the session's transcript (`transcript_path` in the hook's input): any use of `Edit`, `Write`, `MultiEdit`, `NotebookEdit`, `Bash` (a shell command can edit), `Task` or `Agent` (an agent it starts can) counts as a possible edit, and a line that doesn't parse is skipped. With no readable transcript it falls back to the write hook's events, which carry the session id: no edit logged since the newest passing `fairlead done` lets it stop. With `guard.events = "off"` as well, it can't tell and asks as before.
 - **A pass for this tree:** it lets the stop through.
-- **Otherwise** it exits 2 with the reason on stderr, which Claude Code gives the agent instead of stopping: the gate hasn't passed for the tree as it is now, or its last run failed, and to run `fairlead done`.
-- **`on_stop = "ask"`**, the default, sends the agent back once: when Claude Code says a Stop hook already did (`stop_hook_active`), the next stop goes through. **`"require"`** sends it back every time until the gate passes; Claude Code's own cap on consecutive blocks ends a loop.
-- On any error, such as no base branch or an unreadable config, it lets the stop through. Each time it sends the agent back it records a `stop` event with the tree, never the reason's text.
+- **Otherwise** it exits 2 with the reason on stderr, which Claude Code gives the agent instead of stopping: the gate hasn't run on the tree as it is now, or its last run failed at a named step, or its steps passed while a whole suite waits (with what holds it and the ways forward), and the one thing to run next.
+- **`on_stop = "ask"`**, the default, sends the agent back once: when Claude Code says a Stop hook already did (`stop_hook_active`), the next stop goes through. *Since 0.15.2:* and it sends a session back at most once for a given tree, read from the `stop` events it records with the session id, since Claude Code clears `stop_hook_active` at every new turn and the hook otherwise asked again on every turn of a long session. An edit makes a new tree, which it asks about once more. The reminder says it is the one for this tree. **`"require"`** sends it back every time until the gate passes; Claude Code's own cap on consecutive blocks ends a loop.
+- On any error, such as no base branch or an unreadable config, it lets the stop through. Each time it sends the agent back it records a `stop` event with the tree and the session id, never the reason's text.
 
 ```toml
 [done]
@@ -99,4 +104,16 @@ needs: 3 checked in 628 ms
   browser: met: BROWSER_PATH is set (0 ms)
 ```
 
-A `command` need runs a command from the config, as `[[checks]]` do, so `doctor` runs it too. The done gate doesn't read `[[needs]]` yet: a test that needs a missing service still fails `fairlead done`. What the gate will do with a need that isn't met is in #259.
+A `command` need runs a command from the config, as `[[checks]]` do, so `doctor` runs it too.
+
+*Since 0.15.2:* `fairlead done` reads `[[needs]]` ([#284](https://github.com/mahkassem/fairlead/issues/284), the first gate step of #259). It checks each need the plan's steps touch, once, the way `doctor` does, and when one isn't met:
+
+- A test invocation that names its files runs without the files the need's `tests` cover, and is left out when none is left. One that runs its whole suite, naming no file, is left out only when the need covers every test it would run; otherwise it runs.
+- A check the need's `checks` names is left out.
+- With `proved_in`, what was left out counts as passed for `done`, `done --check`, `next` and the Stop hook, in any phase, since that place proves it before a merge. Without it, the gate doesn't pass, and says to meet the need or set `proved_in`.
+- The gate prints one line for each need and step, and the `done` event and the receipt record which need left what out of which step:
+
+```text
+done: api: 5 files not run here: need "postgres" not met (localhost:5432 refused); proved in CI (api job). To run them here: Start Postgres on 5432
+done: db-lint: not run here: need "postgres" not met (localhost:5432 refused), and the need names no `proved_in`, so the gate can't pass. Meet it or set its `proved_in` to where these are proved, then run `fairlead done` again
+```

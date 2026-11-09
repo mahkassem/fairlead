@@ -87,7 +87,13 @@ fn a_passing_gate_is_recorded_for_the_tree_and_an_edit_makes_it_stale() {
     assert_eq!((code, out.trim()), (0, "done: passed for this tree"));
     std::fs::write(dir.join("a.ts"), "export const a = 3;\n").unwrap();
     let (code, out) = done(&dir, &["--check"]);
-    assert_eq!((code, out.trim()), (1, "done: not passed for this tree"));
+    assert_eq!(
+        (code, out.trim()),
+        (
+            1,
+            "done: not passed for this tree: `fairlead done` hasn't run on the tree as it is now; run `fairlead done`"
+        )
+    );
     let log = std::fs::read_to_string(dir.join(".git/fairlead/events.jsonl")).unwrap();
     let last: serde_json::Value = serde_json::from_str(log.lines().last().unwrap()).unwrap();
     assert_eq!(last["stage"], "done");
@@ -118,6 +124,44 @@ fn a_failing_step_stops_the_gate_and_is_recorded_as_a_failure() {
 }
 
 #[test]
+fn a_failed_step_says_whether_it_could_start_and_its_first_error_line() {
+    let dir = repo("why");
+    let boot = "echo 'Error: connect ECONNREFUSED 127.0.0.1:5432' >&2; exit 3";
+    std::fs::write(
+        dir.join("fairlead.toml"),
+        CONFIG.replace("test ! -f FAIL", boot),
+    )
+    .unwrap();
+    let (code, out) = done(&dir, &[]);
+    assert_eq!(code, 1, "{out}");
+    let line = out
+        .lines()
+        .find(|l| l.starts_with("done: failed unit"))
+        .unwrap();
+    assert!(
+        line.ends_with(
+            "s: could not start (exit 3 before any test ran): Error: connect ECONNREFUSED 127.0.0.1:5432"
+        ),
+        "{line}"
+    );
+    let ran = "echo '2 passed, 1 failed'; echo 'Error: expected 2, got 3'; exit 1";
+    std::fs::write(
+        dir.join("fairlead.toml"),
+        CONFIG.replace("test ! -f FAIL", ran),
+    )
+    .unwrap();
+    let (_, out) = done(&dir, &[]);
+    let line = out
+        .lines()
+        .find(|l| l.starts_with("done: failed unit"))
+        .unwrap();
+    assert!(
+        line.ends_with("s: exit 1 after its tests ran: Error: expected 2, got 3"),
+        "{line}"
+    );
+}
+
+#[test]
 fn done_always_must_name_a_check() {
     let dir = repo("bad");
     std::fs::write(
@@ -135,6 +179,14 @@ fn done_always_must_name_a_check() {
 
 /// Runs the Stop hook as Claude Code would, returning its exit code and stderr.
 fn stop(dir: &Path, active: bool) -> (i32, String) {
+    stop_as(dir, "s", active)
+}
+
+fn stop_as(dir: &Path, session: &str, active: bool) -> (i32, String) {
+    stop_with(dir, session, active, None)
+}
+
+fn stop_with(dir: &Path, session: &str, active: bool, transcript: Option<&Path>) -> (i32, String) {
     use std::io::Write as _;
     let mut child = Command::new(env!("CARGO_BIN_EXE_fairlead"))
         .args(["guard", "stop"])
@@ -146,9 +198,12 @@ fn stop(dir: &Path, active: bool) -> (i32, String) {
         .stderr(std::process::Stdio::piped())
         .spawn()
         .unwrap();
-    let input = serde_json::json!({
-        "session_id": "s", "cwd": dir, "hook_event_name": "Stop", "stop_hook_active": active
+    let mut input = serde_json::json!({
+        "session_id": session, "cwd": dir, "hook_event_name": "Stop", "stop_hook_active": active
     });
+    if let Some(path) = transcript {
+        input["transcript_path"] = serde_json::json!(path);
+    }
     child
         .stdin
         .take()
@@ -162,9 +217,36 @@ fn stop(dir: &Path, active: bool) -> (i32, String) {
     )
 }
 
+/// An edit by `session` as the write hook sees it, which logs it.
+fn edit(dir: &Path, session: &str) {
+    use std::io::Write as _;
+    let mut child = Command::new(env!("CARGO_BIN_EXE_fairlead"))
+        .args(["guard", "hook"])
+        .current_dir(dir)
+        .env_clear()
+        .env("PATH", std::env::var_os("PATH").unwrap_or_default())
+        .env("HOME", dir)
+        .stdin(std::process::Stdio::piped())
+        .spawn()
+        .unwrap();
+    let input = serde_json::json!({
+        "session_id": session, "cwd": dir, "hook_event_name": "PreToolUse",
+        "tool_name": "Write",
+        "tool_input": { "file_path": dir.join("a.ts"), "content": "export const a = 9;\n" }
+    });
+    child
+        .stdin
+        .take()
+        .unwrap()
+        .write_all(input.to_string().as_bytes())
+        .unwrap();
+    assert!(child.wait().unwrap().success());
+}
+
 #[test]
 fn the_stop_hook_sends_an_agent_back_until_the_tree_it_leaves_has_passed() {
     let dir = repo("stop");
+    edit(&dir, "s");
     let (code, err) = stop(&dir, false);
     assert_eq!(code, 2, "a change with no gate: {err}");
     assert!(err.contains("Run `fairlead done`"), "{err}");
@@ -175,11 +257,106 @@ fn the_stop_hook_sends_an_agent_back_until_the_tree_it_leaves_has_passed() {
     );
     assert_eq!(done(&dir, &[]).0, 0);
     assert_eq!(stop(&dir, false).0, 0, "the tree passed");
+    edit(&dir, "s");
     std::fs::write(dir.join("a.ts"), "export const a = 4;\n").unwrap();
     assert_eq!(
         stop(&dir, false).0,
         2,
         "an edit after the pass makes it stale"
+    );
+}
+
+#[test]
+fn ask_sends_a_session_back_once_per_tree_though_each_turn_clears_stop_hook_active() {
+    let dir = repo("once");
+    edit(&dir, "one");
+    edit(&dir, "two");
+    let (code, err) = stop_as(&dir, "one", false);
+    assert_eq!(code, 2, "{err}");
+    assert!(
+        err.contains("this is the one reminder for this tree in this session"),
+        "{err}"
+    );
+    for turn in 0..3 {
+        assert_eq!(
+            stop_as(&dir, "one", false).0,
+            0,
+            "turn {turn} on the same tree goes through"
+        );
+    }
+    assert_eq!(stop_as(&dir, "two", false).0, 2, "another session is asked");
+    std::fs::write(dir.join("a.ts"), "export const a = 5;\n").unwrap();
+    assert_eq!(stop_as(&dir, "one", false).0, 2, "a new tree is asked");
+    assert_eq!(stop_as(&dir, "one", false).0, 0);
+}
+
+#[test]
+fn a_session_that_edited_nothing_since_the_last_pass_is_let_stop() {
+    let dir = repo("nested");
+    let (code, err) = stop_as(&dir, "nested", false);
+    assert_eq!(code, 0, "a nested `claude -p` that only read stops: {err}");
+    edit(&dir, "agent");
+    assert_eq!(
+        stop_as(&dir, "agent", false).0,
+        2,
+        "the session that edited is asked"
+    );
+    assert_eq!(stop_as(&dir, "nested", false).0, 0);
+    assert_eq!(done(&dir, &[]).0, 0);
+    std::fs::write(dir.join("a.ts"), "export const a = 6;\n").unwrap();
+    assert_eq!(
+        stop_as(&dir, "agent", false).0,
+        0,
+        "no edit by this session since the pass"
+    );
+    let config = std::fs::read_to_string(dir.join("fairlead.toml")).unwrap();
+    std::fs::write(
+        dir.join("fairlead.toml"),
+        config.replace("[done]", "[guard]\nevents = \"off\"\n\n[done]"),
+    )
+    .unwrap();
+    assert_eq!(
+        stop_as(&dir, "unlogged", false).0,
+        2,
+        "with no write log it can't tell, so it asks as before"
+    );
+}
+
+#[test]
+fn the_transcript_decides_whether_a_session_could_have_edited() {
+    let dir = repo("transcript");
+    let line = |content: serde_json::Value| {
+        serde_json::json!({"type": "assistant", "message": {"role": "assistant", "content": content}})
+            .to_string()
+    };
+    let shell = dir.join("shell.jsonl");
+    let tool = serde_json::json!([{"type": "tool_use", "id": "t1", "name": "Bash", "input": {"command": "sed -i s/1/2/ a.ts"}}]);
+    std::fs::write(&shell, format!("{}\nnot json\n", line(tool))).unwrap();
+    let (code, err) = stop_with(&dir, "sh", false, Some(&shell));
+    assert_eq!(
+        code, 2,
+        "a shell command could have edited, logged or not: {err}"
+    );
+    let talk = dir.join("talk.jsonl");
+    let text = serde_json::json!([{"type": "text", "text": "an answer"}]);
+    std::fs::write(&talk, line(text) + "\n").unwrap();
+    edit(&dir, "talk");
+    assert_eq!(
+        stop_with(&dir, "talk", false, Some(&talk)).0,
+        0,
+        "a transcript with no tool use lets it stop"
+    );
+    let missing = dir.join("missing.jsonl");
+    assert_eq!(
+        stop_with(&dir, "quiet", false, Some(&missing)).0,
+        0,
+        "no transcript: no logged edit lets it stop"
+    );
+    edit(&dir, "busy");
+    assert_eq!(
+        stop_with(&dir, "busy", false, Some(&missing)).0,
+        2,
+        "no transcript: a logged edit sends it back"
     );
 }
 
@@ -192,6 +369,7 @@ fn require_keeps_sending_it_back_and_off_or_no_change_never_does() {
         format!("{config}on_stop = \"require\"\n"),
     )
     .unwrap();
+    edit(&dir, "s");
     assert_eq!(stop(&dir, true).0, 2, "require ignores stop_hook_active");
     std::fs::write(
         dir.join("fairlead.toml"),

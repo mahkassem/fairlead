@@ -87,11 +87,19 @@ pub fn live_evidence(workflows: &[Workflow]) -> Vec<String> {
 /// Whether a workflow on a schedule runs Fairlead's CI plan, which plans
 /// the full stage when the schedule starts it.
 pub fn scheduled_plan(workflows: &[Workflow]) -> bool {
-    workflows.iter().any(|w| {
-        let lines: Vec<&str> = w.text.lines().map(str::trim).collect();
-        lines.iter().any(|l| l.starts_with("schedule:"))
-            && lines.iter().any(|l| l.contains("fairlead ci plan"))
-    })
+    scheduled_workflow(workflows).is_some()
+}
+
+/// The file name of the first such workflow, as a message names it.
+pub fn scheduled_workflow(workflows: &[Workflow]) -> Option<&str> {
+    workflows
+        .iter()
+        .find(|w| {
+            let lines: Vec<&str> = w.text.lines().map(str::trim).collect();
+            lines.iter().any(|l| l.starts_with("schedule:"))
+                && lines.iter().any(|l| l.contains("fairlead ci plan"))
+        })
+        .map(|w| w.name.rsplit('/').next().unwrap_or(&w.name))
 }
 
 /// Runners and checks whose whole suite runs only at the full stage.
@@ -182,6 +190,11 @@ mod tests {
             "i.yml",
             "on:\n  schedule:\n    - cron: \"1 2 * * 1\"\nsteps:\n  - run: fairlead insights\n",
         );
+        let named = [
+            wf(".github/workflows/i.yml", &insights.text),
+            wf(".github/workflows/n.yml", &nightly.text),
+        ];
+        assert_eq!(scheduled_workflow(&named), Some("n.yml"));
         assert!(scheduled_plan(&[nightly]));
         assert!(!scheduled_plan(&[insights]));
     }

@@ -139,7 +139,7 @@ repositories are on the way
 
 ## What it does
 
-This README documents Fairlead 0.15.1. Each command, by what it's for:
+This README documents Fairlead 0.15.2. Each command, by what it's for:
 
 - **The test plan:** `plan`, `test --explain`, the import graph (`graph`) and
   coverage maps (`coverage import`). *Since 0.13.0:* `graph hubs` lists the
@@ -204,9 +204,13 @@ The [quick start](#quick-start) shows the first few, and the
 
 ## Status
 
-Pre-alpha. The latest release, v0.15.1, fixes `fairlead doctor` missing a
-production deploy whose workflow names the environment on its own line.
-0.15.0 left slow suites, such as
+Pre-alpha. The latest release, v0.15.2, makes `fairlead done` read
+`[[needs]]`: a suite this machine can't run is left out, and passes when
+the need names where it's proved. It also fixes the Stop hook, which now
+asks a session once per tree and never asks one that can't have edited, and
+says why a step failed or a suite holds the gate. 0.15.1 fixed
+`fairlead doctor` missing a production deploy whose workflow names the
+environment on its own line. 0.15.0 left slow suites, such as
 end-to-end and browser tests, to a scheduled run: a pull request runs only
 what the change reaches (`all_from`, or the project's `phase` before a live
 deployment). It also adds `[[needs]]`: a repository declares what some

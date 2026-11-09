@@ -1,6 +1,5 @@
 //! Checking `[[needs]]` on this machine (#259): a TCP connect, a command's
-//! exit status, or a variable. A spike for `fairlead doctor`, to measure the
-//! checks on real machines before the done gate relies on them.
+//! exit status, or a variable, for `fairlead doctor` and the done gate.
 
 use std::net::{SocketAddr, TcpStream, ToSocketAddrs};
 use std::path::Path;

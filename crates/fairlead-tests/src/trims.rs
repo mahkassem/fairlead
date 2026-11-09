@@ -49,7 +49,7 @@ pub fn trims(
             out.warnings.push(Warning {
                 code: "fairlead-config".into(),
                 path: Some(path.to_string()),
-                message: "Fairlead's own config changed; the plan is made with the new one, so the file doesn't select everything".into(),
+                message: "Fairlead's own config changed; the plan is made with the new one, so the file doesn't select everything, and it reaches no test through a file that reads it: it changes what Fairlead plans, not what the code does. A check whose paths match it still runs".into(),
             });
         }
         for (path, at_head, at_base) in sides(change) {
@@ -90,7 +90,7 @@ fn sides(change: &Change) -> Vec<(&str, bool, bool)> {
 
 /// `fairlead.toml` or a layer over it, such as `fairlead.ci.yaml`, at the
 /// root where the config is read from.
-fn is_config(path: &str) -> bool {
+pub fn is_config(path: &str) -> bool {
     let Some(stem) = ["toml", "yaml", "yml"]
         .iter()
         .find_map(|ext| path.strip_suffix(&format!(".{ext}")))
