@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.20.1 (2026-11-10)
+
+What running 0.20.0 on eight repositories got wrong.
+
+### Fixed
+
+- The block in AGENTS.md and CLAUDE.md read as stale once a Markdown formatter added blank lines inside it, so `setup --check` and the formatter each undid the other. A block that says the same lines is current, and `agents sync` leaves it as the formatter wants it.
+- The gate's advice about a new file no test is near named config files and notes, such as `.claude/settings.json`. It is for source files a test could import.
+- The `binary` item said "the project's own copy, matches package.json" where `package.json` pinned an older release, or listed fairlead with nothing installed. Both are open now, with `fairlead migrate --write` or the install command as the fix.
+- The first budgeted `fairlead done` on a runner with no recorded time ran none of the tests a blanket reached, so a one second suite owed nearly all of itself to CI. They count in the runner's first 20, unless it names a smoke set or its whole suite waits for a later stage.
+- The `smoke` item asked for a smoke set on every runner with over 50 test files. It no longer asks where the gate has timed the suite and it fits the budget whole.
+- Wording: "1 of 1 runner hasn't run", "last passed today", "under 0.1 s". `fairlead migrate` ends by naming `fairlead setup --check`, and `guard check` says the built-in secret-path rule runs at a commit where it used to say only "no rules configured".
+
+### Docs
+
+- `agents.files` adds to the default list; `{ replace = [...] }` names one file alone.
+- 0.19.1 was never published: its fixes shipped in 0.20.0.
+
 ## 0.20.0 (2026-11-10)
 
 Set up right. A first setup took seven commands found in three places, one `init` served every kind of repository, and nothing told a repository that its install was incomplete: of four repositories checked, two had no agent hooks and no git hook.

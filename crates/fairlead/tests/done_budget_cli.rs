@@ -225,6 +225,35 @@ fn a_blanket_runs_the_smoke_set_and_owes_the_rest() {
 }
 
 #[test]
+fn a_blanket_on_an_untimed_runner_with_no_smoke_set_runs_a_trial_that_times_it() {
+    let config = format!("{RUNNER}\n[plan]\nrun_all = [\"flags.txt\"]\n");
+    let dir = repo("blanketuntimed", &config, 3, &[("flags.txt", "off\n")]);
+    let (code, out) = fairlead(&dir, &["done"]);
+    assert_eq!(code, 0, "{out}");
+    // All four are reached only through the blanket, and no time is on record.
+    let step = unit_step(&out);
+    assert!(
+        step.contains("test/a.test.ts") && step.contains("m02"),
+        "{out}"
+    );
+    assert!(!out.contains("owed to CI"), "{out}");
+    assert_eq!(last_done(&dir)["reach"]["ran"], 4);
+
+    // With a smoke set the untimed runner runs that and owes the rest.
+    let smoked =
+        format!("{RUNNER}smoke = [\"test/a.test.ts\"]\n\n[plan]\nrun_all = [\"flags.txt\"]\n");
+    let dir2 = repo("blanketuntimedsmoke", &smoked, 3, &[("flags.txt", "off\n")]);
+    let (code, out) = fairlead(&dir2, &["done"]);
+    assert_eq!(code, 0, "{out}");
+    assert!(
+        out.contains("unit: 1 of 4 reached test files run here; 3 owed to CI before merge"),
+        "{out}"
+    );
+    std::fs::remove_dir_all(&dir).unwrap();
+    std::fs::remove_dir_all(&dir2).unwrap();
+}
+
+#[test]
 fn a_blanket_with_no_smoke_set_says_so_and_runs_whole_when_it_fits() {
     let config = format!("{RUNNER}\n[plan]\nrun_all = [\"flags.txt\"]\n");
     let dir = repo("nosmoke", &config, 3, &[("flags.txt", "off\n")]);

@@ -3,6 +3,7 @@
 //! was found and, when it is open, the one command or edit that closes it.
 //! Checking reads files and the event log; it never runs a test or a need.
 
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use fairlead_core::config::{AgentsWrite, Config, Loaded, Profile};
@@ -144,7 +145,8 @@ pub fn check_in(tree: &Tree, loaded: Option<&Loaded>, track: Track) -> Vec<Item>
     }
     items.push(config.map_or_else(|| later("ci", WAITS), |c| ci(&repo, c.profile, track)));
     if let (Some(c), Some(s)) = (planned, &suites) {
-        items.push(smoke(c, s));
+        let per_file = crate::done_budget::per_file_of(&events);
+        items.push(smoke(c, s, &per_file));
     }
     items.push(gate(&events, days(&today()).unwrap_or(0)));
     match (planned, written) {
@@ -309,14 +311,29 @@ fn binary(repo: &Path, config: Option<&Config>) -> Item {
     if let Some(first) = wrong.into_iter().next() {
         return open("binary", first, install_command(runner));
     }
+    if let Some(spec) = doctor_version::older_pin(this, &seen) {
+        return open(
+            "binary",
+            format!("package.json pins {spec} and this binary is {this}"),
+            "fairlead migrate --write",
+        );
+    }
+    if runner.is_some() && seen.installed.is_none() {
+        return open(
+            "binary",
+            format!("package.json lists fairlead and node_modules has no copy of it; this binary is {this}"),
+            install_command(runner),
+        );
+    }
     let whence = match (runner, crate::on_path()) {
         (Some(runner), _) => format!(", the project's own copy through `{runner}`"),
         (None, Some(_)) => " on PATH".to_string(),
         (None, None) => ", not on PATH, where the hooks look for it".to_string(),
     };
-    let pinned = match seen.spec {
-        Some(_) => ", matches package.json",
-        None => "",
+    let pinned = match (&seen.spec, doctor_version::pinned_here(this, &seen)) {
+        (Some(_), true) => ", matches package.json".to_string(),
+        (Some(spec), false) => format!(", within package.json's `{spec}`"),
+        (None, _) => String::new(),
     };
     ok("binary", format!("{this}{whence}{pinned}"))
 }
@@ -466,9 +483,13 @@ fn proved(config: &Config, suites: &Suites, record: &crate::setup_prove::Record)
     let unproved: Vec<&str> = ids.iter().copied().filter(|id| of(id).is_none()).collect();
     if !unproved.is_empty() {
         let text = format!(
-            "{} of {} haven't run a test file here: {}",
+            "{} of {} {} run a test file here: {}",
             unproved.len(),
             plural(ids.len(), "runner"),
+            match unproved.len() {
+                1 => "hasn't",
+                _ => "haven't",
+            },
             unproved.join(", ")
         );
         return open("proved", text, "fairlead setup");
@@ -478,7 +499,10 @@ fn proved(config: &Config, suites: &Suites, record: &crate::setup_prove::Record)
     }
     let each: Vec<String> = known
         .iter()
-        .map(|p| format!("{} {:.1} s", p.runner, p.seconds))
+        .map(|p| match p.seconds {
+            s if s < 0.05 => format!("{} under 0.1 s", p.runner),
+            s => format!("{} {s:.1} s", p.runner),
+        })
         .collect();
     ok(
         "proved",
@@ -600,7 +624,13 @@ fn ci(repo: &Path, profile: Profile, track: Track) -> Item {
     }
 }
 
-fn smoke(config: &Config, suites: &Suites) -> Item {
+fn smoke(config: &Config, suites: &Suites, per_file: &BTreeMap<String, f64>) -> Item {
+    let budget = f64::from(config.done.budget_seconds);
+    // A suite the gate has timed and that fits the budget runs whole.
+    let fits = |id: &str, files: usize| {
+        let whole = per_file.get(id).map(|t| t * files as f64);
+        whole.is_some_and(|w| budget > 0.0 && w <= budget)
+    };
     let needs: Vec<(&str, Vec<Pattern>)> = config
         .needs
         .items()
@@ -624,7 +654,7 @@ fn smoke(config: &Config, suites: &Suites) -> Item {
         .iter()
         .zip(&suites.files)
         .filter_map(|(runner, files)| {
-            if files.len() > SMOKE_OVER {
+            if files.len() > SMOKE_OVER && !fits(&runner.id, files.len()) {
                 return Some((runner, plural(files.len(), "test file")));
             }
             behind(files).map(|need| (runner, format!("need \"{need}\" covers it")))
@@ -665,7 +695,9 @@ fn smoke(config: &Config, suites: &Suites) -> Item {
     match ids.len() {
         0 => ok(
             "smoke",
-            format!("no runner has over {SMOKE_OVER} test files or a need"),
+            format!(
+                "no runner has a need, or over {SMOKE_OVER} test files that outlast the budget"
+            ),
         ),
         _ => ok("smoke", format!("`smoke` is named on {}", ids.join(", "))),
     }
@@ -679,11 +711,12 @@ fn gate(events: &[Value], today: i64) -> Item {
         .filter_map(|e| days(e["at"].as_str()?.get(..10)?).map(|at| today - at))
         .min();
     match last {
+        Some(d) if d <= 0 => ok("gate", "`fairlead done` last passed today"),
         Some(d) if d <= FRESH_DAYS => ok(
             "gate",
             format!(
                 "`fairlead done` last passed {} ago",
-                plural(d.max(0) as usize, "day")
+                plural(d as usize, "day")
             ),
         ),
         Some(d) => open(

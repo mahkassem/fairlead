@@ -160,17 +160,23 @@ fn proved_reads_the_record_as_open_later_or_ok() {
 #[test]
 fn smoke_is_wanted_past_50_test_files_or_behind_a_need() {
     let c = config(TWO);
+    let none = std::collections::BTreeMap::new();
     let many: Vec<String> = (0..51).map(|i| format!("src/{i}.test.ts")).collect();
     let big = suites(vec![many.iter().map(String::as_str).collect(), vec![]]);
-    let item = smoke(&c, &big);
+    let item = smoke(&c, &big, &none);
     assert_eq!(item.state, State::Open);
     assert_eq!(item.text, "unit: 51 test files, and it names no `smoke`");
+    // Timed at a tenth of a second a file, the 51 fit the budget and run whole.
+    let quick = std::collections::BTreeMap::from([("unit".to_string(), 0.1)]);
+    assert_eq!(smoke(&c, &big, &quick).state, State::Ok);
+    let slow = std::collections::BTreeMap::from([("unit".to_string(), 10.0)]);
+    assert_eq!(smoke(&c, &big, &slow).state, State::Open);
     let small = suites(vec![vec!["src/a.test.ts"], vec!["e2e/b.spec.ts"]]);
-    assert_eq!(smoke(&c, &small).state, State::Ok);
+    assert_eq!(smoke(&c, &small, &none).state, State::Ok);
     let needy = config(&format!(
         "{TWO}\n[[needs]]\nid = \"browser\"\nenv = \"BROWSER\"\ntests = [\"e2e/**\"]\n"
     ));
-    let item = smoke(&needy, &small);
+    let item = smoke(&needy, &small, &none);
     assert_eq!(
         item.text,
         "e2e: need \"browser\" covers it, and it names no `smoke`"
@@ -179,9 +185,9 @@ fn smoke_is_wanted_past_50_test_files_or_behind_a_need() {
         "{}smoke = [\"e2e/b.spec.ts\"]\n\n[[needs]]\nid = \"browser\"\nenv = \"BROWSER\"\ntests = [\"e2e/**\"]\n",
         TWO
     ));
-    assert_eq!(smoke(&named, &small).state, State::Ok);
+    assert_eq!(smoke(&named, &small, &none).state, State::Ok);
     let stale = config(&format!("{TWO}smoke = [\"e2e/gone.spec.ts\"]\n"));
-    let item = smoke(&stale, &small);
+    let item = smoke(&stale, &small, &none);
     assert_eq!(item.state, State::Open);
     assert_eq!(
         item.text,
@@ -252,5 +258,49 @@ fn the_binary_is_open_below_the_floor_and_the_fix_is_how_the_repository_installs
         item.text
     );
     assert_eq!(item.fix.as_deref(), Some("pnpm install"));
+    // A pin older than the binary: the hooks would run another release.
+    std::fs::write(
+        dir.join("package.json"),
+        r#"{"devDependencies": {"fairlead": "0.1.0"}}"#,
+    )
+    .unwrap();
+    let item = binary(&dir, None);
+    assert_eq!(item.state, State::Open);
+    assert!(
+        item.text
+            .starts_with("package.json pins 0.1.0 and this binary is "),
+        "{}",
+        item.text
+    );
+    assert_eq!(item.fix.as_deref(), Some("fairlead migrate --write"));
+    // The pin is right and nothing is installed under node_modules.
+    let here = env!("CARGO_PKG_VERSION");
+    std::fs::write(
+        dir.join("package.json"),
+        format!(r#"{{"devDependencies": {{"fairlead": "{here}"}}}}"#),
+    )
+    .unwrap();
+    let item = binary(&dir, None);
+    assert_eq!(item.state, State::Open);
+    assert!(
+        item.text.contains("node_modules has no copy"),
+        "{}",
+        item.text
+    );
+    assert_eq!(item.fix.as_deref(), Some("pnpm install"));
+    let installed = dir.join("node_modules/fairlead");
+    std::fs::create_dir_all(&installed).unwrap();
+    std::fs::write(
+        installed.join("package.json"),
+        format!(r#"{{"version": "{here}"}}"#),
+    )
+    .unwrap();
+    let item = binary(&dir, None);
+    assert_eq!(item.state, State::Ok, "{}", item.text);
+    assert!(
+        item.text.ends_with(", matches package.json"),
+        "{}",
+        item.text
+    );
     let _ = std::fs::remove_dir_all(&dir);
 }

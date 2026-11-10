@@ -28,6 +28,13 @@ fn command(dir: &Path, program: &str, args: &[&str]) -> Command {
     cmd.env("PATH", std::env::join_paths(path).unwrap())
         .env("HOME", dir)
         .env("GIT_CONFIG_NOSYSTEM", "1")
+        // A commit starts maintenance in the background, which would still
+        // be writing under .git while a test compares the tree.
+        .env("GIT_CONFIG_COUNT", "2")
+        .env("GIT_CONFIG_KEY_0", "maintenance.auto")
+        .env("GIT_CONFIG_VALUE_0", "false")
+        .env("GIT_CONFIG_KEY_1", "gc.auto")
+        .env("GIT_CONFIG_VALUE_1", "0")
         .env("GIT_AUTHOR_NAME", "t")
         .env("GIT_AUTHOR_EMAIL", "t@example.com")
         .env("GIT_COMMITTER_NAME", "t")
@@ -120,6 +127,21 @@ fn snapshot(dir: &Path) -> BTreeMap<PathBuf, Vec<u8>> {
     out
 }
 
+/// The paths that differ between two snapshots, for a failure to name.
+fn changed(
+    before: &BTreeMap<PathBuf, Vec<u8>>,
+    after: &BTreeMap<PathBuf, Vec<u8>>,
+) -> Vec<PathBuf> {
+    let all = before.keys().chain(after.keys());
+    let mut out: Vec<PathBuf> = all
+        .filter(|p| before.get(*p) != after.get(*p))
+        .cloned()
+        .collect();
+    out.sort();
+    out.dedup();
+    out
+}
+
 fn read(dir: &Path, path: &str) -> String {
     std::fs::read_to_string(dir.join(path)).unwrap_or_default()
 }
@@ -209,7 +231,12 @@ fn a_second_run_fixes_nothing_more_and_prints_no_fixed_line() {
     assert_eq!(code, 0, "{second}");
     assert!(!second.contains("fixed"), "{second}");
     assert_eq!(second, first.replace("  fixed  ", "  ok     "));
-    assert!(before == snapshot(&dir), "the second run wrote something");
+    let after = snapshot(&dir);
+    assert!(
+        before == after,
+        "the second run wrote {:?}",
+        changed(&before, &after)
+    );
 }
 
 #[cfg(unix)]
@@ -225,7 +252,7 @@ fn a_runner_is_proved_on_its_smallest_test_file_and_the_mvp_track_shows_ci_open_
         "{out}"
     );
     assert!(
-        out.contains("\n  fixed  proved     1 runner ran one test file: vitest 0."),
+        out.contains("\n  fixed  proved     1 runner ran one test file: vitest "),
         "{out}"
     );
     assert!(
@@ -233,7 +260,7 @@ fn a_runner_is_proved_on_its_smallest_test_file_and_the_mvp_track_shows_ci_open_
         "{out}"
     );
     assert!(
-        out.contains("\n  ok     smoke      no runner has over 50 test files or a need\n"),
+        out.contains("\n  ok     smoke      no runner has a need, or over 50 test files that outlast the budget\n"),
         "{out}"
     );
     assert_eq!(read(&dir, "ran.log"), "src/b.test.ts\n");
@@ -405,7 +432,12 @@ fn check_and_dry_run_change_nothing_on_disk_and_exit_1_while_a_required_item_is_
         "{out}"
     );
     assert!(out.ends_with("Fix them and run `fairlead setup` again. `fairlead setup --check` shows this list any time.\n"), "{out}");
-    assert!(before == snapshot(&dir), "--check wrote something");
+    let after = snapshot(&dir);
+    assert!(
+        before == after,
+        "--check wrote {:?}",
+        changed(&before, &after)
+    );
 
     let (code, out, _) = setup(&dir, &["--dry-run"]);
     assert_eq!(code, 1, "{out}");
@@ -417,7 +449,12 @@ fn check_and_dry_run_change_nothing_on_disk_and_exit_1_while_a_required_item_is_
         out.ends_with("Nothing was changed. `fairlead setup` applies these.\n"),
         "{out}"
     );
-    assert!(before == snapshot(&dir), "--dry-run wrote something");
+    let after = snapshot(&dir);
+    assert!(
+        before == after,
+        "--dry-run wrote {:?}",
+        changed(&before, &after)
+    );
 }
 
 #[test]

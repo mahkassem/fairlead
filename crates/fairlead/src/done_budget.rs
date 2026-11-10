@@ -166,11 +166,19 @@ pub fn classes(
 /// Each runner's seconds for one test file: the median over its recent
 /// passing `done` steps that recorded how many files they named.
 pub fn seconds_per_file(log: &str) -> BTreeMap<String, f64> {
+    let events: Vec<serde_json::Value> = log
+        .lines()
+        .filter(|l| l.contains("\"stage\":\"done\""))
+        .filter_map(|l| serde_json::from_str(l).ok())
+        .collect();
+    per_file_of(&events)
+}
+
+/// The same, from events already read; those of another stage name no
+/// runner step with a file count, so they add nothing.
+pub fn per_file_of(events: &[serde_json::Value]) -> BTreeMap<String, f64> {
     let mut seen: BTreeMap<String, Vec<f64>> = BTreeMap::new();
-    for line in log.lines().filter(|l| l.contains("\"stage\":\"done\"")) {
-        let Ok(event) = serde_json::from_str::<serde_json::Value>(line) else {
-            continue;
-        };
+    for event in events.iter().filter(|e| e["stage"] == "done") {
         for step in event["steps"].as_array().into_iter().flatten() {
             let (Some(id), Some(seconds), Some(files)) = (
                 step["id"].as_str(),
@@ -263,7 +271,8 @@ pub struct Inputs<'a> {
 /// The steps with each runner cut to what fits the budget, nearest tests
 /// first, and what was left as debts. A changed test always runs. A runner
 /// with no recorded time runs its nearest `TRIAL` files, which gives the
-/// next run its time. A suite reached only through a blanket runs whole
+/// next run its time; those reached only through a blanket count among
+/// them unless the runner names a smoke set or its suite waits (`all_from`). A suite reached only through a blanket runs whole
 /// when all of it fits what's left, and otherwise only its smoke set.
 pub fn cut(inputs: &Inputs, steps: Vec<Invocation>) -> Cut {
     let Inputs {
@@ -303,6 +312,10 @@ pub fn cut(inputs: &Inputs, steps: Vec<Invocation>) -> Cut {
     let mut owed: BTreeMap<(&str, &'static str), usize> = BTreeMap::new();
     let mut blanket: BTreeMap<&str, Vec<String>> = BTreeMap::new();
     let mut trial: BTreeMap<&str, usize> = BTreeMap::new();
+    let no_trial: BTreeSet<&str> = (planned.config.tests.runners.items().iter())
+        .filter(|r| !r.smoke.is_empty() || r.all_from.is_some())
+        .map(|r| r.id.as_str())
+        .collect();
     for (class, _, path, runner) in tests {
         let time = per_file.get(runner).copied();
         let verdict = match (class, time) {
@@ -311,7 +324,9 @@ pub fn cut(inputs: &Inputs, steps: Vec<Invocation>) -> Cut {
                 blanket.entry(runner).or_default().push(path);
                 continue;
             }
-            (Class::Blanket, None) => Err("blanket"),
+            // Untimed, and either a smoke set stood for it above or its whole
+            // suite is one that waits for a later stage: no trial of it here.
+            (Class::Blanket, None) if no_trial.contains(runner) => Err("blanket"),
             (_, Some(t)) if spent + t <= budget_s => Ok(()),
             (_, Some(_)) => Err("budget"),
             (_, None) => {
@@ -520,6 +535,8 @@ pub fn advice(
         .iter()
         .filter(|c| c.status == Status::Added)
         .map(|c| c.path.as_str())
+        // Only code a test could import: a config file or a note has none.
+        .filter(|p| fairlead_lang::tree::Tree::is_source(p))
         .filter(|p| !suites.tests.contains(*p) && !named_like_a_test(p))
         .filter(|p| !tested(planned, suites, p))
         .collect();

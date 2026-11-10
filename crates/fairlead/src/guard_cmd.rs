@@ -122,7 +122,13 @@ pub fn run(action: GuardAction, sets: Vec<String>, cwd: &Path) -> ExitCode {
         guard.is_empty() && !(staged_only && guard.paths.is_some())
     };
     if nothing {
-        println!("guard: no rules configured");
+        // The secret-path rule needs no config, and reads only what a commit adds.
+        match !push && guard.is_empty() && guard.paths.is_some() {
+            true => println!(
+                "guard: no rules configured; the built-in secret-path rule runs at a commit (`--staged`)"
+            ),
+            false => println!("guard: no rules configured"),
+        }
         return ExitCode::SUCCESS;
     }
     if let GuardAction::Compare { file, rules, maps } = &action {
