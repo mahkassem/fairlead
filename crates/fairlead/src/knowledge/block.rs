@@ -291,7 +291,7 @@ mod tests {
     #[test]
     fn the_block_stays_within_forty_lines_and_says_how_many_more() {
         let small = render("l", &lists(3, 4));
-        assert_eq!(small.len(), 10 + 2 + 3 + 2 + 4);
+        assert_eq!(small.len(), 13 + 2 + 3 + 2 + 4);
         assert!(!small.iter().any(|l| l.contains("more:")));
         let big = render("l", &lists(30, 25));
         assert_eq!(big.len(), MAX_LINES);
@@ -299,7 +299,7 @@ mod tests {
         assert_eq!(more.len(), 2, "{big:#?}");
         let listed_l = big.iter().filter(|l| l.starts_with("- Lesson")).count();
         let listed_s = big.iter().filter(|l| l.starts_with("- s")).count();
-        assert_eq!(listed_l + listed_s, MAX_LINES - 10 - 2 * 3);
+        assert_eq!(listed_l + listed_s, MAX_LINES - 13 - 2 * 3);
         assert_eq!(
             *more[0],
             format!("- … {} more: `fairlead lessons list`", 30 - listed_l)
