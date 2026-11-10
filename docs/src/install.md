@@ -53,11 +53,11 @@ that file with the same arguments:
 - uses: actions/cache@v4
   with:
     path: ${{ runner.temp }}/fairlead
-    key: fairlead-${{ runner.os }}-0.19.1
+    key: fairlead-${{ runner.os }}-0.20.0
 - run: |
     mkdir -p "$RUNNER_TEMP/fairlead"
     test -x "$RUNNER_TEMP/fairlead/fairlead" || curl -fsSL --retry 3 \
-      https://github.com/mahkassem/fairlead/releases/download/v0.19.1/fairlead-x86_64-unknown-linux-gnu.tar.xz \
+      https://github.com/mahkassem/fairlead/releases/download/v0.20.0/fairlead-x86_64-unknown-linux-gnu.tar.xz \
       | tar xJ --strip-components 1 -C "$RUNNER_TEMP/fairlead"
 - run: npm ci
   env:

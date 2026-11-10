@@ -520,7 +520,8 @@ pub fn advice(
         .iter()
         .filter(|c| c.status == Status::Added)
         .map(|c| c.path.as_str())
-        .filter(|p| !suites.tests.contains(*p) && !tested(planned, suites, p))
+        .filter(|p| !suites.tests.contains(*p) && !named_like_a_test(p))
+        .filter(|p| !tested(planned, suites, p))
         .collect();
     if let Some(first) = lonely.first() {
         let more = match lonely.len() - 1 {
@@ -532,6 +533,20 @@ pub fn advice(
         ));
     }
     out
+}
+
+/// A test file the config's patterns don't claim, such as one a script
+/// runs: it is a test, so it needs no test of its own.
+fn named_like_a_test(path: &str) -> bool {
+    let name = path.rsplit('/').next().unwrap_or(path);
+    let in_tests = path
+        .split('/')
+        .any(|part| matches!(part, "test" | "tests" | "__tests__" | "spec" | "e2e"));
+    in_tests
+        || [".test.", ".spec.", "_test.", "_spec."]
+            .iter()
+            .any(|mark| name.contains(mark))
+        || name.starts_with("test_")
 }
 
 /// Whether a test imports `path`, directly or through other files. A

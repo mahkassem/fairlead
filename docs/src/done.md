@@ -83,7 +83,7 @@ done: e2e: 1 of 44 reached test files run here; 43 owed to CI before merge: 43 r
 - **Under a budget the gate names the files it runs**, so a runner's `all_command` isn't used and no suite waits for a later stage: what doesn't fit is owed instead. `fairlead done --full`, `--budget 0` and `done.budget_seconds = 0` run the whole plan as before, with `all_command` and the waiting below.
 - **An unmet [need](#needs)** leaves its files out before the budget is counted, as before.
 - **[The Stop hook](#the-stop-hook)** reads the record as before. A budgeted pass is a pass, debts and all, so `on_stop = "require"` no longer asks an agent for a run its machine can't finish.
-- **Advice** follows the steps when the plan backs it, each line starting `done: advice:`. Three kinds: a suite a blanket reaches whose runner names no `smoke` set; a new source file no test imports, directly or through other files; and a step that alone took longer than the whole budget. Advice never fails the gate. It is for the pull request's notes or a follow-up, and the gate says so.
+- **Advice** follows the steps when the plan backs it, each line starting `done: advice:`. Three kinds: a suite a blanket reaches whose runner names no `smoke` set; a new source file no test imports, directly or through other files (*since 0.20.0* a file named like a test is left out, wherever `tests.match` puts it); and a step that alone took longer than the whole budget. Advice never fails the gate. It is for the pull request's notes or a follow-up, and the gate says so.
 
 *Since 0.15.0:* with no budget (`--full`, or `done.budget_seconds = 0`), a suite whose whole run waits for a later stage ([Whole suites](plan.md#whole-suites-at-a-later-stage)) runs only the tests the change reaches, and the gate prints one line for what it left out. When the change reaches most of such a suite, the gate passes the steps it ran but isn't finished: the record says `deferred`, `done --check` stays false and the Stop hook sends the agent back, until `fairlead done --full`, which runs every whole suite, passes on the same tree. In a project whose `phase` is `early`, nothing is deployed, so the gate passes and the scheduled run proves the suite. In `testing`, deferred holds until `done --full`; use `early` when nobody outside the team uses the build. *Since 0.15.2:* every line that reports a held suite names it, the phase that holds it, the share the change reaches, and the ways forward ([The project's phase](plan.md#the-projects-phase)); `done --check` says why a tree hasn't passed (not run on this tree, failed at a named step, or a suite waits) rather than only that it hasn't.
 
@@ -136,7 +136,7 @@ on_stop = "ask"   # off | ask | require
 ```toml
 [[needs]]
 id = "smtp"
-tcp = ["localhost:1025", "{env:MAIL_HOST}:1025"]  # met when any one accepts a connection
+tcp = ["localhost:1025", "{env:MAIL_HOST}:1025"]  # met when any one accepts a connection, whatever answers
 tests = ["tests/Feature/Mail/**"]
 proved_in = "CI (services job)"
 hint = "Start a local SMTP catcher on port 1025"

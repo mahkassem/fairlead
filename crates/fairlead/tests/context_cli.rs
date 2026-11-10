@@ -332,6 +332,10 @@ fn the_session_start_hook_answers_with_resume_and_is_silent_without_a_brief() {
 
     let empty = repo("hookempty", RUNNER);
     let call = json!({"session_id": "s", "cwd": empty, "source": "startup"});
+    // The day's first session hears of the open setup, and only of that.
+    let first = session_start(&empty, &call.to_string());
+    assert!(first.contains("fairlead: setup has "), "{first}");
+    assert!(!first.contains("resume   "), "{first}");
     assert_eq!(session_start(&empty, &call.to_string()), "");
     assert_eq!(session_start(&empty, "not json"), "");
 }

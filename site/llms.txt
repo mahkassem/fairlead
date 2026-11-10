@@ -1,0 +1,53 @@
+# Fairlead
+
+> Fairlead is a single binary that keeps a coding agent on course in a repository: it enforces the project's own rules as the agent writes, plans only the tests a change can reach, runs a done gate before a change counts as finished, and records what was left for CI to prove. Everything about a repository lives in its `fairlead.toml`. `fairlead setup` sets a repository up and prints a checklist where every open item names one fix; `fairlead guide <topic>` prints a short guide for the installed release.
+
+An agent with a shell starts with the first link. The change loop is three commands: `fairlead brief <paths>` before an edit, `fairlead done` before it's finished, `fairlead receipt` after. A hook that refuses an edit names the rule to fix, and a gate that owes tests to CI has passed: put the block `fairlead receipt --pr` prints in the pull request.
+
+## Start
+
+- [For agents](https://mahkassem.github.io/fairlead/docs/for-agents.html): the six built-in guides on one page: setup, the change loop, the done gate, CI, upgrading and troubleshooting
+- [Start here: which project is yours?](https://mahkassem.github.io/fairlead/docs/start.html): what `fairlead setup` does on a new, MVP, ongoing or legacy repository, and what done looks like on each
+- [Install](https://mahkassem.github.io/fairlead/docs/install.html): the shell installer, npm, Homebrew, Cargo and Composer, the platforms, and `fairlead init`
+- [Troubleshooting](https://mahkassem.github.io/fairlead/docs/troubleshooting.html): one entry per setup item id: the symptom, the cause and the fix
+- [Configuration](https://mahkassem.github.io/fairlead/docs/config.html): `fairlead.toml`, its layers, environments and keys
+- [Blueprints](https://mahkassem.github.io/fairlead/docs/blueprints.html): a named starting point for a kind of project, written once by `fairlead init --blueprint`
+- [Upgrading](https://mahkassem.github.io/fairlead/docs/migrate.html): `fairlead migrate`, and what each release changed
+
+## The change loop
+
+- [The brief](https://mahkassem.github.io/fairlead/docs/brief.html): before an edit, what the paths reach and what has to pass
+- [The done gate](https://mahkassem.github.io/fairlead/docs/done.html): the steps a change passes, the budget, what is owed to CI, needs and the Stop hook
+- [The receipt and next](https://mahkassem.github.io/fairlead/docs/receipt.html): the change against its brief, where each step ran, and the one step that's due
+- [Context and resume](https://mahkassem.github.io/fairlead/docs/context.html): the brief with what to read first, and where the last session on a branch stopped
+- [AGENTS.md and CLAUDE.md](https://mahkassem.github.io/fairlead/docs/agents.html): the block `fairlead agents sync` keeps in the files an agent reads first
+- [Find](https://mahkassem.github.io/fairlead/docs/find.html): one search over lessons, skills, docs headings and declared names
+- [Lessons](https://mahkassem.github.io/fairlead/docs/lessons.html): what a project learned, one small file each, offered when a change reaches it
+- [Skills](https://mahkassem.github.io/fairlead/docs/skills.html): routing each SKILL.md to the code it applies to
+- [MCP server](https://mahkassem.github.io/fairlead/docs/mcp.html): the read-only commands as MCP tools over stdio
+
+## Rules
+
+- [Guard rules](https://mahkassem.github.io/fairlead/docs/guard.html): the project's rules at write, commit, push and in CI; the write hook, the git hook and the ratchet
+- [Pull request rules](https://mahkassem.github.io/fairlead/docs/pr.html): branch names, ticket keys, body headings, and claims tied to a passing receipt
+- [Trackers](https://mahkassem.github.io/fairlead/docs/trackers.html): linking a change to the task its branch names
+
+## Test plans
+
+- [Test plan](https://mahkassem.github.io/fairlead/docs/plan.html): which tests and checks a change can affect, and why each is in
+- [Import graph](https://mahkassem.github.io/fairlead/docs/graph.html): the file-level graph the plan walks, and how to inspect it
+- [Plans in CI](https://mahkassem.github.io/fairlead/docs/ci.html): `fairlead ci plan`, `ci run`, `ci report`, stages, the workflow `ci workflow` writes, and the ledger that says whether a red check is the change's own
+- [Workspaces](https://mahkassem.github.io/fairlead/docs/workspace.html): a folder of repositories planned side by side
+
+## Measuring
+
+- [Readiness score](https://mahkassem.github.io/fairlead/docs/score.html): `fairlead doctor --score`, points out of 100 on a fixed rubric
+- [Insights](https://mahkassem.github.io/fairlead/docs/insights.html): what the event log and CI's reports say about the setup, and the scorecard for the gate
+- [Replay](https://mahkassem.github.io/fairlead/docs/replay.html): the plan measured against real CI failures from the repository's history
+- [Tokens and cost](https://mahkassem.github.io/fairlead/docs/tokens.html): tokens and cost per agent session, read as counts only
+
+## Optional
+
+- [Introduction](https://mahkassem.github.io/fairlead/docs/introduction.html): what Fairlead is and which release the book documents
+- [Benchmarks](https://mahkassem.github.io/fairlead/docs/benchmarks.html): replay results on public repositories
+- [Roadmap](https://mahkassem.github.io/fairlead/docs/roadmap.html): the milestones and their status

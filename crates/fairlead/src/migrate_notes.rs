@@ -323,6 +323,13 @@ pub const RELEASES: &[(&str, &[Note])] = &[
         }],
     ),
     ("0.19.1", &[]),
+    (
+        "0.20.0",
+        &[Note {
+            text: "Run `fairlead setup`: it installs what the repository is missing (the agent hooks, the git hook, the block in AGENTS.md, which gained three lines) and lists the rest with one fix for each. While a required item is open, `fairlead setup --check` exits 1, the day's first session is told, and `fairlead ci plan` warns in CI. A `smoke` entry that names no test file is now a warning at `config check`.",
+            applies: always,
+        }],
+    ),
 ];
 
 /// Config tables and keys by the release that added them. The top-level

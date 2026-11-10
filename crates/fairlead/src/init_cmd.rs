@@ -5,7 +5,6 @@
 use std::path::Path;
 use std::process::ExitCode;
 
-use fairlead_core::config;
 use fairlead_core::pattern::Pattern;
 use serde_json::Value;
 
@@ -74,7 +73,22 @@ struct Found {
 /// repository set up with only the guard, once it has tests.
 pub fn runners_now(root: &Path) -> Vec<&'static str> {
     let files = fairlead_lang::tree::Tree::scan(&fairlead_lang::tree::plain(root)).files;
-    detect(root, &files).runners.iter().map(|r| r.id).collect()
+    runners_in(root, &files)
+}
+
+/// `runners_now` for a caller that has the tree's files already.
+pub fn runners_in(root: &Path, files: &[String]) -> Vec<&'static str> {
+    detect(root, files).runners.iter().map(|r| r.id).collect()
+}
+
+/// The config `init` writes here with no flags, and whether it is the
+/// guard-only one, for `fairlead setup`.
+pub fn plain(root: &Path, files: &[String]) -> (String, bool) {
+    let found = detect(root, files);
+    if found.runners.is_empty() && found.checks.is_empty() {
+        return (crate::init_guard::render(root, files), true);
+    }
+    (render(&found), false)
 }
 
 pub fn run(args: InitArgs, cwd: &Path) -> ExitCode {
@@ -131,30 +145,10 @@ pub fn run(args: InitArgs, cwd: &Path) -> ExitCode {
         }
         return ExitCode::SUCCESS;
     }
-    // Checked beside the target before it replaces it, so a config that
-    // doesn't load never lands; packs a blueprint names resolve from there.
-    let draft = root.join(".fairlead.init.toml");
-    if let Err(e) = std::fs::write(&draft, &text) {
-        eprintln!("fairlead: could not write {}: {e}", draft.display());
-        return ExitCode::from(2);
-    }
-    let checked = match config::load_file(&draft, &[]) {
-        Ok(loaded) => config::validate(&loaded.config)
-            .into_iter()
-            .map(|p| format!("{}: {}", p.key, p.message))
-            .collect::<Vec<_>>(),
-        Err(e) => vec![format!("the config init made doesn't load: {e}")],
-    };
-    if !checked.is_empty() {
-        let _ = std::fs::remove_file(&draft);
-        for line in checked {
+    if let Err(lines) = crate::init_guard::land(&root, &text) {
+        for line in lines {
             eprintln!("fairlead: {line}");
         }
-        return ExitCode::from(2);
-    }
-    if let Err(e) = std::fs::rename(&draft, &target) {
-        let _ = std::fs::remove_file(&draft);
-        eprintln!("fairlead: could not write {}: {e}", target.display());
         return ExitCode::from(2);
     }
     println!("fairlead: wrote {}", target.display());

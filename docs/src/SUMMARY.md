@@ -4,7 +4,10 @@
 
 # Get started
 
+- [Start here](start.md)
 - [Install](install.md)
+- [For agents](for-agents.md)
+- [Troubleshooting](troubleshooting.md)
 - [Configuration](config.md)
 - [Blueprints](blueprints.md)
 - [Upgrading](migrate.md)

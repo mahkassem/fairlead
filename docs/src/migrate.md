@@ -450,6 +450,28 @@ test files go, or the runner runs its whole suite on every change that
 reaches one of its tests. `fairlead init` gives Playwright specs their own
 runner, and sets up the guard alone in a repository with no tests yet.
 
+### To 0.20.0
+
+`fairlead migrate --write` updates the hooks and the pins as before. Then
+run `fairlead setup` once:
+
+- **It applies what the repository is missing and lists the rest.** The
+  agent hooks, the git hook and the block in AGENTS.md and CLAUDE.md are
+  written where they are missing or stale; the block gained three lines,
+  so it is stale in every repository that has one. What `setup` can't do
+  itself is listed as `open` with one fix under it
+  ([Start here](start.md)).
+- **A repository with a gap hears about it.** While a required item is
+  open, `fairlead setup --check` exits 1, the first session of the day
+  starts with one line naming the items, and `fairlead ci plan` prints a
+  warning for what the checkout shows. Nothing fails a gate or a CI job.
+- **A `smoke` entry that names no test file is a warning** at
+  `config check` and an open, not required, `smoke` item. Until 0.20.0 it
+  was dropped without a word, as after a rename.
+- **`fairlead guide`** prints a short guide for an agent on `setup`,
+  `loop`, `gate`, `ci`, `upgrade` or `troubleshoot`
+  ([For agents](for-agents.md)).
+
 ## Going back to an older release
 
 Install the older release, then run its `hooks uninstall` and

@@ -145,8 +145,17 @@ repositories are on the way
 
 ## What it does
 
-This README documents Fairlead 0.19.1. Each command, by what it's for:
+This README documents Fairlead 0.20.0. Each command, by what it's for:
 
+- **Setting a repository up:** `setup` and `guide`. *Since 0.20.0:* `setup`
+  writes a first config when there is none, installs the agent hooks and the
+  git hook, syncs the block in AGENTS.md, runs each runner's smallest test
+  file once, and prints a checklist in which every open item has one fix.
+  `setup --check` prints the list and changes nothing, and exits 1 while a
+  required item is open. The list is ordered for the kind of repository it
+  detects (new, mvp, ongoing or legacy; `--track` overrides). `guide` prints
+  a short guide for an agent on `setup`, `loop`, `gate`, `ci`, `upgrade` or
+  `troubleshoot`.
 - **The test plan:** `plan`, `test --explain`, the import graph (`graph`) and
   coverage maps (`coverage import`). *Since 0.13.0:* `graph hubs` lists the
   files that link the most changes to the most tests and the barrier that
@@ -226,10 +235,12 @@ The [quick start](#quick-start) shows the first few, and the
 
 ## Status
 
-Pre-alpha. The latest release, v0.19.1, fixes what a first setup got
-wrong: Playwright specs get their own runner, a repository with no tests
-yet starts with the guard, and a runner that names no `{files}` is warned
-about. 0.19.0 gave the done gate a budget: it
+Pre-alpha. The latest release, v0.20.0, makes a first setup one command:
+`fairlead setup` applies what is local, then lists what is left with one
+fix for each, ordered for the kind of repository it finds (new, mvp,
+ongoing or legacy), and `fairlead guide` prints the guide an agent needs
+for each step. A session and CI say so when a repository's setup has gaps.
+The release before it gave the done gate a budget: it
 runs the tests nearest the change until the budget is spent and records
 what else the change reaches as owed to CI, so the gate fits the machine
 it runs on and no suite holds it. A suite reached only through a blanket
@@ -299,14 +310,15 @@ a CI cache ([Install](https://mahkassem.github.io/fairlead/docs/install.html#a-b
 ## Quick start
 
 ```sh
-fairlead init                                # a first fairlead.toml, from what the repository shows
-fairlead config check                        # validate fairlead.toml
-fairlead plan --base main                    # the tests and checks this branch can affect
-fairlead test --explain src/a.test.ts        # why that test is in the plan, or isn't
-fairlead graph why src/a.test.ts src/util.ts # how one file depends on another
-fairlead brief src/util.ts                   # before an edit: what it reaches and what must pass
-fairlead done                                # the gate a change passes before it's finished
+fairlead setup               # set the repository up, then list what is still open, each with its one fix
+fairlead brief src/util.ts   # before an edit: what it reaches and what must pass
+fairlead done                # the gate a change passes before it's finished
+fairlead receipt             # after it: the change against its brief, and the gate's state
 ```
+
+[Start here](https://mahkassem.github.io/fairlead/docs/start.html) says what
+`setup` does on a new, MVP, ongoing or legacy repository, and what done looks
+like on each.
 
 ## Documentation
 

@@ -104,7 +104,17 @@ pub fn run(args: ResumeArgs, cwd: &Path) -> ExitCode {
 fn hook() -> ExitCode {
     let mut input = String::new();
     let _ = std::io::Read::read_to_string(&mut std::io::stdin(), &mut input);
-    if let Some(context) = hook_context(&input) {
+    // A session is also told when the setup it runs under has gaps.
+    let dir = serde_json::from_str::<serde_json::Value>(&input)
+        .ok()
+        .and_then(|call| call["cwd"].as_str().map(PathBuf::from))
+        .or_else(|| std::env::current_dir().ok());
+    let setup = dir.and_then(|d| crate::setup_items::session_line(&d));
+    let context = match (hook_context(&input), setup) {
+        (Some(resume), Some(setup)) => Some(format!("{resume}\n{setup}")),
+        (resume, setup) => resume.or(setup),
+    };
+    if let Some(context) = context {
         let answer = serde_json::json!({
             "hookSpecificOutput": { "hookEventName": "SessionStart", "additionalContext": context }
         });

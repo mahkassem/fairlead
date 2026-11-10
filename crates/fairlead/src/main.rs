@@ -26,6 +26,7 @@ mod find_cmd;
 mod graph_cmd;
 mod graph_hubs;
 mod guard_cmd;
+mod guide_cmd;
 mod head;
 mod hook_cmd;
 mod hooks_cmd;
@@ -56,7 +57,11 @@ mod replay_cmd;
 mod resume_cmd;
 mod reuse;
 mod score_cmd;
+mod setup_cmd;
 mod setup_hints;
+mod setup_items;
+mod setup_prove;
+mod setup_track;
 mod since_green;
 mod skills_cmd;
 mod skills_eval_cmd;
@@ -97,6 +102,11 @@ enum Command {
     Doctor {
         #[command(flatten)]
         args: score_cmd::DoctorArgs,
+    },
+    /// Set up what is local and reversible (a first config, the hooks, the agents block), then list what is still open with the one fix for each.
+    Setup {
+        #[command(flatten)]
+        args: setup_cmd::SetupArgs,
     },
     /// Write a first fairlead.toml from what the repository shows: its test runners, and a check for each language the graph doesn't read.
     Init {
@@ -200,6 +210,12 @@ enum Command {
     Context {
         #[command(flatten)]
         args: context_cmd::ContextArgs,
+    },
+    /// A short guide for an agent, matching this release: setup, the change
+    /// loop, the gate, CI, upgrading and troubleshooting.
+    Guide {
+        #[command(flatten)]
+        args: guide_cmd::GuideArgs,
     },
     /// For a new session: the last brief on this branch, what changed since,
     /// the done gate, `next` and the lessons the branch added.
@@ -373,6 +389,7 @@ fn doctor_report(dir: &Path, opts: &LoadOptions) -> String {
         }
     }
     hooks.push_str(&ledger_text::doctor_lines(&graph_cmd::repo_root(dir)));
+    hooks.push_str(&setup_items::doctor_line(dir, loaded.as_ref().ok()));
     let profile = match &loaded {
         Ok(l) if !l.config.profile.is_full() => {
             "profile: guard (no test plan; `fairlead done` runs `guard check` and `pr check`)\n"
@@ -464,6 +481,12 @@ fn check(loaded: &Loaded) -> ExitCode {
     }
     for line in setup_hints::runner_warnings(&loaded.config) {
         eprintln!("warning: {line}");
+    }
+    let runners = loaded.config.tests.runners.items();
+    if runners.iter().any(|r| !r.smoke.is_empty()) {
+        for line in setup_hints::smoke_warnings(&check_tree(loaded).files, &loaded.config) {
+            eprintln!("warning: {line}");
+        }
     }
     let mut problems = loaded.problems.clone();
     problems.extend(fairlead_core::config::plan_globs(&loaded.config));
@@ -612,6 +635,7 @@ fn main() -> ExitCode {
             );
             ExitCode::SUCCESS
         }
+        Some(Command::Setup { args }) => setup_cmd::run(args, &cwd()),
         Some(Command::Init { args }) => init_cmd::run(args, &cwd()),
         Some(Command::Config { action, sets }) => run_config(action, sets),
         Some(Command::Graph { action, sets }) => graph_cmd::run(action, sets, &cwd()),
@@ -629,6 +653,7 @@ fn main() -> ExitCode {
         Some(Command::Pr { action }) => pr_cmd::run(action, &cwd()),
         Some(Command::Brief { args }) => brief_cmd::run(args, &cwd()),
         Some(Command::Context { args }) => context_cmd::run(args, &cwd()),
+        Some(Command::Guide { args }) => guide_cmd::run(args),
         Some(Command::Resume { args }) => resume_cmd::run(args, &cwd()),
         Some(Command::Receipt { args }) => receipt_cmd::run(args, &cwd()),
         Some(Command::Next { args }) => receipt_cmd::run_next(args, &cwd()),
