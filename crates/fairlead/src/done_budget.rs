@@ -467,6 +467,29 @@ pub fn owed_line(debts: &[Debt]) -> String {
     )
 }
 
+/// The receipt's lines for what is owed, one for each runner: "unit: 251
+/// test files to CI before merge (240 budget, 11 blanket)".
+pub fn owed_lines(debts: &[Debt]) -> Vec<String> {
+    let mut steps: Vec<&str> = debts.iter().map(|d| d.step.as_str()).collect();
+    steps.dedup();
+    steps
+        .into_iter()
+        .map(|step| {
+            let mine: Vec<&Debt> = debts.iter().filter(|d| d.step == step).collect();
+            let total: usize = mine.iter().map(|d| d.files).sum();
+            let parts: Vec<String> = mine
+                .iter()
+                .map(|d| format!("{} {}", d.files, d.why))
+                .collect();
+            format!(
+                "{step}: {total} test files to CI {} ({})",
+                when(&mine[0].due),
+                parts.join(", ")
+            )
+        })
+        .collect()
+}
+
 /// Advice the budget's reading of the plan backs: a suite a blanket
 /// reaches with no smoke set, and a new source file no test is near.
 pub fn advice(

@@ -315,6 +315,13 @@ pub const RELEASES: &[(&str, &[Note])] = &[
             applies: always,
         }],
     ),
+    (
+        "0.19.0",
+        &[Note {
+            text: "`fairlead done` runs under a budget, `done.budget_seconds` (120): the tests nearest the change run until it's spent, and what else the change reaches is recorded as owed to CI, so no suite holds the gate until `done --full`. Give a slow suite's runner a `smoke` set, the few files that stand for it when only a `run_all` path or a wide `[[graph.edges]]` rule reaches it. `done.budget_seconds = 0` keeps the gate as it was.",
+            applies: always,
+        }],
+    ),
 ];
 
 /// Config tables and keys by the release that added them. The top-level
@@ -366,6 +373,9 @@ pub const SINCE: &[(&str, &str)] = &[
     ("checks.cheap", "0.18"),
     ("done.cheap_seconds", "0.18"),
     ("done.pre_push", "0.18"),
+    ("done.budget_seconds", "0.19"),
+    ("tests.runners.smoke", "0.19"),
+    ("plan.blanket_share", "0.19"),
 ];
 
 /// Top-level tables every released config format has had.

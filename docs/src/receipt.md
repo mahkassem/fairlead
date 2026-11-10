@@ -32,6 +32,7 @@ not run  unverifiable here: native-build needs macos; proved in CI (macos job)
 ```
 
 - **ran:** each step by its stage (its `from`, or `ready` for a runner and `draft` for a check) and the `os/arch` it ran on, marked `(failed)` or `(held)`. A run an earlier release recorded says `stage not recorded, platform not recorded`.
+- **owed:** *Since 0.19.0:* test files a [budgeted](done.md#the-budget) run reached and left to CI, one line for each runner: `owed     unit: 339 test files to CI before merge (339 budget)`. A runner with a debt isn't listed as never run.
 - **never run on this tree:** steps the gate plans now that its newest run didn't reach, such as those after a failure without `--keep-going`; with no run, every one.
 - **unverifiable here:** steps an unmet [`[[needs]]` entry](done.md#needs) left out, `needs macos` for an `os` need and `needs "postgres"` for any other, and steps a [`[[quarantine]]` entry](plan.md#tests-that-lie-on-one-platform) held, each with where it's proved.
 

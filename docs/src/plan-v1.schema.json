@@ -96,7 +96,7 @@
           "$ref": "#/$defs/InvocationKind"
         },
         "reached": {
-          "description": "For a whole suite: how many of `selected` the change reaches. At\n`plan.whole_share` or more of the suite, it waits whole; a person runs\nit before merging.",
+          "description": "For a whole suite: how many of `selected` the change reaches. At\n`plan.whole_share` or more of the suite, it waits whole, and CI or a\n`done --full` here runs it.",
           "format": "uint",
           "minimum": 0,
           "type": "integer"

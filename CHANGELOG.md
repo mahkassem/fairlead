@@ -1,5 +1,24 @@
 # Changelog
 
+## Unreleased
+
+A gate that fits the machine it runs on. `fairlead done` asked for the whole plan, and a change that reached most of a slow suite held it until `done --full`; where that couldn't run, a need or a quarantine entry let the gate pass on a line of text. Now the gate runs what fits a budget, nearest the change first, and records the rest as owed to CI.
+
+### New
+
+- `fairlead done` runs under a budget, `done.budget_seconds` (120). A test file the change edits always runs; then tests that import a changed file, tests an owner rule names, a suite's smoke set, and longer import chains, shortest first, until the budget is spent. A runner's time for one file is the median over its recent passing steps, and a runner with no recorded time runs its nearest 20 files, which times the next run. `--budget SECONDS` sets it for one run; `--full`, `--budget 0` or `done.budget_seconds = 0` runs the whole plan.
+- Debts. What the change reaches and the budget leaves out is owed to CI: before merge, or by the nightly run in a project whose `phase` is `early`. The gate prints one line for each runner, the pass line sums them, the `done` event records each (runner, files, why, due), and `fairlead receipt` lists them as `owed`.
+- Blankets and smoke sets. A test reached only by a `plan.run_all` path, an unreached file's widening, or `[[graph.edges]]` rules that reach `plan.blanket_share` (0.3) or more of its runner's suite is reached by a blanket. Its suite runs whole when all of it fits what's left of the budget; otherwise the gate runs the runner's new `smoke` files and owes the rest.
+- Advice in the gate's output, never failing it: a suite a blanket reaches whose runner names no smoke set, a new source file no test imports, and a step that alone outlasts the budget. Each line says it's for the pull request's notes or a follow-up.
+- `fairlead insights --score`: the share of gate runs whose plan selected everything, the share of the suite a median plan reaches, the gate's median and 90th-percentile time, what was owed and why, and the waivers a config carries.
+- The `done` event records the budget, the plan's reach (whether it selected everything, test files reached, the suite's size, files run here) and how many test files each runner step named.
+
+### Changed
+
+- Under a budget, which is the default, no suite holds the gate: a change that reaches most of a suite whose whole run waits for a later stage owes it to CI, in any phase, where it held `done --check` and the Stop hook until `done --full`. The phase now says when a debt is due. With no budget the gate is as it was.
+- Under a budget the gate names the files each runner runs, so `all_command` isn't used; `done --full` runs whole suites with it as before.
+- The plan's line for a suite a change reaches most of ends "`fairlead done` owes it to CI under its budget, and `fairlead done --full` runs it here", where it told a person to run `done --full` before merging.
+
 ## 0.18.0 (2026-11-09)
 
 One release in three parts. A guard for any stack: secret file names, gitleaks, migration numbers against a fresh base and `[pr]` rules, with `init --profile guard` for a repository the test planner doesn't read. An answer to "is this red mine?" while a pull request is red: `fairlead ci ledger`, the default branch's red streaks and `insights --speed`. And a done gate whose pass can be trusted: it plans the branch from its merge base, runs first the cheap steps CI shows going red, runs before a push, counts only what a change adds to a foreign linter's findings, and leaves a receipt per stage and platform that the pull request's claims are held to.

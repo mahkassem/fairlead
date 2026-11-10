@@ -106,6 +106,9 @@ pub struct Gate {
     /// Tests and checks an unmet `[[needs]]` entry kept from running here.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub not_run: Vec<fairlead_guard::events::Unmet>,
+    /// Test files a budgeted run reached and left to CI.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub owed: Vec<fairlead_guard::events::Debt>,
     /// Each step of the run with its stage and where it ran.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub ran: Vec<RanStep>,
@@ -239,6 +242,7 @@ fn gate(log: &str, tree: &str) -> Gate {
             seconds: 0.0,
             waiting: Vec::new(),
             not_run: Vec::new(),
+            owed: Vec::new(),
             ran: Vec::new(),
         };
     };
@@ -260,6 +264,7 @@ fn gate(log: &str, tree: &str) -> Gate {
         seconds: steps.iter().filter_map(|s| s["seconds"].as_f64()).sum(),
         waiting: serde_json::from_value(e["waiting"].clone()).unwrap_or_default(),
         not_run: serde_json::from_value(e["unmet"].clone()).unwrap_or_default(),
+        owed: serde_json::from_value(e["debts"].clone()).unwrap_or_default(),
         ran: crate::receipt_stages::ran(&e),
     }
 }
@@ -396,7 +401,10 @@ fn compare(s: &State, root: &Path, cwd: &Path) -> Result<Receipt, String> {
             path,
         })
         .collect();
-    let left_out: Vec<String> = s.gate.not_run.iter().map(|u| u.step.clone()).collect();
+    let owed = s.gate.owed.iter().map(|d| d.step.clone());
+    let left_out: Vec<String> = (s.gate.not_run.iter().map(|u| u.step.clone()))
+        .chain(owed)
+        .collect();
     let never_run = crate::receipt_stages::never_run(&s.now, &s.gate.ran, &left_out);
     let unverifiable = crate::receipt_stages::unverifiable(&s.now, &s.gate.not_run, &s.gate.ran);
     Ok(Receipt {
@@ -498,6 +506,9 @@ pub fn text(r: &Receipt, all: bool) -> String {
     }
     let gate = gate_line(&r.gate);
     out.push_str(&format!("gate     {gate}\n"));
+    for line in crate::done_budget::owed_lines(&r.gate.owed) {
+        out.push_str(&format!("owed     {line}\n"));
+    }
     out.push_str(&crate::receipt_stages::lines(
         &r.gate.ran,
         &r.never_run,

@@ -155,6 +155,12 @@ fn the_nearest_tests_run_until_the_budget_is_spent_and_the_rest_is_owed() {
     assert_eq!(event["steps"][0]["files"], 2);
     let (code, out) = fairlead(&dir, &["done", "--check"]);
     assert_eq!(code, 0, "{out}");
+    // The receipt says what is owed, and doesn't call the runner never run.
+    let (_, out) = fairlead(&dir, &["receipt", "--base", "main"]);
+    assert!(
+        out.contains("owed     unit: 2 test files to CI before merge (2 budget)"),
+        "{out}"
+    );
     std::fs::remove_dir_all(&dir).unwrap();
 }
 
