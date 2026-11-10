@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.19.0 (2026-11-10)
 
 A gate that fits the machine it runs on. `fairlead done` asked for the whole plan, and a change that reached most of a slow suite held it until `done --full`; where that couldn't run, a need or a quarantine entry let the gate pass on a line of text. Now the gate runs what fits a budget, nearest the change first, and records the rest as owed to CI.
 
