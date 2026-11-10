@@ -8,6 +8,7 @@
 - [Install](install.md)
 - [For agents](for-agents.md)
 - [Troubleshooting](troubleshooting.md)
+- [Report a mistake](report.md)
 - [Configuration](config.md)
 - [Blueprints](blueprints.md)
 - [Upgrading](migrate.md)

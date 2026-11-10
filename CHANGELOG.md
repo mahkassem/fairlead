@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.20.2 (2026-11-10)
+
+A mistake of Fairlead's reaches its makers the day it happens, without anything private going with it.
+
+### New
+
+- Every refusal ends with one line: when the gate fails, a hook stops an edit or the guard stops a commit, it says how to check whether the mistake is Fairlead's (`fairlead guide report`) and that `fairlead report` drafts a report for the project's owner to review and send.
+- `fairlead report` writes a draft inside the git folder, so it is never committed, and sends nothing. It holds the release, the platform, the config's shape as counts, the setup's states and the last five refusals as numbers. Runners and checks are numbered in the config's order and never named; no path, command, file content, environment value or repository name is copied in. `--print` prints it and writes no file.
+- `fairlead guide report`, and the same text as the docs page "Report a mistake": the checks to run first, what the draft holds, what never goes in a report (a secret, a private name, code, output, a path that says what the project is), and who sends it. The owner does; an agent posts it only when the owner said to in that session.
+- An issue form for these reports, which asks the sender to confirm that an owner read it and that it holds no secret, private name or code.
+- The block in AGENTS.md and CLAUDE.md gains one line on this, so `fairlead agents sync` has a change to write.
+
 ## 0.20.1 (2026-11-10)
 
 What running 0.20.0 on eight repositories got wrong.

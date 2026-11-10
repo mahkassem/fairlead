@@ -1,6 +1,6 @@
 # For agents
 
-*Since 0.20.0:* this page is for a coding agent that has a shell and has never used Fairlead. It holds the six guides built into the binary, in the order a repository meets them. `fairlead guide` prints the same text for the installed release, so when the release you run isn't the one this book documents, read the command's output rather than this page.
+*Since 0.20.0:* this page is for a coding agent that has a shell and has never used Fairlead. It holds the seven guides built into the binary, in the order a repository meets them. `fairlead guide` prints the same text for the installed release, so when the release you run isn't the one this book documents, read the command's output rather than this page.
 
 ```sh
 fairlead guide            # the topics, one line each
@@ -15,12 +15,14 @@ fairlead guide setup      # one guide
 | [`ci`](#fairlead-in-ci) | you add Fairlead to a workflow, or a check on the pull request is red |
 | [`upgrade`](#upgrade-fairlead) | the repository moves to a new release |
 | [`troubleshoot`](#troubleshoot-setup) | a setup item stays open after its fix |
+| [`report`](#report-a-mistake-of-fairleads) | Fairlead said no and you think Fairlead is wrong |
 
-Three things hold in every guide:
+Four things hold in every guide:
 
 - **A setup item that is open has exactly one fix**, printed under it. Run that, then `fairlead setup` again.
 - **A hook that refuses an edit names the rule to fix.** Change the edit; the refusal isn't something to get around.
 - **A gate that owes tests to CI has passed.** Put the block `fairlead receipt --pr` prints in the pull request, and let CI run what is owed.
+- **A refusal that looks like Fairlead's mistake gets reported, by the project's owner.** `fairlead report` drafts it with nothing private in it; the refusal still stands meanwhile.
 
 An unknown topic prints the list on standard error and exits 2. For a tool that reads an index rather than a book, [`llms.txt`](https://mahkassem.github.io/fairlead/llms.txt) at the site's root links every page with one line each.
 
@@ -188,6 +190,7 @@ The Stop hook is the same kind of message: it sends you back while the tree you 
 - Passed: `fairlead receipt`, then `fairlead next`.
 - Failed twice at the same step for a reason outside your change: stop and report the step, its `<why>` and what you tried.
 - A check is red on the pull request after a local pass: `fairlead guide ci`.
+- The gate or a hook said no and Fairlead itself looks wrong: `fairlead guide report`. The refusal stands while its owner looks.
 
 ## Fairlead in CI
 
@@ -334,3 +337,56 @@ Use this guide when `fairlead setup` or `fairlead setup --check` prints an `open
 ### tests
 - Guard profile only. Open when the repository now has tests a runner can run. Not required.
 - Fix: `fairlead init --dry-run` prints the runner. Add it to `fairlead.toml` and remove `profile = "guard"`.
+
+## Report a mistake of Fairlead's
+
+Use this guide when Fairlead said no and you think Fairlead is wrong, not the change: the gate failed, a hook refused an edit, a commit was stopped, a plan ran a test nothing reaches or left out one that matters, or a setup item is open that shouldn't be.
+
+Fairlead's makers want these reports. Each one that arrives the day it happens saves a review later.
+
+### First, check that it is Fairlead's mistake
+
+Run what fits the refusal. Most turn out to be the change, the config or the machine.
+
+```sh
+fairlead doctor                 # the binary that ran, the versions the repository names, the hooks
+fairlead setup --check          # the setup, one item to a line, with one fix each
+fairlead config check           # the config's own problems
+fairlead test --explain FILE    # why a test is or isn't in the plan: the chain that reaches it
+fairlead guard check --list     # every finding the guard has, with its rule
+```
+
+- The gate failed on a step: run that step's command by hand. It fails the same way: the change or the machine, not Fairlead.
+- A hook refused an edit: read the rule it names. The edit does what the rule forbids: fix the edit.
+- A test was selected or left out: `test --explain` prints the chain. The chain is real: the plan is right.
+- The binary isn't the one the repository pins: install that one, then try again.
+
+It is Fairlead's mistake when the check shows Fairlead doing something its own output or docs say it doesn't.
+
+### Then draft the report
+
+```sh
+fairlead report           # writes a draft inside the git folder; sends nothing
+fairlead report --print   # prints the draft and writes no file
+```
+
+The draft holds the release, the platform, the config's shape as counts, the setup's states and the last refusals as numbers. Runners and checks are numbered, never named. Add three short answers: what happened, what you expected, how you checked.
+
+### What never goes in a report
+
+An issue is public and can't be taken back. Leave out, without exception:
+
+- any secret: a token, password, key, cookie or connection string, even an expired one;
+- any private name: a person, customer, company, repository, branch, host or domain;
+- source code, file content, test output, log lines and stack traces;
+- file paths that say what the project is. Write "a test file" or "the API package".
+
+When a detail seems needed and is on this list, leave it out and say that something was left out.
+
+### Who sends it
+
+The project's owner. Give them the draft and say where it is; they read every line and post it at https://github.com/mahkassem/fairlead/issues/new?template=mistake.yml.
+
+An agent posts it only when the owner said to in this session, and then only the draft and the three answers. With no such word, stop at the draft and tell the owner.
+
+Then go on with the work: the refusal still stands until the change passes or the owner decides otherwise. A report is not a way around it.

@@ -46,3 +46,4 @@ The Stop hook is the same kind of message: it sends you back while the tree you 
 - Passed: `fairlead receipt`, then `fairlead next`.
 - Failed twice at the same step for a reason outside your change: stop and report the step, its `<why>` and what you tried.
 - A check is red on the pull request after a local pass: `fairlead guide ci`.
+- The gate or a hook said no and Fairlead itself looks wrong: `fairlead guide report`. The refusal stands while its owner looks.

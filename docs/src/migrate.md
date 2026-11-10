@@ -479,6 +479,16 @@ in AGENTS.md or CLAUDE.md in formatter-ignore markers, so a Markdown
 formatter would leave it alone, can take them out: the block now reads as
 current whatever blank lines the formatter adds.
 
+### To 0.20.2
+
+Run `fairlead agents sync`: the block gained one line, so `fairlead setup
+--check` reads it as stale until then. Nothing else changes in your files.
+
+When Fairlead says no and looks wrong, its last line now says how to check
+and how to report it. `fairlead report` drafts the report for the
+project's owner to review and send, with nothing private in it
+([Report a mistake](report.md)).
+
 ## Going back to an older release
 
 Install the older release, then run its `hooks uninstall` and

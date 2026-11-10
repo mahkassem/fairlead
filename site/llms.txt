@@ -6,10 +6,11 @@ An agent with a shell starts with the first link. The change loop is three comma
 
 ## Start
 
-- [For agents](https://mahkassem.github.io/fairlead/docs/for-agents.html): the six built-in guides on one page: setup, the change loop, the done gate, CI, upgrading and troubleshooting
+- [For agents](https://mahkassem.github.io/fairlead/docs/for-agents.html): the seven built-in guides on one page: setup, the change loop, the done gate, CI, upgrading, troubleshooting and reporting a mistake
 - [Start here: which project is yours?](https://mahkassem.github.io/fairlead/docs/start.html): what `fairlead setup` does on a new, MVP, ongoing or legacy repository, and what done looks like on each
 - [Install](https://mahkassem.github.io/fairlead/docs/install.html): the shell installer, npm, Homebrew, Cargo and Composer, the platforms, and `fairlead init`
 - [Troubleshooting](https://mahkassem.github.io/fairlead/docs/troubleshooting.html): one entry per setup item id: the symptom, the cause and the fix
+- [Report a mistake](https://mahkassem.github.io/fairlead/docs/report.html): when Fairlead said no and looks wrong: how to check it, what `fairlead report` drafts, what never goes in a report, and who sends it
 - [Configuration](https://mahkassem.github.io/fairlead/docs/config.html): `fairlead.toml`, its layers, environments and keys
 - [Blueprints](https://mahkassem.github.io/fairlead/docs/blueprints.html): a named starting point for a kind of project, written once by `fairlead init --blueprint`
 - [Upgrading](https://mahkassem.github.io/fairlead/docs/migrate.html): `fairlead migrate`, and what each release changed

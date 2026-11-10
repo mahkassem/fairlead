@@ -54,6 +54,7 @@ mod pr_receipt;
 mod receipt_cmd;
 mod receipt_stages;
 mod replay_cmd;
+mod report_cmd;
 mod resume_cmd;
 mod reuse;
 mod score_cmd;
@@ -212,10 +213,16 @@ enum Command {
         args: context_cmd::ContextArgs,
     },
     /// A short guide for an agent, matching this release: setup, the change
-    /// loop, the gate, CI, upgrading and troubleshooting.
+    /// loop, the gate, CI, upgrading, troubleshooting and reporting a mistake.
     Guide {
         #[command(flatten)]
         args: guide_cmd::GuideArgs,
+    },
+    /// Draft a report of a mistake of Fairlead's, for the project's owner
+    /// to review and send: numbers and Fairlead's own words only. Sends nothing.
+    Report {
+        #[command(flatten)]
+        args: report_cmd::ReportArgs,
     },
     /// For a new session: the last brief on this branch, what changed since,
     /// the done gate, `next` and the lessons the branch added.
@@ -654,6 +661,7 @@ fn main() -> ExitCode {
         Some(Command::Brief { args }) => brief_cmd::run(args, &cwd()),
         Some(Command::Context { args }) => context_cmd::run(args, &cwd()),
         Some(Command::Guide { args }) => guide_cmd::run(args),
+        Some(Command::Report { args }) => report_cmd::run(args, &cwd()),
         Some(Command::Resume { args }) => resume_cmd::run(args, &cwd()),
         Some(Command::Receipt { args }) => receipt_cmd::run(args, &cwd()),
         Some(Command::Next { args }) => receipt_cmd::run_next(args, &cwd()),

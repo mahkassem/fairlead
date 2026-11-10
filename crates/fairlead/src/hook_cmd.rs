@@ -366,9 +366,10 @@ fn answer(settings: &config::Guard, rel: String, found: Vec<Finding>) -> Outcome
         ))
     } else {
         hook::deny(&format!(
-            "fairlead guard: {what} {} finding(s):\n{}\nFix them and write again.",
+            "fairlead guard: {what} {} finding(s):\n{}\nFix them and write again. {}",
             found.len(),
-            list.join("\n")
+            list.join("\n"),
+            crate::report_cmd::MISTAKE
         ))
     };
     Outcome {

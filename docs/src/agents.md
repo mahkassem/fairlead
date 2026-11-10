@@ -26,6 +26,7 @@ files = ["AGENTS.md", "CLAUDE.md"] # from the repository root
 - Before you finish: `fairlead done` runs the gate the change has to pass.
 - When the gate says `owed to CI`: it passed. Put `fairlead receipt --pr` in the pull request, so what CI still has to run shows there.
 - When a hook refuses an edit: fix what the rule it names found, then write again. Don't route around it.
+- When Fairlead looks wrong: `fairlead report` drafts a report for the project's owner to review and send. Never put a secret, a private name or code in one.
 - When something isn't set up: `fairlead setup` fixes what it can and lists the rest with one fix each; `fairlead guide` explains each command.
 - After it: `fairlead receipt` compares the change with its brief, and `fairlead next` names the step that's due.
 - The pull request: open it as a draft, `gh pr create --draft`, and mark it ready, `gh pr ready`, once `fairlead done` passes.

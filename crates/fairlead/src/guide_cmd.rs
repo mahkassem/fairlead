@@ -42,6 +42,11 @@ const GUIDES: &[(&str, &str, &str)] = &[
         "a setup item that stays open: its cause and its fix, by item id",
         include_str!("../guides/troubleshoot.md"),
     ),
+    (
+        "report",
+        "Fairlead said no and looks wrong: check it, draft a report, and what never goes in one",
+        include_str!("../guides/report.md"),
+    ),
 ];
 
 pub fn run(args: GuideArgs) -> ExitCode {

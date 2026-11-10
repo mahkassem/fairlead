@@ -145,7 +145,7 @@ repositories are on the way
 
 ## What it does
 
-This README documents Fairlead 0.20.1. Each command, by what it's for:
+This README documents Fairlead 0.20.2. Each command, by what it's for:
 
 - **Setting a repository up:** `setup` and `guide`. *Since 0.20.0:* `setup`
   writes a first config when there is none, installs the agent hooks and the
@@ -154,8 +154,15 @@ This README documents Fairlead 0.20.1. Each command, by what it's for:
   `setup --check` prints the list and changes nothing, and exits 1 while a
   required item is open. The list is ordered for the kind of repository it
   detects (new, mvp, ongoing or legacy; `--track` overrides). `guide` prints
-  a short guide for an agent on `setup`, `loop`, `gate`, `ci`, `upgrade` or
-  `troubleshoot`.
+  a short guide for an agent on `setup`, `loop`, `gate`, `ci`, `upgrade`,
+  `troubleshoot` or `report`.
+- **When Fairlead looks wrong:** `report`. *Since 0.20.2:* every refusal (a
+  failed gate, a hook that stops an edit, a commit the guard stops) ends by
+  saying how to check whether the mistake is Fairlead's. `report` then writes
+  a draft for the project's owner to review and post as an issue: the
+  release, the platform, the config's shape as counts, the setup's states and
+  the last refusals as numbers, with runners and checks numbered and never
+  named. It sends nothing, and the guide says what never goes in a report.
 - **The test plan:** `plan`, `test --explain`, the import graph (`graph`) and
   coverage maps (`coverage import`). *Since 0.13.0:* `graph hubs` lists the
   files that link the most changes to the most tests and the barrier that
@@ -235,10 +242,11 @@ The [quick start](#quick-start) shows the first few, and the
 
 ## Status
 
-Pre-alpha. The latest release, v0.20.1, fixes what running the one before
-it on eight repositories got wrong: a formatter no longer makes the agents
-block read as stale, and a first gate run times its runner on real tests.
-That release made a first setup one command:
+Pre-alpha. The latest release, v0.20.2, makes a mistake of Fairlead's easy
+to report: every refusal says how to check it, and `fairlead report` drafts
+a report with nothing private in it for the project's owner to send. The
+release before it fixed what a first run on eight repositories got wrong,
+and the one before that made a first setup one command:
 `fairlead setup` applies what is local, then lists what is left with one
 fix for each, ordered for the kind of repository it finds (new, mvp,
 ongoing or legacy), and `fairlead guide` prints the guide an agent needs

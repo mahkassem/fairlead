@@ -399,6 +399,7 @@ fn check_staged(root: &Path, guard: &Guard, settings: &config::Guard, list: bool
     if warn {
         ExitCode::SUCCESS
     } else {
+        eprintln!("guard: {}", crate::report_cmd::MISTAKE);
         ExitCode::FAILURE
     }
 }

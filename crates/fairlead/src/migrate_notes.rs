@@ -331,6 +331,13 @@ pub const RELEASES: &[(&str, &[Note])] = &[
         }],
     ),
     ("0.20.1", &[]),
+    (
+        "0.20.2",
+        &[Note {
+            text: "Run `fairlead agents sync`: the block in AGENTS.md and CLAUDE.md gained one line. When Fairlead says no and looks wrong, `fairlead report` drafts a report for the project's owner to review and send, with nothing private in it (see Report a mistake).",
+            applies: always,
+        }],
+    ),
 ];
 
 /// Config tables and keys by the release that added them. The top-level
