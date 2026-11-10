@@ -522,3 +522,98 @@ fn doctor_ends_with_how_many_setup_items_are_open_or_that_none_is() {
     .unwrap();
     assert_eq!(last(&doctor()), "setup: nothing open");
 }
+
+const STATES: [&str; 4] = ["ok", "fixed", "open", "later"];
+const IDS: [&str; 12] = [
+    "binary", "config", "runners", "proved", "hooks", "git-hook", "agents", "ci", "smoke", "gate",
+    "measure", "tests",
+];
+
+/// Each ```text block of a page that holds checklist rows.
+fn samples(page: &str) -> Vec<Vec<String>> {
+    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join(page);
+    let text = std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("{page}: {e}"));
+    let mut out = Vec::new();
+    let mut block: Option<Vec<String>> = None;
+    for line in text.lines() {
+        match (line.starts_with("```"), block.take()) {
+            (true, Some(lines)) => out.push(lines),
+            (true, None) if line == "```text" => block = Some(Vec::new()),
+            (false, Some(mut lines)) => {
+                lines.push(line.to_string());
+                block = Some(lines);
+            }
+            _ => {}
+        }
+    }
+    let row = |l: &String| STATES.iter().any(|s| l.starts_with(&format!("  {s} ")));
+    out.retain(|lines| lines.iter().any(row));
+    out
+}
+
+#[test]
+fn every_checklist_the_docs_show_has_the_shape_setup_prints() {
+    let pages = [
+        "../../docs/src/start.md",
+        "../../docs/src/troubleshooting.md",
+        "guides/setup.md",
+    ];
+    let mut seen = 0;
+    for page in pages {
+        for block in samples(page) {
+            seen += 1;
+            let mut open = 0;
+            for (at, line) in block.iter().enumerate() {
+                let words: Vec<&str> = line.split_whitespace().collect();
+                if line.starts_with("         fix: ") || !line.starts_with("  ") {
+                    continue;
+                }
+                assert!(STATES.contains(&words[0]), "{page}: state in `{line}`");
+                assert!(IDS.contains(&words[1]), "{page}: id in `{line}`");
+                assert_eq!(&line[..20], format!("  {:<7}{:<11}", words[0], words[1]));
+                let fixed = (block.get(at + 1)).is_some_and(|l| l.starts_with("         fix: "));
+                assert_eq!(words[0] == "open", fixed, "{page}: fix under `{line}`");
+                open += usize::from(words[0] == "open");
+            }
+            let Some(last) = block.iter().find(|l| l.contains(" open. Fix ")) else {
+                continue;
+            };
+            let said = match open {
+                1 => "1 open. Fix it and".to_string(),
+                n => format!("{n} open. Fix them and"),
+            };
+            assert!(
+                last.starts_with(&said),
+                "{page}: `{last}` after {open} open"
+            );
+        }
+    }
+    assert!(seen >= 16, "{seen} checklists found in the docs");
+}
+
+#[cfg(unix)]
+#[test]
+fn the_new_track_sample_in_start_here_is_what_setup_prints_on_such_a_repository() {
+    let dir = repo("docsnew", README);
+    for n in 1..6 {
+        std::fs::write(dir.join("README.md"), format!("# a project\n{n}\n")).unwrap();
+        let out = command(&dir, "git", &["commit", "-qam", "note"]).output();
+        assert!(out.unwrap().status.success());
+    }
+    std::fs::create_dir_all(dir.join(".claude")).unwrap();
+    lefthook(&dir, true);
+    let (code, out, err) = setup(&dir, &[]);
+    assert_eq!(code, 0, "{out}{err}");
+    let shown = samples("../../docs/src/start.md")
+        .into_iter()
+        .find(|b| b[0].contains("track: new "))
+        .expect("the new track's sample");
+    // The docs name the release they ship with; the binary names itself.
+    let binary = |l: &str| l.starts_with("  ok     binary ");
+    let printed: Vec<&str> = out.lines().filter(|l| !binary(l)).collect();
+    let shown: Vec<&str> = (shown.iter().map(String::as_str))
+        .filter(|l| !binary(l))
+        .collect();
+    assert_eq!(printed, shown);
+    std::fs::remove_dir_all(&dir).unwrap();
+}

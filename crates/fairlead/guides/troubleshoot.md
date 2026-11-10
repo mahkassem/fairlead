@@ -15,7 +15,7 @@ Use this guide when `fairlead setup` or `fairlead setup --check` prints an `open
 - Fix: edit `[[tests.runners]]` in `fairlead.toml`: narrow a `match` or add an `exclude` until each test file has exactly one runner, and put `{files}` where the test files go in the command.
 
 ## proved
-- Open when a runner ran its smallest test file and the test failed. `later` when the runner couldn't start: a need is unmet, or its tool is missing.
+- Open when a runner ran its smallest test file and the test failed, or the runner couldn't start. `later` when a need that covers it is unmet here.
 - Fix: run the runner's command on that file and read the error. A test that fails on a clean checkout is the repository's to fix: report it. A missing tool: install the dependencies (`npm ci`, `bun install`).
 
 ## hooks
@@ -35,7 +35,7 @@ Use this guide when `fairlead setup` or `fairlead setup --check` prints an `open
 - Fix: `fairlead ci workflow --write`, on a branch. It refuses to replace a workflow it didn't write; add a job to your own instead (`fairlead guide ci`).
 
 ## smoke
-- Open when a runner whose suite is over 50 files, or which a `[[needs]]` entry covers, names no `smoke` set. Not required.
+- Open when a runner whose suite is over 50 files, or which a `[[needs]]` entry covers, names no `smoke` set, or a `smoke` entry names no test file the runner matches. Not required.
 - Fix: name 1 to 3 fast, broad test files under that runner's `smoke` in `fairlead.toml`.
 
 ## gate

@@ -9,7 +9,7 @@ fairlead guide setup      # one guide
 
 | Topic | Read it when |
 |---|---|
-| [`setup`](#set-a-repository-up) | the repository has no `fairlead.toml`, or a session starts with `fairlead: setup has N open items` |
+| [`setup`](#set-a-repository-up) | the repository has no `fairlead.toml`, or a session starts with `fairlead: setup has N open` |
 | [`loop`](#the-change-loop) | you are about to make a change |
 | [`gate`](#the-done-gate) | `fairlead done` fails or owes tests to CI, a hook refuses an edit, or you are writing the pull request |
 | [`ci`](#fairlead-in-ci) | you add Fairlead to a workflow, or a check on the pull request is red |
@@ -26,7 +26,7 @@ An unknown topic prints the list on standard error and exits 2. For a tool that 
 
 ## Set a repository up
 
-Use this guide when a repository has no `fairlead.toml`, when a session starts with `fairlead: setup has N open items`, or when `fairlead doctor` ends with `setup: N open`.
+Use this guide when a repository has no `fairlead.toml`, when a session starts with `fairlead: setup has N open`, or when `fairlead doctor` ends with `setup: N open`.
 
 ### The commands, in order
 
@@ -42,13 +42,17 @@ Run `fairlead setup` at the repository's root. It writes a first config when the
 ### What the output means
 
 ```text
-fairlead setup    track: ongoing (412 test files, 3 workflows, 2 years of history)
-  ok     binary     0.20.0 on PATH, matches package.json
-  fixed  hooks      Claude Code: edit guard, stop gate, session start
-  later  proved     e2e can't run here: need "browser" not met
-  open   ci         no workflow runs fairlead
-         fix: fairlead ci workflow --write
-1 open. Fix them and run `fairlead setup` again. `fairlead setup --check` shows this list any time.
+fairlead setup    track: new (no tests yet, 6 commits)
+  ok     binary     0.20.0 on PATH
+  fixed  config     fairlead.toml, no problems, guard profile
+  fixed  hooks      Claude Code: edit guard, brief nudge, stop gate, session start
+  fixed  git-hook   the commit stage is in lefthook.yml, and lefthook runs it
+  fixed  agents     the block is current in AGENTS.md, CLAUDE.md
+  open   gate       no passing `fairlead done` on record
+         fix: fairlead done
+  ok     tests      no tests a runner here can run yet
+  later  ci         no workflow runs `fairlead guard check`; the new track leaves it for later
+1 open. Fix it and run `fairlead setup` again. `fairlead setup --check` shows this list any time.
 ```
 
 Each line is a state, an item's id and what was found.
@@ -134,7 +138,7 @@ fairlead learn --title "…" --path "src/x/**" --evidence <link> --source mistak
 
 - The gate failed, owes tests to CI, or a hook refused an edit: `fairlead guide gate`.
 - A check is red on the pull request: `fairlead guide ci`.
-- A session starts with `fairlead: setup has N open items`: `fairlead guide setup`.
+- A session starts with `fairlead: setup has N open`: `fairlead guide setup`.
 
 ## The done gate
 
@@ -297,7 +301,7 @@ Use this guide when `fairlead setup` or `fairlead setup --check` prints an `open
 - Fix: edit `[[tests.runners]]` in `fairlead.toml`: narrow a `match` or add an `exclude` until each test file has exactly one runner, and put `{files}` where the test files go in the command.
 
 ### proved
-- Open when a runner ran its smallest test file and the test failed. `later` when the runner couldn't start: a need is unmet, or its tool is missing.
+- Open when a runner ran its smallest test file and the test failed, or the runner couldn't start. `later` when a need that covers it is unmet here.
 - Fix: run the runner's command on that file and read the error. A test that fails on a clean checkout is the repository's to fix: report it. A missing tool: install the dependencies (`npm ci`, `bun install`).
 
 ### hooks
@@ -317,7 +321,7 @@ Use this guide when `fairlead setup` or `fairlead setup --check` prints an `open
 - Fix: `fairlead ci workflow --write`, on a branch. It refuses to replace a workflow it didn't write; add a job to your own instead (`fairlead guide ci`).
 
 ### smoke
-- Open when a runner whose suite is over 50 files, or which a `[[needs]]` entry covers, names no `smoke` set. Not required.
+- Open when a runner whose suite is over 50 files, or which a `[[needs]]` entry covers, names no `smoke` set, or a `smoke` entry names no test file the runner matches. Not required.
 - Fix: name 1 to 3 fast, broad test files under that runner's `smoke` in `fairlead.toml`.
 
 ### gate

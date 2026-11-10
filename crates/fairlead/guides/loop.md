@@ -54,4 +54,4 @@ fairlead learn --title "…" --path "src/x/**" --evidence <link> --source mistak
 
 - The gate failed, owes tests to CI, or a hook refused an edit: `fairlead guide gate`.
 - A check is red on the pull request: `fairlead guide ci`.
-- A session starts with `fairlead: setup has N open items`: `fairlead guide setup`.
+- A session starts with `fairlead: setup has N open`: `fairlead guide setup`.

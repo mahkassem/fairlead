@@ -7,7 +7,7 @@ fairlead setup --check    # the checklist; changes nothing
 fairlead doctor           # the binary, the config, the hooks, the needs and the event log, in full
 ```
 
-The text after an id is what was found in your repository, so it differs from the samples here; match an entry by its id. `fairlead doctor` ends with `setup: N open (first: <id>)`, and a session whose hooks are installed starts with `fairlead: setup has N open items (first: <id>)`, at most once a day: both point to the same list.
+The text after an id is what was found in your repository, so it differs from the samples here; match an entry by its id. `fairlead doctor` ends with `setup: N open (first: <id>)`, and a session whose hooks are installed starts with `fairlead: setup has N open (<ids>)`, at most once a day: both point to the same list. In CI, `fairlead ci plan` warns when the checkout itself shows a gap (the config, the runners, the agents block, and the hooks where the agent's settings are committed): `setup has N open in the repository (<ids>)`.
 
 | Id | Required | Checks |
 |---|---|---|
@@ -31,7 +31,7 @@ With `profile = "guard"`, `runners`, `proved`, `smoke` and `measure` are left ou
 **Symptom**
 
 ```text
-  open   binary     0.19.1 on PATH, package.json pins 0.20.0
+  open   binary     the config needs 0.20 or later and this binary is 0.19.1
          fix: bun install
 ```
 
@@ -44,8 +44,8 @@ With `profile = "guard"`, `runners`, `proved`, `smoke` and `measure` are left ou
 **Symptom**
 
 ```text
-  open   config     fairlead.toml: tests.unreachd: unknown field `unreachd`
-         fix: fairlead config check
+  open   config     no fairlead.toml; defaults apply
+         fix: fairlead init
 ```
 
 **Cause.** There is no `fairlead.toml`, or it loads with problems. The text is the first problem; an unknown key is an error, so a typo can't switch something off unnoticed ([Errors](config.md#errors)).
@@ -57,8 +57,8 @@ With `profile = "guard"`, `runners`, `proved`, `smoke` and `measure` are left ou
 **Symptom**
 
 ```text
-  open   runners    tests.runners `e2e`: its command names no `{files}`
-         fix: put `{files}` where the test files go
+  open   runners    tests.runners `e2e`: its command names no `{files}`, so it runs its whole suite whenever any of its tests is selected
+         fix: put `{files}` where the test files go in fairlead.toml
 ```
 
 **Cause.** A test file has no runner, or more than one, or a runner's command names no test files, so it runs its whole suite whenever one of its tests is selected. The commonest case is an end-to-end spec named like a unit test, which the unit runner's `match` also takes.
@@ -70,20 +70,21 @@ With `profile = "guard"`, `runners`, `proved`, `smoke` and `measure` are left ou
 **Symptom**
 
 ```text
-  open   proved     unit: src/money.test.ts failed (exit 1)
+  open   proved     unit failed on src/money.test.ts: could not start (exit 1 before any test ran), with no output
+         fix: install what the runner needs (the project's dependencies, or the service it talks to), then `fairlead setup`
   later  proved     e2e can't run here: need "browser" not met
 ```
 
-**Cause.** `setup` ran each runner's smallest test file, with a 60 second limit. `open` means the test ran and failed. `later` means the runner couldn't start on this machine: a [`[[needs]]` entry](done.md#needs) isn't met, or the runner's tool is missing. `setup --check` runs nothing and reads the last result, kept in `.git/fairlead/setup.json`.
+**Cause.** `setup` ran each runner's smallest test file, with a 60 second limit. `open` means the test failed, or the runner couldn't start: its tool or the project's dependencies are missing. `later` means a [`[[needs]]` entry](done.md#needs) that covers the runner isn't met on this machine. `setup --check` runs nothing and reads the last result, kept in `.git/fairlead/setup.json`.
 
-**Fix.** For `open`, run the runner's command on that file and read the error. A test that fails on a clean checkout is the repository's to fix; an agent reports it rather than editing the test to pass. For `later` with a missing tool, install the project's dependencies and run `fairlead setup` again. An unmet need is not a fault: its `proved_in` says where those tests are proved.
+**Fix.** For a runner that couldn't start, install the project's dependencies and run `fairlead setup` again. For a failed test, run the runner's command on that file and read the error. A test that fails on a clean checkout is the repository's to fix; an agent reports it rather than editing the test to pass. An unmet need is not a fault: its `proved_in` says where those tests are proved.
 
 ## hooks
 
 **Symptom**
 
 ```text
-  open   hooks      Claude Code: no Fairlead hooks in .claude/settings.json
+  open   hooks      no hooks for Claude Code
          fix: fairlead hooks install
 ```
 
@@ -96,7 +97,7 @@ With `profile = "guard"`, `runners`, `proved`, `smoke` and `measure` are left ou
 **Symptom**
 
 ```text
-  open   git-hook   written but not active: lefthook isn't in .git/hooks
+  open   git-hook   written but not active: lefthook.yml has the commit stage, .git/hooks doesn't run lefthook
          fix: lefthook install
 ```
 
@@ -109,7 +110,7 @@ With `profile = "guard"`, `runners`, `proved`, `smoke` and `measure` are left ou
 **Symptom**
 
 ```text
-  open   agents     CLAUDE.md's fairlead block is stale
+  open   agents     AGENTS.md's fairlead block is stale
          fix: fairlead agents sync
 ```
 
@@ -122,7 +123,7 @@ With `profile = "guard"`, `runners`, `proved`, `smoke` and `measure` are left ou
 **Symptom**
 
 ```text
-  open   ci         no workflow runs fairlead
+  open   ci         no workflow runs `fairlead ci`
          fix: fairlead ci workflow --write
 ```
 
@@ -135,11 +136,11 @@ With `profile = "guard"`, `runners`, `proved`, `smoke` and `measure` are left ou
 **Symptom**
 
 ```text
-  open   smoke      e2e: 68 test files and no smoke set
-         fix: name 1 to 3 files under the runner's `smoke`
+  open   smoke      e2e: 68 test files, and it names no `smoke`
+         fix: name 1 to 3 test files under `smoke` on runner `e2e` in fairlead.toml
 ```
 
-**Cause.** A runner whose suite is over 50 files, or which a `[[needs]]` entry covers, names no `smoke` set. When a change reaches such a suite only through a blanket and the suite doesn't fit the budget, the gate has nothing small to run in its place.
+**Cause.** A runner whose suite is over 50 files, or which a `[[needs]]` entry covers, names no `smoke` set, or a `smoke` entry names no test file the runner matches, as after a rename (`fairlead config check` warns about that one too). When a change reaches such a suite only through a blanket and the suite doesn't fit the budget, the gate has nothing small to run in its place.
 
 **Fix.** Under that runner in `fairlead.toml`, name 1 to 3 fast test files that stand for the suite, as `smoke = ["e2e/smoke.spec.ts"]` ([The budget](done.md#the-budget)).
 
@@ -148,7 +149,7 @@ With `profile = "guard"`, `runners`, `proved`, `smoke` and `measure` are left ou
 **Symptom**
 
 ```text
-  open   gate       no passing `fairlead done` in the last 30 days
+  open   gate       no passing `fairlead done` on record
          fix: fairlead done
 ```
 
@@ -174,7 +175,7 @@ With `profile = "guard"`, `runners`, `proved`, `smoke` and `measure` are left ou
 
 ```text
   open   tests      this repository has tests `vitest` can run, and the guard-only profile plans none
-         fix: add the runner `fairlead init --dry-run` prints, and remove `profile = "guard"`
+         fix: `fairlead init --dry-run` prints the runner; add it to fairlead.toml and remove `profile = "guard"`
 ```
 
 **Cause.** The repository was set up with [the guard only](install.md#the-guard-only), and it now has test files a runner can run.

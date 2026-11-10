@@ -147,6 +147,15 @@ repositories are on the way
 
 This README documents Fairlead 0.19.1. Each command, by what it's for:
 
+- **Setting a repository up:** `setup` and `guide`. *Since 0.20.0:* `setup`
+  writes a first config when there is none, installs the agent hooks and the
+  git hook, syncs the block in AGENTS.md, runs each runner's smallest test
+  file once, and prints a checklist in which every open item has one fix.
+  `setup --check` prints the list and changes nothing, and exits 1 while a
+  required item is open. The list is ordered for the kind of repository it
+  detects (new, mvp, ongoing or legacy; `--track` overrides). `guide` prints
+  a short guide for an agent on `setup`, `loop`, `gate`, `ci`, `upgrade` or
+  `troubleshoot`.
 - **The test plan:** `plan`, `test --explain`, the import graph (`graph`) and
   coverage maps (`coverage import`). *Since 0.13.0:* `graph hubs` lists the
   files that link the most changes to the most tests and the barrier that

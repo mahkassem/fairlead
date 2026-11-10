@@ -1,6 +1,6 @@
 # Set a repository up
 
-Use this guide when a repository has no `fairlead.toml`, when a session starts with `fairlead: setup has N open items`, or when `fairlead doctor` ends with `setup: N open`.
+Use this guide when a repository has no `fairlead.toml`, when a session starts with `fairlead: setup has N open`, or when `fairlead doctor` ends with `setup: N open`.
 
 ## The commands, in order
 
@@ -16,13 +16,17 @@ Run `fairlead setup` at the repository's root. It writes a first config when the
 ## What the output means
 
 ```text
-fairlead setup    track: ongoing (412 test files, 3 workflows, 2 years of history)
-  ok     binary     0.20.0 on PATH, matches package.json
-  fixed  hooks      Claude Code: edit guard, stop gate, session start
-  later  proved     e2e can't run here: need "browser" not met
-  open   ci         no workflow runs fairlead
-         fix: fairlead ci workflow --write
-1 open. Fix them and run `fairlead setup` again. `fairlead setup --check` shows this list any time.
+fairlead setup    track: new (no tests yet, 6 commits)
+  ok     binary     0.20.0 on PATH
+  fixed  config     fairlead.toml, no problems, guard profile
+  fixed  hooks      Claude Code: edit guard, brief nudge, stop gate, session start
+  fixed  git-hook   the commit stage is in lefthook.yml, and lefthook runs it
+  fixed  agents     the block is current in AGENTS.md, CLAUDE.md
+  open   gate       no passing `fairlead done` on record
+         fix: fairlead done
+  ok     tests      no tests a runner here can run yet
+  later  ci         no workflow runs `fairlead guard check`; the new track leaves it for later
+1 open. Fix it and run `fairlead setup` again. `fairlead setup --check` shows this list any time.
 ```
 
 Each line is a state, an item's id and what was found.

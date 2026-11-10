@@ -53,14 +53,15 @@ fairlead setup
 ```text
 fairlead setup    track: new (no tests yet, 6 commits)
   ok     binary     0.20.0 on PATH
-  fixed  config     wrote fairlead.toml: the guard only, no test runner found
-  fixed  hooks      Claude Code: edit guard, stop gate, session start
-  fixed  git-hook   commit stage in lefthook.yml, lefthook active
-  fixed  agents     the block in AGENTS.md and CLAUDE.md
-  later  ci         nothing for CI to run yet
-  open   gate       no passing `fairlead done` in the last 30 days
+  fixed  config     fairlead.toml, no problems, guard profile
+  fixed  hooks      Claude Code: edit guard, brief nudge, stop gate, session start
+  fixed  git-hook   the commit stage is in lefthook.yml, and lefthook runs it
+  fixed  agents     the block is current in AGENTS.md, CLAUDE.md
+  open   gate       no passing `fairlead done` on record
          fix: fairlead done
-1 open. Fix them and run `fairlead setup` again. `fairlead setup --check` shows this list any time.
+  ok     tests      no tests a runner here can run yet
+  later  ci         no workflow runs `fairlead guard check`; the new track leaves it for later
+1 open. Fix it and run `fairlead setup` again. `fairlead setup --check` shows this list any time.
 ```
 
 The exit code is 0: `gate` is open but not required.
@@ -99,18 +100,18 @@ fairlead setup
 ```
 
 ```text
-fairlead setup    track: mvp (38 test files, no workflow runs tests, 4 months of history)
-  ok     binary     0.20.0 on PATH, matches package.json
-  fixed  config     wrote fairlead.toml: 1 runner (vitest)
-  ok     runners    38 test files, each with one runner
-  fixed  proved     vitest ran src/money.test.ts: passed in 2 s
-  fixed  hooks      Claude Code: edit guard, stop gate, session start
-  fixed  git-hook   commit stage in lefthook.yml, lefthook active
-  fixed  agents     the block in AGENTS.md and CLAUDE.md
-  open   ci         no workflow runs fairlead
+fairlead setup    track: mvp (39 test files, no workflow that tests or deploys, 4 months of history)
+  ok     binary     0.20.0 on PATH
+  fixed  config     fairlead.toml, no problems
+  ok     runners    1 runner, 39 test files, each with exactly one runner
+  fixed  hooks      Claude Code: edit guard, brief nudge, stop gate, session start
+  fixed  git-hook   the commit stage is in lefthook.yml, and lefthook runs it
+  fixed  agents     the block is current in AGENTS.md, CLAUDE.md
+  fixed  proved     1 runner ran one test file: vitest 0.0 s
+  open   ci         no workflow runs `fairlead ci`
          fix: fairlead ci workflow --write
-  ok     smoke      no suite is over 50 files
-  open   gate       no passing `fairlead done` in the last 30 days
+  ok     smoke      no runner has over 50 test files or a need
+  open   gate       no passing `fairlead done` on record
          fix: fairlead done
   later  measure    the scorecard needs 10 more gate runs
 2 open. Fix them and run `fairlead setup` again. `fairlead setup --check` shows this list any time.
@@ -152,21 +153,22 @@ fairlead setup
 ```
 
 ```text
-fairlead setup    track: ongoing (412 test files, 3 workflows, 2 years of history)
-  ok     binary     0.20.0 on PATH, matches package.json
-  ok     config     fairlead.toml loads with no problems
-  ok     runners    412 test files, each with one runner
+fairlead setup    track: ongoing (412 test files, 2 workflows, 2 years of history)
+  ok     binary     0.20.0 on PATH
+  ok     config     fairlead.toml, no problems
+  ok     runners    2 runners, 412 test files, each with exactly one runner
+  fixed  hooks      Claude Code: edit guard, brief nudge, stop gate, session start
+  fixed  git-hook   the commit stage is in lefthook.yml, and lefthook runs it
+  fixed  agents     the block is current in AGENTS.md, CLAUDE.md
   later  proved     e2e can't run here: need "browser" not met
-  fixed  hooks      Claude Code: edit guard, stop gate, session start
-  fixed  git-hook   commit stage in lefthook.yml, lefthook active
-  ok     agents     the block in AGENTS.md and CLAUDE.md is current
-  open   ci         no workflow runs fairlead
+  open   ci         no workflow runs `fairlead ci`
          fix: fairlead ci workflow --write
-  open   smoke      unit: 368 test files and no smoke set
-         fix: name 1 to 3 files under the runner's `smoke`
-  ok     gate       `fairlead done` passed 2 days ago
-  later  measure    the scorecard needs 4 more gate runs
-2 open. Fix them and run `fairlead setup` again. `fairlead setup --check` shows this list any time.
+  open   smoke      unit: 368 test files, and it names no `smoke`
+         fix: name 1 to 3 test files under `smoke` on runner `unit` in fairlead.toml
+  open   gate       no passing `fairlead done` on record
+         fix: fairlead done
+  later  measure    the scorecard needs 10 more gate runs
+3 open. Fix them and run `fairlead setup` again. `fairlead setup --check` shows this list any time.
 ```
 
 The exit code is 1: `ci` is open and required. `smoke` is open and not required.
@@ -208,24 +210,25 @@ fairlead setup
 ```
 
 ```text
-fairlead setup    track: legacy (6 years of history, the test planner doesn't read this stack)
+fairlead setup    track: legacy (6 years of history, the planner can't read the stack)
   ok     binary     0.20.0 on PATH
-  fixed  config     wrote fairlead.toml: the guard only, with a migrations rule for db/migrate
-  fixed  hooks      Claude Code: edit guard, stop gate, session start
-  open   git-hook   written but not active: lefthook isn't in .git/hooks
-         fix: lefthook install
-  fixed  agents     the block in AGENTS.md and CLAUDE.md
-  later  ci         not due on the legacy track
-  open   gate       no passing `fairlead done` in the last 30 days
+  fixed  config     fairlead.toml, no problems, guard profile
+  fixed  hooks      Claude Code: edit guard, brief nudge, stop gate, session start
+  open   git-hook   written but not active: lefthook.yml has the commit stage, .git/hooks doesn't run lefthook, and lefthook isn't on the PATH
+         fix: install lefthook (it is what runs the commit stage), then `lefthook install`
+  fixed  agents     the block is current in AGENTS.md, CLAUDE.md
+  open   gate       no passing `fairlead done` on record
          fix: fairlead done
+  ok     tests      no tests a runner here can run yet
+  later  ci         no workflow runs `fairlead guard check`; the legacy track leaves it for later
 2 open. Fix them and run `fairlead setup` again. `fairlead setup --check` shows this list any time.
 ```
 
-The exit code is 1: `git-hook` is open and required. `setup` writes the commit stage, and runs `lefthook install` itself only when `lefthook` is on the PATH.
+The exit code is 0: `git-hook` is open, and it is required only on a machine that has `lefthook`, which is what runs the commit stage. `setup` writes the stage, and runs `lefthook install` itself when `lefthook` is on the PATH.
 
 ### What done looks like
 
-`fairlead setup --check` exits 0, `fairlead done` passes, and a commit that adds a secret-named file or edits an old migration is refused on every machine that clones the repository.
+`git-hook` is `ok`, `fairlead done` passes, and a commit that adds a secret-named file or edits an old migration is refused on every machine that clones the repository and has `lefthook`.
 
 ### What comes later
 
