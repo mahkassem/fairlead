@@ -185,15 +185,94 @@ fn an_existing_config_is_kept_unless_force_is_given() {
 }
 
 #[test]
-fn a_repository_init_knows_nothing_about_gets_no_config() {
+fn a_repository_with_no_tests_yet_starts_with_the_guard_and_is_told_when_it_has_some() {
     let dir = repo("unknown", &[("notes.txt", "hello\n")]);
     let (code, out) = fairlead(&dir, &["init"]);
-    assert_eq!(code, 1, "{out}");
+    assert_eq!(code, 0, "{out}");
     assert!(
-        out.contains("found no test runner init knows here"),
+        out.contains("no test runner here yet, so this sets up the guard only"),
         "{out}"
     );
-    assert!(!dir.join("fairlead.toml").exists());
+    let config = std::fs::read_to_string(dir.join("fairlead.toml")).unwrap();
+    assert!(config.contains(r#"profile = "guard""#), "{config}");
+    // With no remote yet, the guard still runs.
+    let (code, out) = fairlead(&dir, &["guard", "check"]);
+    assert_eq!(code, 0, "{out}");
+    // Once a test exists, doctor names the runner it can have.
+    std::fs::write(
+        dir.join("package.json"),
+        r#"{"scripts":{"test":"vitest run"},"devDependencies":{"vitest":"^3.0.0"}}"#,
+    )
+    .unwrap();
+    std::fs::write(dir.join("a.test.ts"), "import { test } from 'vitest';\n").unwrap();
+    let (_, out) = fairlead(&dir, &["doctor"]);
+    assert!(
+        out.contains("tests: this repository has tests `vitest` can run"),
+        "{out}"
+    );
+}
+
+#[test]
+fn playwright_specs_get_a_runner_of_their_own_which_the_unit_runner_leaves_them_to() {
+    let spec = "import { test } from '@playwright/test';\n";
+    let dir = repo(
+        "playwright",
+        &[
+            (
+                "package.json",
+                r#"{"scripts":{"test":"vitest run"},"devDependencies":{"vitest":"^3.0.0","@playwright/test":"^1.50.0"}}"#,
+            ),
+            ("package-lock.json", "{}\n"),
+            ("src/a.test.ts", "import { test } from 'vitest';\n"),
+            ("e2e/cart.spec.ts", spec),
+            ("e2e/flows/pay.spec.ts", spec),
+        ],
+    );
+    let (code, out) = fairlead(&dir, &["init"]);
+    assert_eq!(code, 0, "{out}");
+    assert!(
+        out.contains("vitest") && out.contains("1 test file"),
+        "{out}"
+    );
+    assert!(out.contains("next, in this order:"), "{out}");
+    assert!(
+        out.contains("playwright") && out.contains("2 test files"),
+        "{out}"
+    );
+    let config = std::fs::read_to_string(dir.join("fairlead.toml")).unwrap();
+    assert!(
+        config.contains(r#"exclude = ["e2e/**/*.{test,spec}.{ts,tsx,js,jsx,mjs,cjs,mts,cts}"]"#),
+        "{config}"
+    );
+    assert!(
+        config.contains(r#"command = ["npx", "playwright", "test", "{files}"]"#),
+        "{config}"
+    );
+    // Every test file has exactly one runner, so the config checks clean.
+    let (code, out) = fairlead(&dir, &["config", "check"]);
+    assert_eq!(code, 0, "{out}");
+    assert!(!out.contains("warning"), "{out}");
+}
+
+#[test]
+fn a_runner_that_names_no_test_is_warned_about_at_config_check_and_doctor() {
+    let dir = repo(
+        "nofiles",
+        &[
+            ("src/a.test.ts", "import { test } from 'vitest';\n"),
+            (
+                "fairlead.toml",
+                "[[tests.runners]]\nid = \"unit\"\nmatch = [\"**/*.test.ts\"]\ncommand = [\"npx\", \"vitest\", \"run\"]\n",
+            ),
+        ],
+    );
+    for args in [&["config", "check"][..], &["doctor"][..]] {
+        let (_, out) = fairlead(&dir, args);
+        assert!(
+            out.contains("tests.runners `unit`: its command names no `{files}`"),
+            "{args:?}: {out}"
+        );
+    }
 }
 
 #[test]

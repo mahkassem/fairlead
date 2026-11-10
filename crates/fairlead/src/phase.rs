@@ -131,7 +131,7 @@ pub fn doctor_lines(root: &Path, config: &Config) -> String {
         (None, Some(at)) => format!(
             "phase: not set; {at} looks like a deploy to people, so whole suites run as each step says (`phase = \"live\"` says so)\n"
         ),
-        (None, None) => "phase: not set, and no workflow deploys to people; if nothing is live, `phase = \"early\"` leaves whole suites to the end of the day\n".to_string(),
+        (None, None) => "phase: not set, and no workflow deploys to people; if nothing is live, `phase = \"early\"` lets the nightly run prove what the gate owes\n".to_string(),
     };
     let waiting = at_full(config);
     if !waiting.is_empty() && !scheduled_plan(&found) {

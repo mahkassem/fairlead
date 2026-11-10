@@ -33,6 +33,7 @@ mod import_cmd;
 mod import_rules_cmd;
 mod init_cmd;
 mod init_guard;
+mod init_playwright;
 mod insights_cmd;
 mod insights_score;
 mod insights_speed;
@@ -55,6 +56,7 @@ mod replay_cmd;
 mod resume_cmd;
 mod reuse;
 mod score_cmd;
+mod setup_hints;
 mod since_green;
 mod skills_cmd;
 mod skills_eval_cmd;
@@ -363,6 +365,12 @@ fn doctor_report(dir: &Path, opts: &LoadOptions) -> String {
         if l.config.profile.is_full() {
             hooks.push_str(&phase::doctor_lines(&root, &l.config));
         }
+        for line in setup_hints::runner_warnings(&l.config) {
+            hooks.push_str(&format!("warning: {line}\n"));
+        }
+        if let Some(line) = setup_hints::tests_appeared(&root, &l.config) {
+            hooks.push_str(&line);
+        }
     }
     hooks.push_str(&ledger_text::doctor_lines(&graph_cmd::repo_root(dir)));
     let profile = match &loaded {
@@ -452,6 +460,9 @@ fn check(loaded: &Loaded) -> ExitCode {
         eprintln!("warning: {}: {}", w.key, w.message);
     }
     for line in owner_warnings(loaded) {
+        eprintln!("warning: {line}");
+    }
+    for line in setup_hints::runner_warnings(&loaded.config) {
         eprintln!("warning: {line}");
     }
     let mut problems = loaded.problems.clone();

@@ -167,9 +167,28 @@ pub fn exists_at(root: &Path, rev: &str, path: &str) -> bool {
     git(root, &["cat-file", "-e", &format!("{rev}:./{path}")]).is_ok()
 }
 
+/// Whether `rev` names a commit in this repository.
+pub fn rev_exists(root: &Path, rev: &str) -> bool {
+    git(
+        root,
+        &[
+            "rev-parse",
+            "--verify",
+            "--quiet",
+            &format!("{rev}^{{commit}}"),
+        ],
+    )
+    .is_ok()
+}
+
 /// The commit HEAD and `rev` share.
 pub fn merge_base(root: &Path, rev: &str) -> Result<String, String> {
-    let out = git(root, &["merge-base", "HEAD", rev])?;
+    let out = git(root, &["merge-base", "HEAD", rev]).map_err(|e| match rev_exists(root, rev) {
+        true => e,
+        false => format!(
+            "the base `{rev}` isn't in this repository: fetch it (`git fetch origin`), or point the rule that names it, such as `guard.migrations.base` or `[pr] base`, at a branch that is here"
+        ),
+    })?;
     Ok(String::from_utf8_lossy(&out).trim().to_string())
 }
 

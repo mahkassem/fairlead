@@ -42,6 +42,8 @@ struct Runner {
     id: &'static str,
     why: String,
     matches: Vec<String>,
+    /// Test files under `matches` left to another runner.
+    exclude: Vec<String>,
     command: Vec<String>,
     files: usize,
 }
@@ -66,6 +68,13 @@ struct Found {
     checks: Vec<Check>,
     fmt: Option<Fmt>,
     notes: Vec<String>,
+}
+
+/// The runners init would write here now, by id: for `doctor` in a
+/// repository set up with only the guard, once it has tests.
+pub fn runners_now(root: &Path) -> Vec<&'static str> {
+    let files = fairlead_lang::tree::Tree::scan(&fairlead_lang::tree::plain(root)).files;
+    detect(root, &files).runners.iter().map(|r| r.id).collect()
 }
 
 pub fn run(args: InitArgs, cwd: &Path) -> ExitCode {
@@ -96,11 +105,17 @@ pub fn run(args: InitArgs, cwd: &Path) -> ExitCode {
     };
     let found = detect(&root, &files);
     if found.runners.is_empty() && found.checks.is_empty() {
-        eprintln!("fairlead: found no test runner init knows here; the book's Configuration page shows how to add one, and `fairlead init --profile guard` sets up only the guard");
-        for note in &found.notes {
-            eprintln!("  note: {note}");
+        if blueprint.is_some() || !args.pack.is_empty() {
+            eprintln!("fairlead: found no test runner init knows here, and a blueprint or a pack needs one; the book's Configuration page shows how to add a runner");
+            return ExitCode::FAILURE;
         }
-        return ExitCode::FAILURE;
+        // No tests yet is when a guard costs least, so the repository
+        // starts with one and gains its runner when a test exists.
+        println!("fairlead: no test runner here yet, so this sets up the guard only. When there are tests, `fairlead doctor` says so and `fairlead init --dry-run` prints the runner to add");
+        for note in &found.notes {
+            println!("  note: {note}");
+        }
+        return crate::init_guard::run(&root, args.dry_run);
     }
     let mut text = render(&found);
     if let Some(bp) = &blueprint {
@@ -308,10 +323,15 @@ fn summary(found: &Found) {
     for note in &found.notes {
         println!("  note: {note}");
     }
-    println!("next:");
-    println!("  fairlead plan --base main     what a change since main would run");
-    println!("  fairlead hooks install        guard an agent's edits in Claude Code");
-    println!("  fairlead brief <path>         what an edit will reach, before it's made");
+    println!("next, in this order:");
+    println!(
+        "  fairlead hooks install        guard an agent's edits and check its work when it stops"
+    );
+    println!("  fairlead hooks install --git  the same rules at commit, through lefthook");
+    println!("  fairlead agents sync          tell the agent the change loop, in AGENTS.md");
+    println!("  fairlead ci workflow --write  run the plan on pull requests");
+    println!("  fairlead done                 the gate: run it once and let it pass");
+    println!("  fairlead doctor               what is still missing, with the command for each");
 }
 
 fn detect(root: &Path, files: &[String]) -> Found {
@@ -465,13 +485,38 @@ fn javascript(root: &Path, files: &[String], found: &mut Found) {
     };
     let mut matches = matches;
     matches.extend(importing(root, files, &matches, modules));
+    let specs = match depends("@playwright/test") {
+        true => crate::init_playwright::specs(root, files, &matches),
+        false => Vec::new(),
+    };
+    let spec_globs = crate::init_playwright::globs(files, &matches, &specs);
     push(found, files, id, why, matches, command);
-    if depends("@playwright/test") {
-        found.notes.push(
-            "Playwright specs are best planned in their own layer (`--env e2e`); see the book's Plans in CI page"
-                .into(),
-        );
+    if specs.is_empty() {
+        return;
     }
+    // A unit runner can't run a Playwright spec, so it leaves them out.
+    match found.runners.last_mut().filter(|r| r.id == id) {
+        Some(unit) if unit.files > specs.len() => {
+            unit.files -= specs.len();
+            unit.exclude = spec_globs.clone();
+        }
+        Some(_) => {
+            found.runners.pop();
+        }
+        None => {}
+    }
+    found.runners.push(Runner {
+        id: "playwright",
+        why: "@playwright/test in package.json, on the specs that import it".into(),
+        matches: spec_globs,
+        exclude: Vec::new(),
+        command: with(&["playwright", "test", "{files}"]),
+        files: specs.len(),
+    });
+    found.notes.push(
+        "playwright: name the 1 to 3 specs that stand for the suite as `smoke` on its runner, and add a `[[needs]]` entry if the specs need a browser or a running app this machine may not have"
+            .into(),
+    );
 }
 
 /// `bun test`, in parallel on a Bun that has it. `--no-isolate` keeps one
@@ -789,6 +834,7 @@ fn push(
         id,
         why: why.to_string(),
         matches,
+        exclude: Vec::new(),
         command,
         files: n,
     });
@@ -840,8 +886,12 @@ fn render(found: &Found) -> String {
         list(&all)
     ));
     for r in &found.runners {
+        let exclude = match r.exclude.is_empty() {
+            true => String::new(),
+            false => format!("exclude = {}\n", list(&r.exclude)),
+        };
         out.push_str(&format!(
-            "\n# {}: {} test files, from {}.\n[[tests.runners]]\nid = \"{}\"\nmatch = {}\ncommand = {}\n",
+            "\n# {}: {} test files, from {}.\n[[tests.runners]]\nid = \"{}\"\nmatch = {}\n{exclude}command = {}\n",
             r.id,
             r.files,
             r.why,
