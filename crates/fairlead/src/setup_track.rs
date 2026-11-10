@@ -119,8 +119,9 @@ struct Signals {
     workflows: usize,
     /// A manifest names a stack and `init` finds no runner for it.
     unread: bool,
-    /// Files named like a secret, such as a keystore or an `.env` file.
-    secrets: usize,
+    /// How many files are named like a secret, such as a keystore or an
+    /// `.env` file: a count, never a name or a value.
+    flagged: usize,
 }
 
 pub fn detect(root: &Path, files: &[String], config: Option<&Config>) -> Detected {
@@ -152,7 +153,7 @@ fn signals(root: &Path, files: &[String], config: Option<&Config>) -> Signals {
             runs_tests(&w.text) || !crate::phase::live_evidence(std::slice::from_ref(w)).is_empty()
         })
         .count();
-    let secrets = fairlead_guard::secret_paths::SecretPaths::new(&Default::default())
+    let flagged = fairlead_guard::secret_paths::SecretPaths::new(&Default::default())
         .map_or(0, |s| {
             files.iter().filter(|f| s.matched(f).is_some()).count()
         });
@@ -164,7 +165,7 @@ fn signals(root: &Path, files: &[String], config: Option<&Config>) -> Signals {
         days,
         workflows,
         unread,
-        secrets,
+        flagged,
     }
 }
 
@@ -263,11 +264,11 @@ fn decide(s: &Signals) -> Detected {
             true => "the planner can't read the stack".to_string(),
             false => format!("{tests} for {}", plural(s.sources, "source file")),
         };
-        let secrets = match s.secrets {
+        let flagged = match s.flagged {
             0 => String::new(),
             n => format!(", {} named like a secret", plural(n, "file")),
         };
-        (Track::Legacy, format!("{history}, {reads}{secrets}"))
+        (Track::Legacy, format!("{history}, {reads}{flagged}"))
     } else if s.workflows > 0 && (s.tests > MANY_TESTS || old) {
         (Track::Ongoing, format!("{tests}, {workflows}, {history}"))
     } else {
@@ -304,7 +305,7 @@ mod tests {
         let found = decide(&Signals {
             unread: true,
             workflows: 2,
-            secrets: 3,
+            flagged: 3,
             ..counted(30, 100, 500, 800)
         });
         assert_eq!(found.track, Track::Legacy);
@@ -403,7 +404,7 @@ mod tests {
         .to_vec();
         let found = signals(&dir, &files, None);
         assert_eq!((found.tests, found.sources), (2, 2), "{found:?}");
-        assert_eq!((found.workflows, found.secrets), (1, 1), "{found:?}");
+        assert_eq!((found.workflows, found.flagged), (1, 1), "{found:?}");
         assert!(!found.unread, "go.mod and a Go test: init has a runner");
         let config: Config = toml::from_str(
             "[tests]\nmatch = { replace = [\"**/*_test.go\"] }\n[[tests.runners]]\nid = \"go\"\nmatch = [\"**/*_test.go\"]\ncommand = [\"go\", \"test\", \"{packages}\"]\n",
