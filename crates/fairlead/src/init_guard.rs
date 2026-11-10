@@ -103,6 +103,32 @@ pub fn render(root: &Path, files: &[String]) -> String {
     out
 }
 
+/// Writes `text` as fairlead.toml, checked beside the target before it
+/// replaces it, so a config that doesn't load never lands; packs a
+/// blueprint names resolve from there. An error is the lines to say.
+pub fn land(root: &Path, text: &str) -> Result<(), Vec<String>> {
+    let target = root.join("fairlead.toml");
+    let draft = root.join(".fairlead.init.toml");
+    std::fs::write(&draft, text)
+        .map_err(|e| vec![format!("could not write {}: {e}", draft.display())])?;
+    let checked = match config::load_file(&draft, &[]) {
+        Ok(loaded) => config::validate(&loaded.config)
+            .into_iter()
+            .map(|p| format!("{}: {}", p.key, p.message))
+            .collect::<Vec<_>>(),
+        Err(e) => vec![format!("the config init made doesn't load: {e}")],
+    };
+    let landed = match checked.is_empty() {
+        true => std::fs::rename(&draft, &target)
+            .map_err(|e| vec![format!("could not write {}: {e}", target.display())]),
+        false => Err(checked),
+    };
+    if landed.is_err() {
+        let _ = std::fs::remove_file(&draft);
+    }
+    landed
+}
+
 /// Writes the config, checked before it lands, then the git hook.
 pub fn run(root: &Path, dry_run: bool) -> ExitCode {
     let files = fairlead_lang::tree::Tree::scan(&fairlead_lang::tree::plain(root)).files;
@@ -112,23 +138,9 @@ pub fn run(root: &Path, dry_run: bool) -> ExitCode {
         return ExitCode::SUCCESS;
     }
     let target = root.join("fairlead.toml");
-    let draft = root.join(".fairlead.init.toml");
-    if let Err(e) = std::fs::write(&draft, &text) {
-        eprintln!("fairlead: could not write {}: {e}", draft.display());
-        return ExitCode::from(2);
-    }
-    let checked = match config::load_file(&draft, &[]) {
-        Ok(loaded) => config::validate(&loaded.config),
-        Err(e) => {
-            let _ = std::fs::remove_file(&draft);
-            eprintln!("fairlead: the config init made doesn't load: {e}");
-            return ExitCode::from(2);
-        }
-    };
-    if !checked.is_empty() || std::fs::rename(&draft, &target).is_err() {
-        let _ = std::fs::remove_file(&draft);
-        for p in checked {
-            eprintln!("fairlead: {}: {}", p.key, p.message);
+    if let Err(lines) = land(root, &text) {
+        for line in lines {
+            eprintln!("fairlead: {line}");
         }
         return ExitCode::from(2);
     }

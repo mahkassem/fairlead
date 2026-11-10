@@ -32,8 +32,9 @@ pub fn runner_warnings(config: &Config) -> Vec<String> {
         .collect()
 }
 
-/// In a repository set up with only the guard: the runner it can have now.
-pub fn tests_appeared(root: &Path, config: &Config) -> Option<String> {
+/// In a repository set up with only the guard: the runner it can have now,
+/// as what was found and the edit that adds it.
+pub fn appeared(root: &Path, config: &Config) -> Option<(String, &'static str)> {
     if config.profile.is_full() {
         return None;
     }
@@ -41,10 +42,18 @@ pub fn tests_appeared(root: &Path, config: &Config) -> Option<String> {
     if ids.is_empty() {
         return None;
     }
-    Some(format!(
-        "tests: this repository has tests `{}` can run, and the guard-only profile plans none. `fairlead init --dry-run` prints the runner; add it to fairlead.toml and remove `profile = \"guard\"`\n",
-        ids.join(", ")
+    Some((
+        format!(
+            "this repository has tests `{}` can run, and the guard-only profile plans none",
+            ids.join(", ")
+        ),
+        "`fairlead init --dry-run` prints the runner; add it to fairlead.toml and remove `profile = \"guard\"`",
     ))
+}
+
+/// `appeared`, as `doctor`'s line.
+pub fn tests_appeared(root: &Path, config: &Config) -> Option<String> {
+    appeared(root, config).map(|(what, fix)| format!("tests: {what}. {fix}\n"))
 }
 
 #[cfg(test)]

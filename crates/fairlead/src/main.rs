@@ -56,7 +56,11 @@ mod replay_cmd;
 mod resume_cmd;
 mod reuse;
 mod score_cmd;
+mod setup_cmd;
 mod setup_hints;
+mod setup_items;
+mod setup_prove;
+mod setup_track;
 mod since_green;
 mod skills_cmd;
 mod skills_eval_cmd;
@@ -97,6 +101,11 @@ enum Command {
     Doctor {
         #[command(flatten)]
         args: score_cmd::DoctorArgs,
+    },
+    /// Set up what is local and reversible (a first config, the hooks, the agents block), then list what is still open with the one fix for each.
+    Setup {
+        #[command(flatten)]
+        args: setup_cmd::SetupArgs,
     },
     /// Write a first fairlead.toml from what the repository shows: its test runners, and a check for each language the graph doesn't read.
     Init {
@@ -373,6 +382,7 @@ fn doctor_report(dir: &Path, opts: &LoadOptions) -> String {
         }
     }
     hooks.push_str(&ledger_text::doctor_lines(&graph_cmd::repo_root(dir)));
+    hooks.push_str(&setup_items::doctor_line(dir, loaded.as_ref().ok()));
     let profile = match &loaded {
         Ok(l) if !l.config.profile.is_full() => {
             "profile: guard (no test plan; `fairlead done` runs `guard check` and `pr check`)\n"
@@ -612,6 +622,7 @@ fn main() -> ExitCode {
             );
             ExitCode::SUCCESS
         }
+        Some(Command::Setup { args }) => setup_cmd::run(args, &cwd()),
         Some(Command::Init { args }) => init_cmd::run(args, &cwd()),
         Some(Command::Config { action, sets }) => run_config(action, sets),
         Some(Command::Graph { action, sets }) => graph_cmd::run(action, sets, &cwd()),

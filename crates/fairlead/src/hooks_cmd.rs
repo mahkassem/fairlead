@@ -15,7 +15,9 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Map, Value};
 
 mod refresh;
+mod setup;
 pub use refresh::{apply, claude_installed, stale_agents, stale_git, Refresh};
+pub use setup::{agents, install_agents, install_git_quietly, AgentHooks};
 
 /// Runs the write stage, and does nothing where `fairlead` isn't installed,
 /// so a teammate without it can still work.
@@ -153,7 +155,7 @@ pub fn run(action: HooksAction, cwd: &Path) -> ExitCode {
     if claude {
         result = match action {
             HooksAction::Install { .. } => {
-                install(&file, &manifest, stages(&loaded.config), runner, agent)
+                install(&file, &manifest, stages(&loaded.config), runner, agent).map(say)
             }
             HooksAction::Status { .. } => status(&file, &manifest),
             HooksAction::Uninstall { .. } => uninstall(&file, &manifest),
@@ -167,7 +169,8 @@ pub fn run(action: HooksAction, cwd: &Path) -> ExitCode {
                 &git_dir,
                 runner,
                 wants_push(&loaded.config),
-            ),
+            )
+            .map(say),
             HooksAction::Status { .. } => git_status(&lefthook, &lefthook_manifest, &git_dir),
             HooksAction::Uninstall { .. } => git_uninstall(&lefthook, &lefthook_manifest),
         };
@@ -327,18 +330,16 @@ fn keep_manifest(manifest: &Path, record: &Manifest) -> Result<(), String> {
     )
 }
 
+/// Prints what an install said, a line each.
+fn say(lines: Vec<String>) {
+    for line in lines {
+        println!("hooks: {line}");
+    }
+}
+
 /// The git hooks through lefthook, as `hooks install --git` adds them.
 pub fn install_git(root: &Path, config: &fairlead_core::config::Config) -> Result<(), String> {
-    let git_dir = fairlead_guard::git::git_dir(root).ok_or("not inside a git repository")?;
-    let lefthook = lefthook_file(root);
-    let manifest = lefthook_manifest(&git_dir, &lefthook);
-    git_install(
-        &lefthook,
-        &manifest,
-        &git_dir,
-        package_runner(root),
-        wants_push(config),
-    )
+    install_git_quietly(root, config).map(say)
 }
 
 /// Whether the config asks for the pre-push entry: push checks to run, or
@@ -364,8 +365,9 @@ fn git_install(
     git_dir: &Path,
     runner: Option<&str>,
     push: bool,
-) -> Result<(), String> {
+) -> Result<Vec<String>, String> {
     let original = read(file)?;
+    let mut said = Vec::new();
     let mut entries = vec![(lefthook::COMMIT, git_run(runner, lefthook::RUN))];
     if push {
         entries.push((lefthook::PUSH, git_run(runner, lefthook::PUSH_RUN)));
@@ -385,7 +387,7 @@ fn git_install(
                 {
                     text = t;
                     upgraded = true;
-                    println!("hooks: the {} entry now runs `{}`", entry.hook, entry.run);
+                    said.push(format!("the {} entry now runs `{}`", entry.hook, entry.run));
                 }
             }
             lefthook::Insert::Refused(why) => {
@@ -398,8 +400,7 @@ fn git_install(
         }
     }
     if added.is_empty() && !upgraded {
-        println!("hooks: already in {}", file.display());
-        return Ok(());
+        return Ok(vec![format!("already in {}", file.display())]);
     }
     let written = text;
     keep_manifest(
@@ -412,10 +413,10 @@ fn git_install(
     )?;
     write(file, &written)?;
     if added.is_empty() {
-        return Ok(());
+        return Ok(said);
     }
-    println!(
-        "hooks: added {} to {}",
+    said.push(format!(
+        "added {} to {}",
         added
             .iter()
             .map(|h| if *h == "pre-push" {
@@ -426,11 +427,11 @@ fn git_install(
             .collect::<Vec<_>>()
             .join(" and "),
         file.display()
-    );
+    ));
     if !lefthook_active(git_dir) {
-        println!("hooks: lefthook isn't in .git/hooks yet; run `lefthook install` so it runs");
+        said.push("lefthook isn't in .git/hooks yet; run `lefthook install` so it runs".into());
     }
-    Ok(())
+    Ok(said)
 }
 
 fn git_status(file: &Path, manifest: &Path, git_dir: &Path) -> Result<(), String> {
@@ -731,7 +732,7 @@ fn install(
     stages: Stages,
     runner: Option<&str>,
     agent: Agent,
-) -> Result<(), String> {
+) -> Result<Vec<String>, String> {
     let Stages {
         bash, stop, nudge, ..
     } = stages;
@@ -741,11 +742,10 @@ fn install(
         None => Map::new(),
     };
     if !installed(&settings).is_empty() {
-        println!(
-            "hooks: already installed in {}; `fairlead migrate` brings them to this version's",
+        return Ok(vec![format!(
+            "already installed in {}; `fairlead migrate` brings them to this version's",
             file.display()
-        );
-        return Ok(());
+        )]);
     }
     add_ours(&mut settings, file, &stages, runner, agent)?;
     let written = pretty(&settings);
@@ -785,16 +785,16 @@ fn install(
     } else {
         ""
     };
-    println!(
-        "hooks: installed in {}, checking {what}{note}{resume}",
+    let mut said = vec![format!(
+        "installed in {}, checking {what}{note}{resume}",
         file.display()
-    );
+    )];
     match agent {
-        Agent::Codex => println!("hooks: Codex runs a project's hooks once the project is trusted and you approve them; it asks when it starts, or see /hooks"),
-        Agent::Gemini => println!("hooks: Gemini CLI runs a project's hooks only in a trusted folder, and warns once when it first sees them"),
+        Agent::Codex => said.push("Codex runs a project's hooks once the project is trusted and you approve them; it asks when it starts, or see /hooks".into()),
+        Agent::Gemini => said.push("Gemini CLI runs a project's hooks only in a trusted folder, and warns once when it first sees them".into()),
         Agent::Claude => {}
     }
-    Ok(())
+    Ok(said)
 }
 
 fn status(file: &Path, manifest: &Path) -> Result<(), String> {

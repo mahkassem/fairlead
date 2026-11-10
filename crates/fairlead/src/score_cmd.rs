@@ -254,12 +254,25 @@ fn workflows(root: &Path) -> Vec<String> {
         .collect()
 }
 
+/// Whether a workflow runs Fairlead: the CI plan or the action, or the
+/// guard for the guard profile, which has no plan to stage.
+pub fn ci_runs(root: &Path, profile: Profile) -> bool {
+    workflows(root).iter().any(|text| match profile {
+        Profile::Guard => {
+            text.contains("fairlead guard check") || text.contains("command: guard check")
+        }
+        Profile::Full => {
+            text.contains(crate::ci_workflow::MARKER)
+                || text.contains("fairlead ci ")
+                || text.contains("mahkassem/fairlead@")
+        }
+    })
+}
+
 /// The guard profile has no plan to stage, so a workflow running the guard
 /// earns the whole item.
 fn guard_ci_item(root: &Path) -> Item {
-    let runs = workflows(root)
-        .iter()
-        .any(|t| t.contains("fairlead guard check") || t.contains("command: guard check"));
+    let runs = ci_runs(root, Profile::Guard);
     pass(
         "ci",
         10,
@@ -277,11 +290,7 @@ fn ci_item(root: &Path, loaded: &Loaded) -> Item {
     if loaded.config.profile == Profile::Guard {
         return guard_ci_item(root);
     }
-    let planned = workflows(root).iter().any(|text| {
-        text.contains(crate::ci_workflow::MARKER)
-            || text.contains("fairlead ci ")
-            || text.contains("mahkassem/fairlead@")
-    });
+    let planned = ci_runs(root, Profile::Full);
     let staged = loaded.config.stages.is_some();
     let earned = u32::from(planned) * 5 + u32::from(planned && staged) * 5;
     item(

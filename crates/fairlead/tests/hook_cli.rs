@@ -706,6 +706,7 @@ fn doctor_reports_the_hooks_and_what_the_event_log_recorded() {
             "  denied by: 1 file-length",
             "commit stage: 1 run(s): 1 allow",
             "phase: not set, and no workflow deploys to people; if nothing is live, `phase = \"early\"` lets the nightly run prove what the gate owes",
+            "setup: 3 open (first: hooks); `fairlead setup --check` lists each with its fix",
         ]
     );
 }

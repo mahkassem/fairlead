@@ -42,6 +42,36 @@ fn padded(text: &str) -> Option<[u64; 3]> {
     Some([0, 1, 2].map(|i| v.get(i).copied().unwrap_or(0)))
 }
 
+/// What disagrees with the binary running, each as what differs and what
+/// to do about it.
+pub fn differs(this: &str, seen: &Seen) -> Vec<(String, &'static str)> {
+    let mut out = Vec::new();
+    let have = padded(this);
+    if let (Some(spec), Some(have)) = (&seen.spec, have) {
+        if padded(spec).is_some_and(|want| want > have) {
+            out.push((
+                format!("package.json asks for {spec} but this binary is {this}"),
+                "install again (a worktree's node_modules can be a copy of an older one)",
+            ));
+        }
+    }
+    if let Some(installed) = &seen.installed {
+        if padded(installed) != have {
+            out.push((
+                format!("node_modules has {installed} but this binary is {this}"),
+                "run the project's copy through the package manager (`npx fairlead`, `bunx fairlead`) or install again",
+            ));
+        }
+    }
+    out
+}
+
+/// Whether the config's floor asks for a later version than the binary running.
+pub fn below_floor(this: &str, seen: &Seen) -> bool {
+    let floor = seen.floor.as_deref().and_then(padded);
+    matches!((floor, padded(this)), (Some(want), Some(have)) if want > have)
+}
+
 /// The binary's path, the versions named, and a warning for each that
 /// disagrees with the binary running.
 pub fn lines(binary: &str, this: &str, seen: &Seen) -> String {
@@ -57,20 +87,8 @@ pub fn lines(binary: &str, this: &str, seen: &Seen) -> String {
     if !named.is_empty() {
         out.push_str(&format!("versions: {}\n", named.join(", ")));
     }
-    let have = padded(this);
-    if let (Some(spec), Some(have)) = (&seen.spec, have) {
-        if padded(spec).is_some_and(|want| want > have) {
-            out.push_str(&format!(
-                "warning: package.json asks for {spec} but this binary is {this}; install again (a worktree's node_modules can be a copy of an older one)\n"
-            ));
-        }
-    }
-    if let Some(installed) = &seen.installed {
-        if padded(installed) != have {
-            out.push_str(&format!(
-                "warning: node_modules has {installed} but this binary is {this}; run the project's copy through the package manager (`npx fairlead`, `bunx fairlead`) or install again\n"
-            ));
-        }
+    for (what, then) in differs(this, seen) {
+        out.push_str(&format!("warning: {what}; {then}\n"));
     }
     out
 }
@@ -122,6 +140,13 @@ mod tests {
                 "{out}"
             );
         }
+    }
+
+    #[test]
+    fn a_floor_above_the_binary_is_below_it_and_one_at_or_under_is_not() {
+        assert!(below_floor("0.13.0", &seen(None, None, Some("0.14"))));
+        assert!(!below_floor("0.13.2", &seen(None, None, Some("0.13"))));
+        assert!(!below_floor("0.13.0", &Seen::default()));
     }
 
     #[test]

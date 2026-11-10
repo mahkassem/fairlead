@@ -56,10 +56,18 @@ impl State {
             AgentsWrite::Never => "copy in the block `fairlead agents sync` prints",
         };
         match self {
+            State::Broken(_) => self.what(file),
+            _ => self.what(file).map(|what| format!("{what}; {fix}")),
+        }
+    }
+
+    /// What's wrong with the file, without the fix.
+    fn what(&self, file: &str) -> Option<String> {
+        match self {
             State::Current => None,
-            State::Missing => Some(format!("{file} doesn't exist; {fix}")),
-            State::NoBlock => Some(format!("{file} has no fairlead block; {fix}")),
-            State::Stale => Some(format!("{file}'s fairlead block is stale; {fix}")),
+            State::Missing => Some(format!("{file} doesn't exist")),
+            State::NoBlock => Some(format!("{file} has no fairlead block")),
+            State::Stale => Some(format!("{file}'s fairlead block is stale")),
             State::Broken(why) => Some(format!("{file}: {why}")),
         }
     }
@@ -138,6 +146,28 @@ fn read(path: &Path) -> Result<Option<String>, String> {
     }
 }
 
+/// The files that carry the block, and what is wrong with each one whose
+/// block is missing, stale or broken, for `fairlead setup`.
+pub fn status(root: &Path, config: &Config) -> (Vec<String>, Vec<String>) {
+    let (lines, _) = lines(root, config);
+    let files = files(config);
+    let wrong = files
+        .iter()
+        .filter_map(|f| State::of(read(&root.join(f)), &lines).what(f))
+        .collect();
+    (files, wrong)
+}
+
+/// `agents sync` without printing: what it did to each file, or the first
+/// file it had to leave untouched.
+pub fn sync(root: &Path, config: &Config) -> Result<Vec<String>, String> {
+    let (lines, _) = lines(root, config);
+    files(config)
+        .iter()
+        .map(|f| sync_file(root, f, &lines).map_err(|e| format!("{f}: {e}; left untouched")))
+        .collect()
+}
+
 /// The doctor's lines: each file whose block is missing, stale or broken,
 /// in either write mode, or one line saying they're all current.
 pub fn doctor_lines(root: &Path, config: &Config) -> String {
@@ -211,26 +241,29 @@ fn check_files(root: &Path, files: &[String], lines: &[String], write: AgentsWri
     }
 }
 
+/// Writes the block in one file, and says what that did.
+fn sync_file(root: &Path, f: &str, lines: &[String]) -> Result<String, String> {
+    let path = root.join(f);
+    let text = read(&path)?;
+    let new = block::splice(text.as_deref(), lines)?;
+    if text.as_deref() == Some(new.as_str()) {
+        return Ok(format!("{f} is current"));
+    }
+    if let Some(dir) = path.parent() {
+        std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
+    }
+    std::fs::write(&path, &new).map_err(|e| e.to_string())?;
+    Ok(match text {
+        None => format!("created {f} with the block"),
+        Some(t) if block::locate(&t)?.is_some() => format!("updated the block in {f}"),
+        Some(_) => format!("added the block at the end of {f}"),
+    })
+}
+
 fn sync_files(root: &Path, files: &[String], lines: &[String]) -> ExitCode {
     let mut failed = false;
     for f in files {
-        let path = root.join(f);
-        let outcome = read(&path).and_then(|text| {
-            let new = block::splice(text.as_deref(), lines)?;
-            if text.as_deref() == Some(new.as_str()) {
-                return Ok(format!("{f} is current"));
-            }
-            if let Some(dir) = path.parent() {
-                std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
-            }
-            std::fs::write(&path, &new).map_err(|e| e.to_string())?;
-            Ok(match text {
-                None => format!("created {f} with the block"),
-                Some(t) if block::locate(&t)?.is_some() => format!("updated the block in {f}"),
-                Some(_) => format!("added the block at the end of {f}"),
-            })
-        });
-        match outcome {
+        match sync_file(root, f, lines) {
             Ok(done) => println!("agents: {done}"),
             Err(e) => {
                 failed = true;
