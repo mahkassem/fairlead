@@ -156,8 +156,10 @@ fn print_writes_no_file_and_the_guide_says_what_never_goes_in() {
 
     let (code, guide, _) = fairlead(&dir, &["guide", "report"]);
     assert_eq!(code, 0);
-    assert!(
-        guide.starts_with("# Report a mistake of Fairlead's\n"),
+    // The first line, whatever line ending the checkout gave the guide.
+    assert_eq!(
+        guide.lines().next(),
+        Some("# Report a mistake of Fairlead's"),
         "{guide}"
     );
     for line in [
