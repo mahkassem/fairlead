@@ -133,8 +133,8 @@ fn a_session_is_told_nothing_once_no_required_item_is_open() {
     assert_eq!(code, 0, "{out}{err}{check}");
     assert_eq!(session_start(&dir), "");
     assert!(
-        !dir.join(".git/fairlead/setup-told").exists(),
-        "nothing told, nothing stamped"
+        dir.join(".git/fairlead/setup-told").exists(),
+        "the day's one look is stamped, so the tree isn't read again"
     );
     std::fs::remove_dir_all(&dir).unwrap();
 }

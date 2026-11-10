@@ -186,8 +186,8 @@ fn reload(dir: &Path) -> Option<Loaded> {
     load(dir, &LoadOptions::from_process(Vec::new())).ok()
 }
 
-/// What a new session is told when a required item is open: one line, at
-/// most once a day for a repository. Nothing is proved or changed.
+/// What a new session is told when a required item is open: one line, and
+/// one look, a day for a repository. Nothing is proved or changed.
 pub fn session_line(dir: &Path) -> Option<String> {
     let loaded = reload(dir);
     let root = root_of(dir, loaded.as_ref());
@@ -205,13 +205,14 @@ pub fn session_line(dir: &Path) -> Option<String> {
     let config = loaded.as_ref().map(|l| &l.config);
     let track = crate::setup_track::detect(&root, &tree.files, config).track;
     let items = check_in(&tree, loaded.as_ref(), track);
-    if !blocked(&items) {
-        return None;
-    }
+    // Stamped either way, so a large tree is read once a day at most.
     if let Some(parent) = stamp.parent() {
         let _ = std::fs::create_dir_all(parent);
     }
     let _ = std::fs::write(&stamp, &day);
+    if !blocked(&items) {
+        return None;
+    }
     let open: Vec<&str> = (items.iter())
         .filter(|i| i.required && i.state == State::Open)
         .map(|i| i.id)
