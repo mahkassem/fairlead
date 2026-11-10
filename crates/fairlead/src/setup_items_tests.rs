@@ -180,6 +180,13 @@ fn smoke_is_wanted_past_50_test_files_or_behind_a_need() {
         TWO
     ));
     assert_eq!(smoke(&named, &small).state, State::Ok);
+    let stale = config(&format!("{TWO}smoke = [\"e2e/gone.spec.ts\"]\n"));
+    let item = smoke(&stale, &small);
+    assert_eq!(item.state, State::Open);
+    assert_eq!(
+        item.text,
+        "e2e: its `smoke` entry `e2e/gone.spec.ts` names no test file it matches"
+    );
 }
 
 #[test]

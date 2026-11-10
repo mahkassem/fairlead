@@ -89,6 +89,7 @@ fn repo(name: &str, config: &str, far: usize, head: &[(&str, &str)]) -> PathBuf 
     git(&dir, &["commit", "-q", "-m", "base"]);
     git(&dir, &["checkout", "-q", "-b", "change"]);
     for (path, text) in head {
+        std::fs::create_dir_all(dir.join(path).parent().unwrap()).unwrap();
         std::fs::write(dir.join(path), text).unwrap();
     }
     git(&dir, &["add", "-A"]);
@@ -286,6 +287,18 @@ fn a_new_file_no_test_is_near_gets_advice() {
         out.contains("advice: src/lonely.ts is new and no test is near it"),
         "{out}"
     );
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+#[test]
+fn a_new_file_named_like_a_test_is_not_asked_for_a_test() {
+    // Outside `tests.match`, so the planner reads it as a source file.
+    let config = format!("[tests]\nmatch = {{ replace = [\"test/**\"] }}\n{RUNNER}");
+    let head = [("scripts/check.test.ts", "export {};\n")];
+    let dir = repo("specnew", &config, 1, &head);
+    let (code, out) = fairlead(&dir, &["done"]);
+    assert_eq!(code, 0, "{out}");
+    assert!(!out.contains("no test is near"), "{out}");
     std::fs::remove_dir_all(&dir).unwrap();
 }
 

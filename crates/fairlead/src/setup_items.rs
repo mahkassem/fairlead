@@ -181,6 +181,79 @@ pub fn blocked(items: &[Item]) -> bool {
     items.iter().any(|i| i.required && i.state == State::Open)
 }
 
+fn reload(dir: &Path) -> Option<Loaded> {
+    use fairlead_core::config::{load, LoadOptions};
+    load(dir, &LoadOptions::from_process(Vec::new())).ok()
+}
+
+/// What a new session is told when a required item is open: one line, at
+/// most once a day for a repository. Nothing is proved or changed.
+pub fn session_line(dir: &Path) -> Option<String> {
+    let loaded = reload(dir);
+    let root = root_of(dir, loaded.as_ref());
+    let stamp = fairlead_guard::git::common_dir(&root)?
+        .join("fairlead")
+        .join("setup-told");
+    let day = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_secs() / 86_400)
+        .to_string();
+    if std::fs::read_to_string(&stamp).is_ok_and(|told| told.trim() == day) {
+        return None;
+    }
+    let tree = Tree::scan(&root);
+    let config = loaded.as_ref().map(|l| &l.config);
+    let track = crate::setup_track::detect(&root, &tree.files, config).track;
+    let items = check_in(&tree, loaded.as_ref(), track);
+    if !blocked(&items) {
+        return None;
+    }
+    if let Some(parent) = stamp.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    let _ = std::fs::write(&stamp, &day);
+    let open: Vec<&str> = (items.iter())
+        .filter(|i| i.required && i.state == State::Open)
+        .map(|i| i.id)
+        .collect();
+    Some(format!(
+        "fairlead: setup has {} open ({}); run `fairlead setup`, which fixes what it can and names one fix for each of the rest",
+        open.len(),
+        open.join(", ")
+    ))
+}
+
+/// What CI says about the setup a checkout shows: the config, the runners,
+/// the agents block, and the agent hooks where the repository commits its
+/// agent settings. What only a machine has is left out.
+pub fn ci_line(dir: &Path) -> Option<String> {
+    let loaded = reload(dir);
+    let root = root_of(dir, loaded.as_ref());
+    let tree = Tree::scan(&root);
+    let config = loaded.as_ref().map(|l| &l.config);
+    let track = crate::setup_track::detect(&root, &tree.files, config).track;
+    let repo = crate::graph_cmd::repo_root(&root);
+    let commits_hooks = repo.join(".claude").join("settings.json").exists();
+    let seen = |id: &str| match id {
+        "config" | "runners" | "agents" => true,
+        "hooks" => commits_hooks,
+        _ => false,
+    };
+    let open: Vec<&str> = check_in(&tree, loaded.as_ref(), track)
+        .iter()
+        .filter(|i| i.state == State::Open && seen(i.id))
+        .map(|i| i.id)
+        .collect();
+    if open.is_empty() {
+        return None;
+    }
+    Some(format!(
+        "setup has {} open in the repository ({}); run `fairlead setup` and commit what it writes",
+        open.len(),
+        open.join(", ")
+    ))
+}
+
 /// The last line of `fairlead doctor`; none outside a git repository,
 /// where there is nothing to set up and no bound on the tree to read.
 pub fn doctor_line(dir: &Path, loaded: Option<&Loaded>) -> String {
@@ -565,6 +638,27 @@ fn smoke(config: &Config, suites: &Suites) -> Item {
                 runner.id
             ),
         );
+    }
+    // A `smoke` entry that names no file of its runner stands for nothing.
+    let runners = config.tests.runners.items().iter().zip(&suites.files);
+    for (runner, files) in runners {
+        let stale = runner
+            .smoke
+            .iter()
+            .find(|glob| Pattern::new(glob).is_ok_and(|p| !files.iter().any(|f| p.is_match(f))));
+        if let Some(glob) = stale {
+            return open(
+                "smoke",
+                format!(
+                    "{}: its `smoke` entry `{glob}` names no test file it matches",
+                    runner.id
+                ),
+                format!(
+                    "name test files that exist under `smoke` on runner `{}` in fairlead.toml",
+                    runner.id
+                ),
+            );
+        }
     }
     let ids: Vec<&str> = wanting.iter().map(|(r, _)| r.id.as_str()).collect();
     match ids.len() {

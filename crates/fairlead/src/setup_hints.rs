@@ -32,6 +32,34 @@ pub fn runner_warnings(config: &Config) -> Vec<String> {
         .collect()
 }
 
+/// A `smoke` pattern that names no test file of its runner stands for
+/// nothing: behind a blanket the gate would run none of the suite, without
+/// a word. `files` are the tree's paths.
+pub fn smoke_warnings(files: &[String], config: &Config) -> Vec<String> {
+    use fairlead_core::pattern::Pattern;
+    let mut out = Vec::new();
+    for runner in config.tests.runners.items() {
+        let mine: Vec<Pattern> = (runner.matches.iter())
+            .filter_map(|g| Pattern::new(g).ok())
+            .collect();
+        for glob in &runner.smoke {
+            let Ok(pattern) = Pattern::new(glob) else {
+                continue;
+            };
+            let found = files
+                .iter()
+                .any(|f| pattern.is_match(f) && mine.iter().any(|m| m.is_match(f)));
+            if !found {
+                out.push(format!(
+                    "tests.runners `{}`: its smoke entry `{glob}` names no test file the runner matches, so it stands for nothing; name files that exist, such as after a rename",
+                    runner.id
+                ));
+            }
+        }
+    }
+    out
+}
+
 /// In a repository set up with only the guard: the runner it can have now,
 /// as what was found and the edit that adds it.
 pub fn appeared(root: &Path, config: &Config) -> Option<(String, &'static str)> {

@@ -482,6 +482,12 @@ fn check(loaded: &Loaded) -> ExitCode {
     for line in setup_hints::runner_warnings(&loaded.config) {
         eprintln!("warning: {line}");
     }
+    let runners = loaded.config.tests.runners.items();
+    if runners.iter().any(|r| !r.smoke.is_empty()) {
+        for line in setup_hints::smoke_warnings(&check_tree(loaded).files, &loaded.config) {
+            eprintln!("warning: {line}");
+        }
+    }
     let mut problems = loaded.problems.clone();
     problems.extend(fairlead_core::config::plan_globs(&loaded.config));
     let runners = if problems.is_empty() {

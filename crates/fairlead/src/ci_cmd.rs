@@ -240,6 +240,13 @@ fn plan(cwd: &Path, mut changes: Changes, opts: &PlanOpts) -> Result<ExitCode, S
         head_matches(cwd, head)?;
     }
     let config = crate::plan_cmd::config_for(cwd, &changes)?;
+    // CI is where a repository that never ran its setup is still seen.
+    if let Some(line) = crate::setup_items::ci_line(cwd) {
+        match std::env::var("GITHUB_ACTIONS").is_ok_and(|v| v == "true") {
+            true => eprintln!("::warning title=Fairlead setup::{line}"),
+            false => eprintln!("fairlead: {line}"),
+        }
+    }
     let event = stage::Event::from_env();
     let resolved = stage::resolve(opts.stage, &config, event.as_ref());
     changes.stage = resolved.stage;
