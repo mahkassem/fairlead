@@ -53,11 +53,11 @@ that file with the same arguments:
 - uses: actions/cache@v4
   with:
     path: ${{ runner.temp }}/fairlead
-    key: fairlead-${{ runner.os }}-0.19.0
+    key: fairlead-${{ runner.os }}-0.19.1
 - run: |
     mkdir -p "$RUNNER_TEMP/fairlead"
     test -x "$RUNNER_TEMP/fairlead/fairlead" || curl -fsSL --retry 3 \
-      https://github.com/mahkassem/fairlead/releases/download/v0.19.0/fairlead-x86_64-unknown-linux-gnu.tar.xz \
+      https://github.com/mahkassem/fairlead/releases/download/v0.19.1/fairlead-x86_64-unknown-linux-gnu.tar.xz \
       | tar xJ --strip-components 1 -C "$RUNNER_TEMP/fairlead"
 - run: npm ci
   env:
@@ -245,7 +245,25 @@ Python project, say) stays out of the plan instead of stopping it.
 It then loads and validates what it wrote, and prints the test files each
 runner matched. What it can't tell, such as a runner's options in
 `scripts.test` or a Go module below the root, it prints as a note. It never
-replaces a config without `--force`. When the manifests show a framework
+replaces a config without `--force`.
+
+*Since 0.19.1:* three things a first setup got wrong:
+
+- **Playwright specs get a runner of their own.** A spec is named like a
+  unit test, so the unit runner's patterns matched it and `bun test` or
+  Vitest was handed files it can't run. Init finds the specs by their
+  import of `@playwright/test`, writes a `playwright` runner for them and an
+  `exclude` on the unit runner, and notes that the runner wants a
+  [`smoke` set](done.md#the-budget).
+- **A repository with no tests yet starts with the guard.** Where init
+  finds no runner it writes [the guard-only setup](#the-guard-only), where
+  it used to write nothing and exit 1. `fairlead doctor` says when the
+  repository has tests a runner can run, and `fairlead init --dry-run`
+  prints that runner.
+- **The steps after init, in order:** `hooks install`, `hooks install --git`,
+  `agents sync`, `ci workflow --write`, `done` once, then `doctor` for what
+  is still missing.
+ When the manifests show a framework
 with a [pack](graph.md#framework-packs), Laravel or Next.js, it names the pack
 and writes it only with `--pack`.
 

@@ -71,7 +71,7 @@ fn points(s: &serde_json::Value, id: &str) -> u64 {
 }
 
 #[test]
-fn a_bare_repository_scores_zero_and_names_the_biggest_fixes_first() {
+fn a_bare_repository_scores_zero_and_names_its_setup_before_any_measuring() {
     let dir = repo("bare");
     let s = score(&dir, &[]);
     assert_eq!(
@@ -87,9 +87,11 @@ fn a_bare_repository_scores_zero_and_names_the_biggest_fixes_first() {
     assert_eq!(max, 100, "the rubric sums to 100");
     let text = String::from_utf8_lossy(&fairlead(&dir, &["doctor", "--score"]).stdout).into_owned();
     assert!(text.starts_with("readiness 0/100 (rubric 2)"), "{text}");
+    let next = text.split("next:\n").nth(1).unwrap_or("");
+    assert!(next.starts_with("  +10 run `fairlead init`"), "{text}");
     assert!(
-        text.contains("next:\n  +30 run `fairlead replay fetch`"),
-        "the two replay items share one fix: {text}"
+        !next.contains("replay fetch"),
+        "a replay waits for the setup it would measure: {text}"
     );
     let out = fairlead(&dir, &["doctor", "--score", "--min", "1"]);
     assert_eq!(out.status.code(), Some(1), "--min fails a score below it");

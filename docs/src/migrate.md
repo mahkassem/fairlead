@@ -442,6 +442,14 @@ gate does, with no config change:
   plan selected everything, how long the gate takes, and what was owed
   ([Score](insights.md#score)).
 
+### To 0.19.1
+
+Migrate updates nothing in your files. `config check` and `doctor` now
+warn about a runner whose command names no `{files}`: add it where the
+test files go, or the runner runs its whole suite on every change that
+reaches one of its tests. `fairlead init` gives Playwright specs their own
+runner, and sets up the guard alone in a repository with no tests yet.
+
 ## Going back to an older release
 
 Install the older release, then run its `hooks uninstall` and

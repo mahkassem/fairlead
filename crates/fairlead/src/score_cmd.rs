@@ -509,20 +509,27 @@ pub fn render(s: &Score) -> String {
         ));
     }
     // Items sharing a fix, such as the two replay items, are one step.
-    let mut fixes: Vec<(u32, &str)> = Vec::new();
+    // Setup comes before measuring it, in the order it's done: a replay
+    // says little about a repository whose hooks, gate or CI aren't in place.
+    const SETUP: [&str; 5] = ["config", "runners", "hooks", "done", "ci"];
+    let mut fixes: Vec<(usize, u32, &str)> = Vec::new();
     for i in &s.items {
         let Some(fix) = i.fix.as_deref() else {
             continue;
         };
-        match fixes.iter_mut().find(|(_, f)| *f == fix) {
-            Some((gain, _)) => *gain += i.max - i.points,
-            None => fixes.push((i.max - i.points, fix)),
+        let rank = SETUP
+            .iter()
+            .position(|id| *id == i.id)
+            .unwrap_or(SETUP.len());
+        match fixes.iter_mut().find(|(_, _, f)| *f == fix) {
+            Some((_, gain, _)) => *gain += i.max - i.points,
+            None => fixes.push((rank, i.max - i.points, fix)),
         }
     }
-    fixes.sort_by_key(|(gain, _)| std::cmp::Reverse(*gain));
+    fixes.sort_by_key(|(rank, gain, _)| (*rank, std::cmp::Reverse(*gain)));
     if !fixes.is_empty() {
         out.push_str("next:\n");
-        for (gain, fix) in fixes.iter().take(3) {
+        for (_, gain, fix) in fixes.iter().take(3) {
             out.push_str(&format!("  +{gain:<2} {fix}\n"));
         }
     }

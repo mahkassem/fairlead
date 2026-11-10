@@ -9,6 +9,8 @@ fairlead doctor --score --min 70      # exits 1 below 70, for CI
 fairlead doctor --score --replay out/report.json
 ```
 
+*Since 0.19.1:* the fixes under `next` list setup before measuring, in the order it's done: the config, the runners, the hooks, a passing gate and CI come before a replay, which says little about a repository that has none of them yet.
+
 ## Rubric 2
 
 | Item | Points | Earned when |

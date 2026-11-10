@@ -188,6 +188,8 @@ check on the merge commit, already catches a number taken by a change that
 landed. Two pull requests that both wait unmerged with the same number are
 caught when the second one rebases.
 
+*Since 0.19.1:* a repository with no remote yet has no `guard.migrations.base` to compare with. `guard check` then says so in a note and checks the rest, where it used to stop on git's own error; a base named with `--base` that isn't in the repository is still an error, and says to fetch it or point the rule at a branch that is there.
+
 ## Secret paths
 
 *Since 0.18.0:* a commit may not add a file whose name says it holds a

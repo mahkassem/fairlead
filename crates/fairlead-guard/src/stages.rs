@@ -121,6 +121,13 @@ pub fn tree(
         warm(m, root);
         out.findings.extend(m.prefix_findings(tracked));
         match base.or(m.base()) {
+            // A repository with no remote yet has nothing to compare with;
+            // a base named on the command line that isn't here is a mistake.
+            Some(rev) if m.immutable() && base.is_none() && !git::rev_exists(root, rev) => {
+                out.notes.push(format!(
+                    "migrations: the base `{rev}` isn't in this repository yet, so edits to existing migrations aren't checked here; they are once it is fetched (`git fetch origin`)"
+                ));
+            }
             Some(rev) if m.immutable() => {
                 let at = git::merge_base(root, rev)?;
                 let existed = git::paths_at(root, &at);
