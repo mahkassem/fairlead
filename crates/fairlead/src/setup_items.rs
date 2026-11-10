@@ -188,6 +188,18 @@ fn reload(dir: &Path) -> Option<Loaded> {
     load(dir, &LoadOptions::from_process(Vec::new())).ok()
 }
 
+/// The track and each item's state by id: all a report says of the setup.
+pub fn states(dir: &Path) -> (&'static str, Vec<(&'static str, &'static str)>) {
+    let loaded = reload(dir);
+    let root = root_of(dir, loaded.as_ref());
+    let tree = Tree::scan(&root);
+    let config = loaded.as_ref().map(|l| &l.config);
+    let track = crate::setup_track::detect(&root, &tree.files, config).track;
+    let items = check_in(&tree, loaded.as_ref(), track);
+    let states = items.iter().map(|i| (i.id, i.state.word())).collect();
+    (track.name(), states)
+}
+
 /// What a new session is told when a required item is open: one line, and
 /// one look, a day for a repository. Nothing is proved or changed.
 pub fn session_line(dir: &Path) -> Option<String> {

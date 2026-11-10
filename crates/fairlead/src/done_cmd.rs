@@ -253,6 +253,7 @@ fn report(
         ExitCode::FAILURE
     } else {
         eprintln!("done: not passed; fix the failing step and run `fairlead done` again");
+        eprintln!("done: {}", crate::report_cmd::MISTAKE);
         ExitCode::FAILURE
     }
 }

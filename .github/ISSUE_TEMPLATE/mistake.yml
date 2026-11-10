@@ -1,0 +1,52 @@
+name: Fairlead said no, and it looks like its mistake
+description: The gate, a hook, a plan or the setup checklist got something wrong. Start from the draft `fairlead report` writes.
+title: "mistake: "
+labels: ["mistake"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you. A report the day it happens is worth more than one found in a review.
+
+        **This page is public and can't be taken back.** Post only what a stranger may read. Run `fairlead report` and paste its draft below: it holds numbers and Fairlead's own words, never a name your project chose.
+  - type: checkboxes
+    id: safe
+    attributes:
+      label: Before posting
+      options:
+        - label: A person who owns the project has read every line of this report.
+          required: true
+        - label: It holds no secret, such as a token, password, key, cookie or connection string.
+          required: true
+        - label: It holds no private name, such as a person, customer, company, repository, host or domain.
+          required: true
+        - label: It holds no source code, file content, test output or log line.
+          required: true
+  - type: textarea
+    id: recorded
+    attributes:
+      label: What Fairlead recorded
+      description: The "What Fairlead recorded" section of the draft from `fairlead report`.
+      render: markdown
+    validations:
+      required: true
+  - type: textarea
+    id: happened
+    attributes:
+      label: What happened
+      description: Which command or hook said no, and what it said, in your own words. Write "a test file" or "the API package" where a real name would go.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+    validations:
+      required: true
+  - type: textarea
+    id: checked
+    attributes:
+      label: How you checked it is Fairlead's mistake
+      description: The checks from `fairlead guide report` that you ran, and what each one showed.
+    validations:
+      required: true

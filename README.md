@@ -154,8 +154,15 @@ This README documents Fairlead 0.20.1. Each command, by what it's for:
   `setup --check` prints the list and changes nothing, and exits 1 while a
   required item is open. The list is ordered for the kind of repository it
   detects (new, mvp, ongoing or legacy; `--track` overrides). `guide` prints
-  a short guide for an agent on `setup`, `loop`, `gate`, `ci`, `upgrade` or
-  `troubleshoot`.
+  a short guide for an agent on `setup`, `loop`, `gate`, `ci`, `upgrade`,
+  `troubleshoot` or `report`.
+- **When Fairlead looks wrong:** `report`. *Since 0.20.2:* every refusal (a
+  failed gate, a hook that stops an edit, a commit the guard stops) ends by
+  saying how to check whether the mistake is Fairlead's. `report` then writes
+  a draft for the project's owner to review and post as an issue: the
+  release, the platform, the config's shape as counts, the setup's states and
+  the last refusals as numbers, with runners and checks numbered and never
+  named. It sends nothing, and the guide says what never goes in a report.
 - **The test plan:** `plan`, `test --explain`, the import graph (`graph`) and
   coverage maps (`coverage import`). *Since 0.13.0:* `graph hubs` lists the
   files that link the most changes to the most tests and the barrier that
