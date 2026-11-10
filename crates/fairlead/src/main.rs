@@ -34,6 +34,7 @@ mod import_rules_cmd;
 mod init_cmd;
 mod init_guard;
 mod insights_cmd;
+mod insights_score;
 mod insights_speed;
 mod knowledge;
 mod ledger_rerun;

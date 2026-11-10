@@ -47,6 +47,10 @@ pub struct InsightsArgs {
     /// always fail, suites faster than their plan, reruns and cancellations.
     #[arg(long)]
     speed: bool,
+    /// The scorecard instead: how wide the plans were, how long the gate
+    /// took, what a budget left owed to CI and what was waived.
+    #[arg(long, conflicts_with_all = ["speed", "suggest"])]
+    score: bool,
     /// A replay dataset (`replay fetch --data`), for CI job times, reruns and
     /// cancelled runs; repeatable.
     #[arg(long, value_name = "FILE")]
@@ -325,6 +329,27 @@ fn speed(
     Ok(crate::insights_speed::coach(&inputs, cfg, replay_plan))
 }
 
+/// The scorecard over the event log since `--since`, the waivers the
+/// config holds, and a `--replay` report's failures and misses.
+fn score(
+    root: &Path,
+    args: &InsightsArgs,
+    cfg: &config::Config,
+) -> Result<crate::insights_score::Score, String> {
+    let since = args.since.clone().unwrap_or_else(since_default);
+    let log = EventLog::open(root).map(|l| l.read()).unwrap_or_default();
+    let replay = match &args.replay {
+        Some(p) => Some(read_json(p)?),
+        None => None,
+    };
+    Ok(crate::insights_score::score(
+        &log,
+        &since,
+        cfg,
+        replay.as_ref(),
+    ))
+}
+
 /// A `[[replay.quarantine]]` proposal for each flaky test the ledgers
 /// found, named once with how many ledgers found it.
 fn ledger_suggestions(
@@ -592,6 +617,26 @@ pub fn run(args: InsightsArgs, cwd: &Path) -> ExitCode {
             }
             Ok(s) => {
                 print!("{}", crate::insights_speed::render(&s));
+                ExitCode::SUCCESS
+            }
+            Err(e) => {
+                eprintln!("{e}");
+                ExitCode::from(2)
+            }
+        };
+    }
+    if args.score {
+        return match score(&root, &args, &loaded.config) {
+            Ok(s) if args.json => {
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(&serde_json::json!({ "score": s }))
+                        .expect("score prints")
+                );
+                ExitCode::SUCCESS
+            }
+            Ok(s) => {
+                print!("{}", crate::insights_score::render(&s));
                 ExitCode::SUCCESS
             }
             Err(e) => {
