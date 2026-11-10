@@ -299,14 +299,15 @@ a CI cache ([Install](https://mahkassem.github.io/fairlead/docs/install.html#a-b
 ## Quick start
 
 ```sh
-fairlead init                                # a first fairlead.toml, from what the repository shows
-fairlead config check                        # validate fairlead.toml
-fairlead plan --base main                    # the tests and checks this branch can affect
-fairlead test --explain src/a.test.ts        # why that test is in the plan, or isn't
-fairlead graph why src/a.test.ts src/util.ts # how one file depends on another
-fairlead brief src/util.ts                   # before an edit: what it reaches and what must pass
-fairlead done                                # the gate a change passes before it's finished
+fairlead setup               # set the repository up, then list what is still open, each with its one fix
+fairlead brief src/util.ts   # before an edit: what it reaches and what must pass
+fairlead done                # the gate a change passes before it's finished
+fairlead receipt             # after it: the change against its brief, and the gate's state
 ```
+
+[Start here](https://mahkassem.github.io/fairlead/docs/start.html) says what
+`setup` does on a new, MVP, ongoing or legacy repository, and what done looks
+like on each.
 
 ## Documentation
 
