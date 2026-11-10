@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.20.0 (2026-11-10)
+
+Set up right. A first setup took seven commands found in three places, one `init` served every kind of repository, and nothing told a repository that its install was incomplete: of four repositories checked, two had no agent hooks and no git hook.
+
+### New
+
+- `fairlead setup` applies what is local and reversible, then prints a checklist. It writes a first config when there is none (the guard alone where it finds no test runner), installs the hooks for each agent the repository shows, adds the git hook and runs `lefthook install` when lefthook is there, syncs the block in AGENTS.md and CLAUDE.md, and runs each runner's smallest test file once with a 60 second limit. It never writes or edits a workflow, never deletes, and never changes a config that exists.
+- The checklist. Each item is `ok`, `fixed`, `open` or `later`, and each open item has exactly one fix under it: one command or one config edit. The items are the binary, the config, the runners, the proof that each runner starts, the agent hooks, the git hook, the agents block, CI, smoke sets, the gate and the scorecard; a guard-only repository gets `tests` in place of the runner items. `setup --check` prints the list and changes nothing, `--dry-run` prints what would change, `--json` prints it as JSON, and the exit code is 1 while a required item is open.
+- Tracks. `setup` detects the kind of repository from its tests, its history and its workflows: `new`, `mvp`, `ongoing` or `legacy`. The track decides which items are required and their order: CI is required on `ongoing`, open but not required on `mvp`, and left for later on `new` and `legacy`. `--track` overrides it, and it is never written to the config.
+- `fairlead guide [topic]` prints one of six short guides built into the binary, written for an agent: `setup`, `loop`, `gate`, `ci`, `upgrade` and `troubleshoot`. With no topic it lists them.
+- A repository hears about a gap. While a required item is open, the first session of the day starts with one line naming the items, and `fairlead ci plan` prints a warning for what the checkout itself shows: the config, the runners, the agents block, and the hooks where the agent's settings are committed. `fairlead doctor` ends with how many items are open.
+- The block in AGENTS.md says what to do when the gate owes tests to CI, when a hook refuses an edit, and when something isn't set up.
+- Docs: "Start here" by kind of project, "For agents" with the six guides, "Troubleshooting" with one entry per checklist item, and `llms.txt` at the site's root. The checklists the docs show are held to what the command prints by a test.
+
+### Fixed
+
+- A `smoke` entry that names no test file of its runner, as after a rename, was dropped without a word, so behind a blanket the gate ran nothing of that suite. It is now a warning at `config check` and an open `smoke` item.
+- The gate's advice about a new file no test is near named test files that sit outside `tests.match`. A file named like a test is left out.
+- The git hook is not a required item on a machine with no lefthook, where nothing could settle it; the item stays open and says to install it.
+
 ## 0.19.1 (2026-11-10)
 
 Setup defects found by running a first setup on four kinds of repository: new, small, established and legacy.
