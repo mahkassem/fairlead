@@ -114,8 +114,7 @@ fn last_done(dir: &Path) -> Value {
     let log = std::fs::read_to_string(dir.join(".git/fairlead/events.jsonl")).unwrap();
     log.lines()
         .filter_map(|l| serde_json::from_str::<Value>(l).ok())
-        .filter(|e| e["stage"] == "done")
-        .next_back()
+        .rfind(|e| e["stage"] == "done")
         .unwrap()
 }
 
