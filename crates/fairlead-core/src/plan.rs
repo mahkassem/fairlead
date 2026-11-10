@@ -157,8 +157,8 @@ pub struct Deferred {
     #[serde(default, skip_serializing_if = "DeferWhy::is_stage")]
     pub why: DeferWhy,
     /// For a whole suite: how many of `selected` the change reaches. At
-    /// `plan.whole_share` or more of the suite, it waits whole; a person runs
-    /// it before merging.
+    /// `plan.whole_share` or more of the suite, it waits whole, and CI or a
+    /// `done --full` here runs it.
     #[serde(default, skip_serializing_if = "is_zero")]
     pub reached: usize,
     /// How many of `reached` the change reaches through a `[[graph.edges]]`
@@ -203,7 +203,7 @@ impl Deferred {
                 self.id, self.from
             ),
             DeferWhy::Whole => format!(
-                "{}: this change reaches {} of {} test files ({}%){}, `plan.whole_share` or more, so the whole suite waits for the {} stage; run `fairlead done --full` here before merging",
+                "{}: this change reaches {} of {} test files ({}%){}, `plan.whole_share` or more, so the whole suite waits for the {} stage; `fairlead done` owes it to CI under its budget, and `fairlead done --full` runs it here",
                 self.id,
                 self.reached,
                 self.selected,

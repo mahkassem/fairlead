@@ -145,7 +145,7 @@ repositories are on the way
 
 ## What it does
 
-This README documents Fairlead 0.18.0. Each command, by what it's for:
+This README documents Fairlead 0.19.0. Each command, by what it's for:
 
 - **The test plan:** `plan`, `test --explain`, the import graph (`graph`) and
   coverage maps (`coverage import`). *Since 0.13.0:* `graph hubs` lists the
@@ -183,6 +183,9 @@ This README documents Fairlead 0.18.0. Each command, by what it's for:
   receipt says where each step ran, by stage and platform, what never ran on
   this tree and what can't be proved here ("unverifiable here: needs
   macos"), and `receipt --pr` puts it in the pull request body.
+  *Since 0.19.0:* `done` runs under a budget (300 seconds): the tests
+  nearest the change run until it's spent, and what else the change reaches
+  is owed to CI, by runner and count, on the receipt.
 - **Project memory:** `learn` writes a lesson, `import lessons` turns a lessons
   document the team already keeps into one lesson per heading, and `lessons`
   lists, reviews and checks them. The brief offers the ones a change reaches.
@@ -223,8 +226,14 @@ The [quick start](#quick-start) shows the first few, and the
 
 ## Status
 
-Pre-alpha. The latest release, v0.18.0, folds what was planned as 0.16
-and 0.17 into one release. Guards work on any stack from day one
+Pre-alpha. The latest release, v0.19.0, gives the done gate a budget: it
+runs the tests nearest the change until the budget is spent and records
+what else the change reaches as owed to CI, so the gate fits the machine
+it runs on and no suite holds it. A suite reached only through a blanket
+(a `run_all` path or a wide rule) runs its smoke set, and
+`insights --score` says how often plans select everything and how long the
+gate takes. The release before it folded what was planned as 0.16 and
+0.17 into one. Guards work on any stack from day one
 (`init --profile guard`), secret file names are refused at commit with no
 config, gitleaks runs as a preset, and `[pr]` rules (branch, title, ticket,
 body, base, labels, files) run in `done`, at push and in CI with

@@ -9,6 +9,8 @@ fairlead done --dry-run      # print the steps without running them
 fairlead done --keep-going   # run every step even after one fails
 fairlead done --check        # exit 0 only if this tree, as it stands, has passed
 fairlead done --pre-push     # the pre-push hook: the plan and the push checks
+fairlead done --budget 300   # run what fits in 300 seconds and owe the rest to CI
+fairlead done --full         # run the whole plan and every whole suite, with no budget
 ```
 
 *Since 0.18.0:* the change is the branch as it differs from its merge base with `[pr] base`, else the remote's default branch, else `main` or `master`, with uncommitted and untracked files included, so commits already made count as much as edits not yet committed. With none of those branches, the gate says so in one line and plans what changed since HEAD ([What changed](plan.md#what-changed)).
@@ -17,7 +19,7 @@ fairlead done --pre-push     # the pre-push hook: the plan and the push checks
 
 In order:
 
-1. The test invocations the change's plan selects, as `fairlead ci run` would run them.
+1. The test invocations the change's plan selects, as `fairlead ci run` would run them. *Since 0.19.0:* as many as fit [the budget](#the-budget), the tests nearest the change first.
 2. The `[[checks]]` the plan selects.
 3. The checks `done.always` names that the plan didn't select. Run outside a plan, a check's `{files}` stands for the change's files.
 4. `fairlead guard check` over the whole tree, as CI runs it.
@@ -39,11 +41,51 @@ tests  = "planned"      # planned | none
 checks = "planned"      # planned | none
 always = ["typecheck"]  # [[checks]] ids that run for every change
 guard  = true
+budget_seconds = 300    # what fits runs here, the rest is owed to CI; 0 runs the whole plan
 ```
 
 A check `done.always` names needs no `paths` or `modules`, since it always runs.
 
-*Since 0.15.0:* a suite whose whole run waits for a later stage ([Whole suites](plan.md#whole-suites-at-a-later-stage)) runs only the tests the change reaches, and the gate prints one line for what it left out. When the change reaches most of such a suite, the gate passes the steps it ran but isn't finished: the record says `deferred`, `done --check` stays false and the Stop hook sends the agent back, until `fairlead done --full`, which runs every whole suite, passes on the same tree. In a project whose `phase` is `early`, nothing is deployed, so the gate passes and the scheduled run proves the suite. In `testing`, deferred holds until `done --full`; use `early` when nobody outside the team uses the build. *Since 0.15.2:* every line that reports a held suite names it, the phase that holds it, the share the change reaches, and the ways forward ([The project's phase](plan.md#the-projects-phase)); `done --check` says why a tree hasn't passed (not run on this tree, failed at a named step, or a suite waits) rather than only that it hasn't.
+## The budget
+
+*Since 0.19.0:* the gate runs what fits in `done.budget_seconds`, 300 by default, and records the rest of what the change reaches as debts for CI. So the gate can always pass on the machine it runs on, and nothing the change reaches is forgotten: it is owed, by runner and count, in the record, the receipt and the pull request.
+
+The order, nearest the change first:
+
+1. A test file the change edits, and canary tests. These always run, whatever the budget.
+2. Tests that import a changed file.
+3. Tests an [owner rule](plan.md#tests-and-classes) names for a changed path.
+4. A runner's smoke set, when only a blanket reaches its suite (below).
+5. Tests further along an import chain, shortest chain first.
+
+A test fits when its runner's time for one file, added to what the run has already taken on, stays within the budget. That time is the median over the runner's recent passing steps in `done`'s own record, and the checks' median times count against the budget before any test does. A runner with no recorded time runs its nearest 20 files; that run records the time, so the next one fits the budget from it.
+
+```text
+done: unit: 41 of 380 reached test files run here; 339 owed to CI before merge: 339 past the 300 s budget
+done: passed, 6 steps; owed to CI before merge: unit 339 test files (`fairlead receipt` lists them)
+```
+
+**A blanket** is what reaches a test when no file does: a `plan.run_all` path, the widening for a changed file nothing reaches, or `[[graph.edges]]` rules that reach `plan.blanket_share` (0.3) or more of a runner's suite. A suite reached only that way runs whole when all of it fits what's left of the budget. Otherwise the gate runs the runner's `smoke` set, the few files that stand for the suite, and owes the rest:
+
+```toml
+[[tests.runners]]
+id = "e2e"
+match = ["e2e/**"]
+command = ["npx", "playwright", "test", "{files}"]
+smoke = ["e2e/smoke.spec.ts"]
+```
+
+```text
+done: e2e: 1 of 44 reached test files run here; 43 owed to CI before merge: 43 reached only through a blanket (a `run_all` path, an unreached file or a wide `[[graph.edges]]` rule)
+```
+
+- **Debts are due** before merge, or by the nightly run in a project whose `phase` is `early`. This release records and prints them; a CI check that fails a pull request whose debts never ran is planned for the next one. Until then, a debt is paid by the CI that runs the plan on the pull request, as `fairlead ci run` does.
+- **Under a budget the gate names the files it runs**, so a runner's `all_command` isn't used and no suite waits for a later stage: what doesn't fit is owed instead. `fairlead done --full`, `--budget 0` and `done.budget_seconds = 0` run the whole plan as before, with `all_command` and the waiting below.
+- **An unmet [need](#needs)** leaves its files out before the budget is counted, as before.
+- **[The Stop hook](#the-stop-hook)** reads the record as before. A budgeted pass is a pass, debts and all, so `on_stop = "require"` no longer asks an agent for a run its machine can't finish.
+- **Advice** follows the steps when the plan backs it, each line starting `done: advice:`. Three kinds: a suite a blanket reaches whose runner names no `smoke` set; a new source file no test imports, directly or through other files; and a step that alone took longer than the whole budget. Advice never fails the gate. It is for the pull request's notes or a follow-up, and the gate says so.
+
+*Since 0.15.0:* with no budget (`--full`, or `done.budget_seconds = 0`), a suite whose whole run waits for a later stage ([Whole suites](plan.md#whole-suites-at-a-later-stage)) runs only the tests the change reaches, and the gate prints one line for what it left out. When the change reaches most of such a suite, the gate passes the steps it ran but isn't finished: the record says `deferred`, `done --check` stays false and the Stop hook sends the agent back, until `fairlead done --full`, which runs every whole suite, passes on the same tree. In a project whose `phase` is `early`, nothing is deployed, so the gate passes and the scheduled run proves the suite. In `testing`, deferred holds until `done --full`; use `early` when nobody outside the team uses the build. *Since 0.15.2:* every line that reports a held suite names it, the phase that holds it, the share the change reaches, and the ways forward ([The project's phase](plan.md#the-projects-phase)); `done --check` says why a tree hasn't passed (not run on this tree, failed at a named step, or a suite waits) rather than only that it hasn't.
 
 ## CI history
 
@@ -67,7 +109,7 @@ A runner the plan didn't select isn't added, since that would run its whole suit
 
 ## The record
 
-Every run appends a `done` event to `.git/fairlead/events.jsonl`: the plan's tree hash, whether it passed, and each step's id, outcome and seconds, never its output. *Since 0.18.0:* and each step's CI stage (its `from`, or `ready` for a runner and `draft` for a check) and where it ran (`os`, `arch`), which [the receipt](receipt.md#stages-and-platforms) reads. A step that wasn't provable here is recorded with `"quarantined": true`. A result belongs to one tree. The tree hash is HEAD's tree when the working tree is clean, else a hash of every file's path and blob id, so any edit after a pass makes it stale, and `--check` says so. Nothing needs clearing by hand, and switching branches or rebasing can't make an old result look current.
+Every run appends a `done` event to `.git/fairlead/events.jsonl`: the plan's tree hash, whether it passed, and each step's id, outcome and seconds, never its output. *Since 0.19.0:* and the budget it ran under, each debt (the runner, how many test files, why and when it's due), how many test files each runner step named, and the plan's reach: whether it selected everything, the test files it reached, the suite's size and how many ran here, which [`fairlead insights --score`](insights.md#score) reads. *Since 0.18.0:* and each step's CI stage (its `from`, or `ready` for a runner and `draft` for a check) and where it ran (`os`, `arch`), which [the receipt](receipt.md#stages-and-platforms) reads. A step that wasn't provable here is recorded with `"quarantined": true`. A result belongs to one tree. The tree hash is HEAD's tree when the working tree is clean, else a hash of every file's path and blob id, so any edit after a pass makes it stale, and `--check` says so. Nothing needs clearing by hand, and switching branches or rebasing can't make an old result look current.
 
 `[done]` never changes a plan, so it's left out of the plan's config digest, like `[guard]` and `[hooks]`.
 

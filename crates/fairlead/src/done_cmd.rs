@@ -30,9 +30,14 @@ pub struct DoneArgs {
     /// and what to run; exits 0 if it has.
     #[arg(long, conflicts_with_all = ["dry_run", "keep_going"])]
     check: bool,
-    /// Run whole suites that wait for a later stage too.
+    /// Run the whole plan, and whole suites that wait for a later stage too,
+    /// whatever `done.budget_seconds` says.
     #[arg(long, conflicts_with = "check")]
     full: bool,
+    /// Run what fits in this many seconds and owe the rest to CI, in place
+    /// of `done.budget_seconds`; 0 runs the whole plan.
+    #[arg(long, value_name = "SECONDS", conflicts_with_all = ["check", "full"])]
+    budget: Option<u32>,
     /// The pre-push hook: the plan, as `done` runs it, then the push checks
     /// in place of `pr check`; a tree that has passed runs the push checks only.
     #[arg(long, conflicts_with = "check")]
@@ -51,15 +56,16 @@ pub fn run(args: DoneArgs, cwd: &Path) -> ExitCode {
 
 fn gate(args: &DoneArgs, cwd: &Path) -> Result<ExitCode, String> {
     let mut changes = args.changes.clone();
-    changes.full_suites = args.full;
+    let budget = budget_of(args, cwd, &changes);
+    // Under a budget nothing waits for a later stage: what doesn't fit is owed.
+    changes.full_suites = args.full || budget > 0;
     let planning = Instant::now();
-    let planned = make(cwd, &changes)?;
-    let plan_seconds = (planning.elapsed().as_secs_f64() * 100.0).round() / 100.0;
+    let mut planned = make(cwd, &changes)?;
     let root = crate::graph_cmd::repo_root(cwd);
     let tree = planned.plan.tree_hash.clone();
     let log = EventLog::open(&root);
+    let text = log.as_ref().map(|l| l.read()).unwrap_or_default();
     if args.check {
-        let text = log.as_ref().map(|l| l.read()).unwrap_or_default();
         let state = record::state(record::last_done(&text, &tree).as_ref());
         println!("done: {}", check_line(&state, &planned, &root));
         return Ok(if state == State::Passed {
@@ -68,12 +74,15 @@ fn gate(args: &DoneArgs, cwd: &Path) -> Result<ExitCode, String> {
             ExitCode::FAILURE
         });
     }
-    if args.pre_push {
-        let text = log.as_ref().map(|l| l.read()).unwrap_or_default();
-        if record::state(record::last_done(&text, &tree).as_ref()) == State::Passed {
-            return Ok(push_only(&planned, &root));
-        }
+    if args.pre_push && record::state(record::last_done(&text, &tree).as_ref()) == State::Passed {
+        return Ok(push_only(&planned, &root));
     }
+    let suites = crate::done_budget::Suites::read(&planned)?;
+    let narrow = narrow_plan(budget, cwd, &changes, &planned);
+    if budget > 0 {
+        planned.plan.invocations = crate::done_budget::named(&planned, &suites);
+    }
+    let plan_seconds = (planning.elapsed().as_secs_f64() * 100.0).round() / 100.0;
     let (planned_steps, why) = steps_saying_why(&planned, args.pre_push)?;
     for line in &why {
         println!("done: {line}");
@@ -82,6 +91,8 @@ fn gate(args: &DoneArgs, cwd: &Path) -> Result<ExitCode, String> {
     for skip in &skips {
         println!("done: {}", skip.line());
     }
+    let near = narrow.as_ref().unwrap_or(&planned.plan);
+    let (steps, mut owed) = within(budget, &planned, near, &suites, steps, &text)?;
     if args.dry_run {
         for s in &steps {
             println!("done: ({}) {}", s.cwd, s.argv.join(" "));
@@ -103,50 +114,181 @@ fn gate(args: &DoneArgs, cwd: &Path) -> Result<ExitCode, String> {
         (true, true) => "pass",
         (true, false) => "deferred",
     };
+    owed.advice
+        .extend(crate::done_budget::slow(&ran, owed.budget));
     if let Some(log) = &log {
+        let named: usize = ran.iter().filter_map(|s| s.files).sum();
         let mut event = Event::new("done", decision, started.elapsed());
         event.tree = Some(tree);
         event.steps = ran;
         event.waiting = waiting.clone();
         event.unmet = skips.iter().map(|s| s.record()).collect();
         event.plan_seconds = Some(plan_seconds);
+        event.budget_seconds = (owed.budget > 0).then_some(owed.budget);
+        event.debts = owed.debts.clone();
+        event.reach = Some(crate::done_budget::reach(
+            &planned,
+            &suites,
+            owed.ran.unwrap_or(named),
+        ));
         // The log is a record; failing to write it never changes the outcome.
         let _ = log.append(&event);
     }
+    let outcome = Ending {
+        passed,
+        all_ran,
+        not_provable,
+        steps: steps.len(),
+    };
+    Ok(report(&planned, &root, &outcome, &waiting, &skips, &owed))
+}
+
+/// The plan without `run_all` and the unreached widening, which says how
+/// near each test is to the change; none when the plan didn't widen.
+fn narrow_plan(
+    budget: u32,
+    cwd: &Path,
+    changes: &Changes,
+    planned: &crate::plan_cmd::Planned,
+) -> Option<fairlead_core::plan::Plan> {
+    if budget == 0 || !crate::done_budget::widened(&planned.plan) {
+        return None;
+    }
+    let mut near = changes.clone();
+    near.sets.push("plan.run_all={ replace = [] }".into());
+    near.sets.push("tests.unreached=\"warn\"".into());
+    make(cwd, &near).ok().map(|p| p.plan)
+}
+
+/// The steps cut to the budget, with what that leaves owed; as they are
+/// with no budget.
+fn within(
+    budget: u32,
+    planned: &crate::plan_cmd::Planned,
+    narrow: &fairlead_core::plan::Plan,
+    suites: &crate::done_budget::Suites,
+    steps: Vec<Invocation>,
+    log: &str,
+) -> Result<(Vec<Invocation>, Owed), String> {
+    if budget == 0 {
+        return Ok((steps, Owed::default()));
+    }
+    let root = &planned.scan.tree.root;
+    let classes = crate::done_budget::classes(planned, narrow, suites)?;
+    let inputs = crate::done_budget::Inputs {
+        planned,
+        suites,
+        classes: &classes,
+        per_file: &crate::done_budget::seconds_per_file(log),
+        history: &crate::done_history::read(root, &planned.config, log),
+        budget,
+    };
+    let cut = crate::done_budget::cut(&inputs, steps);
+    for line in &cut.lines {
+        println!("done: {line}");
+    }
+    let owed = Owed {
+        budget,
+        debts: cut.debts,
+        ran: Some(cut.ran),
+        advice: crate::done_budget::advice(planned, suites, &classes),
+    };
+    Ok((cut.steps, owed))
+}
+
+/// How a run went, for its last lines.
+struct Ending {
+    passed: bool,
+    all_ran: bool,
+    not_provable: usize,
+    steps: usize,
+}
+
+/// The run's last lines: what waits, the advice, and whether it passed
+/// with what it owes or left elsewhere.
+fn report(
+    planned: &crate::plan_cmd::Planned,
+    root: &Path,
+    outcome: &Ending,
+    waiting: &[Waiting],
+    skips: &[crate::done_needs::Skip],
+    owed: &Owed,
+) -> ExitCode {
     let deferred = planned
         .plan
         .deferred
         .iter()
-        .filter(|_| !guard_only(&planned));
+        .filter(|_| !guard_only(planned));
     for d in deferred.filter(|d| !d.why.is_stage()) {
         println!("done: {}", d.advice());
     }
-    let elsewhere = environment(&skips);
-    if passed && !waiting.is_empty() {
+    owed.say();
+    let elsewhere = format!(
+        "{}{}",
+        environment(skips),
+        crate::done_budget::owed_line(&owed.debts)
+    );
+    let unproved = skips.iter().find(|s| s.proved_in.is_none());
+    let steps = outcome.steps;
+    if outcome.passed && !waiting.is_empty() {
         println!(
-            "done: passed, {} steps{elsewhere}; not finished: {}",
-            steps.len(),
-            record::hold(&waiting, &planned.config, &root)
+            "done: passed, {steps} steps{elsewhere}; not finished: {}",
+            record::hold(waiting, &planned.config, root)
         );
-        Ok(ExitCode::SUCCESS)
-    } else if passed && not_provable > 0 {
+        ExitCode::SUCCESS
+    } else if outcome.passed && outcome.not_provable > 0 {
         println!(
-            "done: passed, {} steps{elsewhere}; {not_provable} failed as quarantined, so not provable here: say so in the pull request",
-            steps.len()
+            "done: passed, {steps} steps{elsewhere}; {} failed as quarantined, so not provable here: say so in the pull request",
+            outcome.not_provable
         );
-        Ok(ExitCode::SUCCESS)
-    } else if passed {
-        println!("done: passed, {} steps{elsewhere}", steps.len());
-        Ok(ExitCode::SUCCESS)
-    } else if let (Some(skip), true) = (unproved, all_ran) {
+        ExitCode::SUCCESS
+    } else if outcome.passed {
+        println!("done: passed, {steps} steps{elsewhere}");
+        ExitCode::SUCCESS
+    } else if let (Some(skip), true) = (unproved, outcome.all_ran) {
         eprintln!(
             "done: not passed: {}",
             record::unmet_line(&skip.need, &skip.step)
         );
-        Ok(ExitCode::FAILURE)
+        ExitCode::FAILURE
     } else {
         eprintln!("done: not passed; fix the failing step and run `fairlead done` again");
-        Ok(ExitCode::FAILURE)
+        ExitCode::FAILURE
+    }
+}
+
+/// The budget a run is under, in seconds: none with `--full`, in the
+/// guard-only profile, or when the gate runs no tests.
+fn budget_of(args: &DoneArgs, cwd: &Path, changes: &Changes) -> u32 {
+    if args.full {
+        return 0;
+    }
+    let Ok(config) = crate::plan_cmd::config_for(cwd, changes) else {
+        return 0;
+    };
+    if config.profile == Profile::Guard || config.done.tests != DoneTests::Planned {
+        return 0;
+    }
+    args.budget.unwrap_or(config.done.budget_seconds)
+}
+
+/// What a budgeted run owes to CI, and the advice its plan backs.
+#[derive(Default)]
+struct Owed {
+    budget: u32,
+    debts: Vec<fairlead_guard::events::Debt>,
+    ran: Option<usize>,
+    advice: Vec<String>,
+}
+
+impl Owed {
+    fn say(&self) {
+        for line in &self.advice {
+            println!("done: advice: {line}");
+        }
+        if !self.advice.is_empty() {
+            println!("done: advice is for the pull request's notes or a follow-up, not for this change, unless it is what you were asked to do");
+        }
     }
 }
 
@@ -260,6 +402,7 @@ fn run_steps(
             ),
             os: Some(std::env::consts::OS.into()),
             arch: Some(std::env::consts::ARCH.into()),
+            files: Some(crate::done_needs::tests_of(planned, s).len()).filter(|n| *n > 0),
         });
         if outcome == Outcome::Failed && !keep_going {
             break;

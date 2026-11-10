@@ -416,6 +416,32 @@ or 0.17.0. `fairlead migrate --write` moves the floor, and moves a lefthook
   With one, a body that says "verified" or "tested" needs a passing
   receipt for the head's tree; `[pr] claims = false` turns that off.
 
+### To 0.19.0
+
+`fairlead migrate --write` moves the floor. One thing changes what the
+gate does, with no config change:
+
+- **`fairlead done` runs under a budget**, `done.budget_seconds`, 300 by
+  default. It runs the tests nearest the change until the budget is spent
+  and records the rest of what the change reaches as owed to CI, so no
+  suite holds the gate until `done --full` and the Stop hook stops sending
+  an agent back for a suite its machine can't finish. The pass line and
+  `fairlead receipt` say what is owed ([The budget](done.md#the-budget)).
+  `done.budget_seconds = 0` keeps the gate as it was.
+- **Give a slow suite a smoke set.** When only a `plan.run_all` path or a
+  wide `[[graph.edges]]` rule reaches a suite, the gate runs the runner's
+  `smoke` files and owes the rest; with none it runs nothing of that
+  suite, and says so as advice.
+- **The first budgeted run of a runner runs its nearest 20 files**, since
+  nothing has timed it yet; the next run fits the budget from that time.
+- **Debts are recorded and printed, not yet enforced.** The CI that runs
+  the plan on the pull request pays them. A check that fails a pull
+  request whose debts never ran is planned for the next release, so keep
+  each need's `proved_in` until then.
+- **`fairlead insights --score`** is new: the share of gate runs whose
+  plan selected everything, how long the gate takes, and what was owed
+  ([Score](insights.md#score)).
+
 ## Going back to an older release
 
 Install the older release, then run its `hooks uninstall` and

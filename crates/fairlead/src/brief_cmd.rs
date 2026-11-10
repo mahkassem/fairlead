@@ -447,7 +447,7 @@ fn assemble(
                 .map(|s| item(s.id.clone(), s.argv.join(" ")))
                 .collect(),
         },
-        phase: planned.config.phase.map(phase_line),
+        phase: (planned.config.phase).map(|p| phase_line(p, planned.config.done.budget_seconds)),
         later: plan
             .deferred
             .iter()
@@ -636,12 +636,17 @@ pub fn text(b: &Brief, all: bool) -> String {
 }
 
 /// What a phase asks of a change, for the agent deciding what to prove.
-fn phase_line(phase: fairlead_core::config::Phase) -> String {
+/// Under a budget the gate decides what runs here, so the phase only says
+/// when the rest is due.
+fn phase_line(phase: fairlead_core::config::Phase, budget: u32) -> String {
     use fairlead_core::config::Phase;
-    let ask = match phase {
-        Phase::Early => "nothing is deployed: prove what the change reaches; whole suites run at the end of the day",
-        Phase::Testing => "testers use it, nothing is live: prove what the change reaches, and run a whole suite here when the change reaches most of it",
-        Phase::Live => "people use it: run what the plan selects, check what this machine can prove (`fairlead doctor`), and say in the pull request what it couldn't",
+    let ask = match (phase, budget > 0) {
+        (Phase::Early, true) => "nothing is deployed: `fairlead done` proves what fits its budget, and the nightly run proves the rest",
+        (Phase::Testing, true) => "testers use it, nothing is live: `fairlead done` proves what fits its budget and owes the rest to CI before merge",
+        (Phase::Live, true) => "people use it: `fairlead done` proves what fits its budget and owes the rest to CI before merge; say in the pull request what this machine couldn't prove",
+        (Phase::Early, false) => "nothing is deployed: prove what the change reaches; whole suites run at the end of the day",
+        (Phase::Testing, false) => "testers use it, nothing is live: prove what the change reaches, and run a whole suite here when the change reaches most of it",
+        (Phase::Live, false) => "people use it: run what the plan selects, check what this machine can prove (`fairlead doctor`), and say in the pull request what it couldn't",
     };
     format!("{}: {ask}", phase.name())
 }

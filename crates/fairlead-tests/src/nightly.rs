@@ -65,7 +65,7 @@ fn whole(
 }
 
 /// Whether a test's chain from the change takes a `[[graph.edges]]` hop.
-fn through_rule(graph: &Graph, reason: &Reason) -> bool {
+pub fn through_rule(graph: &Graph, reason: &Reason) -> bool {
     let Reason::Import { chain } = reason else {
         return false;
     };

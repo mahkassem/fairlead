@@ -128,6 +128,7 @@ mod tests {
             from,
             all_from: None,
             cheap: false,
+            smoke: Vec::new(),
         };
         let mut config = Config::default();
         config.tests.runners = vec![runner(None)].into();
