@@ -174,7 +174,10 @@ fn line(e: &Value, config: Option<&Config>) -> String {
         parts.push(format!("rules {}", rules.join(", ")));
     }
     if let Some(n) = e["added"].as_u64().filter(|n| *n > 0) {
-        parts.push(format!("{n} findings"));
+        parts.push(match n {
+            1 => "1 finding".to_string(),
+            n => format!("{n} findings"),
+        });
     }
     if let Some(budget) = e["budget_seconds"].as_u64() {
         parts.push(format!("budget {budget} s"));
