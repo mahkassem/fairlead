@@ -472,6 +472,13 @@ run `fairlead setup` once:
   `loop`, `gate`, `ci`, `upgrade` or `troubleshoot`
   ([For agents](for-agents.md)).
 
+### To 0.20.1
+
+Migrate updates nothing in your files. A repository that wrapped the block
+in AGENTS.md or CLAUDE.md in formatter-ignore markers, so a Markdown
+formatter would leave it alone, can take them out: the block now reads as
+current whatever blank lines the formatter adds.
+
 ## Going back to an older release
 
 Install the older release, then run its `hooks uninstall` and

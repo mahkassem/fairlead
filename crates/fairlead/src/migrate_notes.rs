@@ -330,6 +330,7 @@ pub const RELEASES: &[(&str, &[Note])] = &[
             applies: always,
         }],
     ),
+    ("0.20.1", &[]),
 ];
 
 /// Config tables and keys by the release that added them. The top-level
