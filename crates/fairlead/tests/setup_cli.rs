@@ -278,7 +278,7 @@ fn a_failed_test_is_open_with_why_and_a_runner_that_cannot_start_here_is_later()
     assert_eq!(code, 0, "`proved` isn't required: {out}");
     assert!(
         out.contains("\n  open   proved     vitest failed on src/b.test.ts: ")
-            && out.contains("error: expected 1 to be 2\n         fix: fairlead setup\n"),
+            && out.contains("error: expected 1 to be 2\n         fix: fix the failing test or the runner's command, then `fairlead setup`\n"),
         "{out}"
     );
 

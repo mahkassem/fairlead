@@ -152,8 +152,11 @@ pub fn check_in(tree: &Tree, loaded: Option<&Loaded>, track: Track) -> Vec<Item>
         (None, Some(c)) => items.push(tests(root, c)),
         (None, None) => {}
     }
+    // Without lefthook the commit stage can't be made active here, and the
+    // agent hooks already guard each edit, so its absence doesn't fail setup.
+    let no_lefthook = !crate::init_guard::on_path("lefthook");
     for item in &mut items {
-        item.required = required(item.id, track);
+        item.required = required(item.id, track) && !(item.id == "git-hook" && no_lefthook);
     }
     in_order(items, track)
 }
@@ -380,7 +383,11 @@ fn proved(config: &Config, suites: &Suites, record: &crate::setup_prove::Record)
     let known: Vec<_> = ids.iter().filter_map(|id| of(id)).collect();
     if let Some(p) = known.iter().find(|p| p.passed == Some(false)) {
         let text = format!("{} failed on {}: {}", p.runner, p.file, why(p));
-        return open("proved", text, "fairlead setup");
+        let fix = match why(p).starts_with("could not start") {
+            true => "install what the runner needs (the project's dependencies, or the service it talks to), then `fairlead setup`",
+            false => "fix the failing test or the runner's command, then `fairlead setup`",
+        };
+        return open("proved", text, fix);
     }
     let unproved: Vec<&str> = ids.iter().copied().filter(|id| of(id).is_none()).collect();
     if !unproved.is_empty() {
@@ -449,14 +456,17 @@ fn git_hook(repo: &Path) -> Item {
             format!("the commit stage is in {shown}, and lefthook runs it"),
         ),
         (shown, true, false) => {
-            let missing = match crate::init_guard::on_path("lefthook") {
-                true => "",
-                false => ", and lefthook isn't on the PATH",
+            let (missing, fix) = match crate::init_guard::on_path("lefthook") {
+                true => ("", "lefthook install"),
+                false => (
+                    ", and lefthook isn't on the PATH",
+                    "install lefthook (it is what runs the commit stage), then `lefthook install`",
+                ),
             };
             open(
                 "git-hook",
                 format!("written but not active: {shown} has the commit stage, .git/hooks doesn't run lefthook{missing}"),
-                "lefthook install",
+                fix,
             )
         }
         (shown, false, _) => open(

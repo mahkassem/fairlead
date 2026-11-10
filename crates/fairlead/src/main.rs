@@ -26,6 +26,7 @@ mod find_cmd;
 mod graph_cmd;
 mod graph_hubs;
 mod guard_cmd;
+mod guide_cmd;
 mod head;
 mod hook_cmd;
 mod hooks_cmd;
@@ -209,6 +210,12 @@ enum Command {
     Context {
         #[command(flatten)]
         args: context_cmd::ContextArgs,
+    },
+    /// A short guide for an agent, matching this release: setup, the change
+    /// loop, the gate, CI, upgrading and troubleshooting.
+    Guide {
+        #[command(flatten)]
+        args: guide_cmd::GuideArgs,
     },
     /// For a new session: the last brief on this branch, what changed since,
     /// the done gate, `next` and the lessons the branch added.
@@ -640,6 +647,7 @@ fn main() -> ExitCode {
         Some(Command::Pr { action }) => pr_cmd::run(action, &cwd()),
         Some(Command::Brief { args }) => brief_cmd::run(args, &cwd()),
         Some(Command::Context { args }) => context_cmd::run(args, &cwd()),
+        Some(Command::Guide { args }) => guide_cmd::run(args),
         Some(Command::Resume { args }) => resume_cmd::run(args, &cwd()),
         Some(Command::Receipt { args }) => receipt_cmd::run(args, &cwd()),
         Some(Command::Next { args }) => receipt_cmd::run_next(args, &cwd()),
