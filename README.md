@@ -145,7 +145,7 @@ repositories are on the way
 
 ## What it does
 
-This README documents Fairlead 0.20.1. Each command, by what it's for:
+This README documents Fairlead 0.20.2. Each command, by what it's for:
 
 - **Setting a repository up:** `setup` and `guide`. *Since 0.20.0:* `setup`
   writes a first config when there is none, installs the agent hooks and the
@@ -242,10 +242,11 @@ The [quick start](#quick-start) shows the first few, and the
 
 ## Status
 
-Pre-alpha. The latest release, v0.20.1, fixes what running the one before
-it on eight repositories got wrong: a formatter no longer makes the agents
-block read as stale, and a first gate run times its runner on real tests.
-That release made a first setup one command:
+Pre-alpha. The latest release, v0.20.2, makes a mistake of Fairlead's easy
+to report: every refusal says how to check it, and `fairlead report` drafts
+a report with nothing private in it for the project's owner to send. The
+release before it fixed what a first run on eight repositories got wrong,
+and the one before that made a first setup one command:
 `fairlead setup` applies what is local, then lists what is left with one
 fix for each, ordered for the kind of repository it finds (new, mvp,
 ongoing or legacy), and `fairlead guide` prints the guide an agent needs
