@@ -66,6 +66,19 @@ pub fn differs(this: &str, seen: &Seen) -> Vec<(String, &'static str)> {
     out
 }
 
+/// The pin in package.json when it names an older release than the binary
+/// running: the hooks run the project's copy, so the two would disagree.
+pub fn older_pin(this: &str, seen: &Seen) -> Option<String> {
+    let spec = seen.spec.as_ref()?;
+    (padded(spec)? < padded(this)?).then(|| spec.clone())
+}
+
+/// Whether package.json names exactly the release running.
+pub fn pinned_here(this: &str, seen: &Seen) -> bool {
+    let spec = seen.spec.as_deref().and_then(padded);
+    spec.is_some() && spec == padded(this)
+}
+
 /// Whether the config's floor asks for a later version than the binary running.
 pub fn below_floor(this: &str, seen: &Seen) -> bool {
     let floor = seen.floor.as_deref().and_then(padded);

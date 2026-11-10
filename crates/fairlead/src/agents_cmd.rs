@@ -42,9 +42,7 @@ impl State {
         match block::locate(&text) {
             Err(e) => State::Broken(e),
             Ok(None) => State::NoBlock,
-            Ok(Some(_)) if block::splice(Some(&text), lines).as_ref() == Ok(&text) => {
-                State::Current
-            }
+            Ok(Some(_)) if block::same(&text, lines) == Ok(true) => State::Current,
             Ok(Some(_)) => State::Stale,
         }
     }
@@ -245,10 +243,13 @@ fn check_files(root: &Path, files: &[String], lines: &[String], write: AgentsWri
 fn sync_file(root: &Path, f: &str, lines: &[String]) -> Result<String, String> {
     let path = root.join(f);
     let text = read(&path)?;
-    let new = block::splice(text.as_deref(), lines)?;
-    if text.as_deref() == Some(new.as_str()) {
-        return Ok(format!("{f} is current"));
+    // A block a formatter only spaced out is left as the formatter wants it.
+    if let Some(t) = &text {
+        if block::same(t, lines)? {
+            return Ok(format!("{f} is current"));
+        }
     }
+    let new = block::splice(text.as_deref(), lines)?;
     if let Some(dir) = path.parent() {
         std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
     }

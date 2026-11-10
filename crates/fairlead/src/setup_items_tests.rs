@@ -252,5 +252,49 @@ fn the_binary_is_open_below_the_floor_and_the_fix_is_how_the_repository_installs
         item.text
     );
     assert_eq!(item.fix.as_deref(), Some("pnpm install"));
+    // A pin older than the binary: the hooks would run another release.
+    std::fs::write(
+        dir.join("package.json"),
+        r#"{"devDependencies": {"fairlead": "0.1.0"}}"#,
+    )
+    .unwrap();
+    let item = binary(&dir, None);
+    assert_eq!(item.state, State::Open);
+    assert!(
+        item.text
+            .starts_with("package.json pins 0.1.0 and this binary is "),
+        "{}",
+        item.text
+    );
+    assert_eq!(item.fix.as_deref(), Some("fairlead migrate --write"));
+    // The pin is right and nothing is installed under node_modules.
+    let here = env!("CARGO_PKG_VERSION");
+    std::fs::write(
+        dir.join("package.json"),
+        format!(r#"{{"devDependencies": {{"fairlead": "{here}"}}}}"#),
+    )
+    .unwrap();
+    let item = binary(&dir, None);
+    assert_eq!(item.state, State::Open);
+    assert!(
+        item.text.contains("node_modules has no copy"),
+        "{}",
+        item.text
+    );
+    assert_eq!(item.fix.as_deref(), Some("pnpm install"));
+    let installed = dir.join("node_modules/fairlead");
+    std::fs::create_dir_all(&installed).unwrap();
+    std::fs::write(
+        installed.join("package.json"),
+        format!(r#"{{"version": "{here}"}}"#),
+    )
+    .unwrap();
+    let item = binary(&dir, None);
+    assert_eq!(item.state, State::Ok, "{}", item.text);
+    assert!(
+        item.text.ends_with(", matches package.json"),
+        "{}",
+        item.text
+    );
     let _ = std::fs::remove_dir_all(&dir);
 }

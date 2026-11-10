@@ -139,6 +139,18 @@ pub fn splice(text: Option<&str>, lines: &[String]) -> Result<String, String> {
     })
 }
 
+/// Whether the file's block says what `lines` say. Blank lines and trailing
+/// spaces don't count: a Markdown formatter adds them between the markers.
+pub fn same(text: &str, lines: &[String]) -> Result<bool, String> {
+    let Some(r) = locate(text)? else {
+        return Ok(false);
+    };
+    let said = |l: &&str| !l.is_empty();
+    let have = text[r].lines().map(str::trim_end).filter(said);
+    let want = lines.iter().map(|l| l.trim_end()).filter(said);
+    Ok(have.eq(want))
+}
+
 fn strip_eol(text: &str) -> Option<&str> {
     text.strip_suffix("\r\n")
         .or_else(|| text.strip_suffix('\n'))
@@ -270,6 +282,22 @@ mod tests {
         assert!(crlf.ends_with("<!-- fairlead:end -->\r\n"));
         let bare = splice(Some("# Rules"), &block).unwrap();
         assert!(bare.ends_with(END), "no final newline stays none: {bare:?}");
+    }
+
+    #[test]
+    fn a_block_a_formatter_spaced_out_still_says_the_same() {
+        let block = render("l", &lists(1, 0));
+        let tight = splice(Some("# Rules\n"), &block).unwrap();
+        assert_eq!(same(&tight, &block), Ok(true));
+        let spaced = tight
+            .replace("-->\n", "-->\n\n")
+            .replace("**\n", "**  \n\n");
+        assert_ne!(spaced, tight);
+        assert_eq!(same(&spaced, &block), Ok(true));
+        let edited = tight.replace("fairlead done", "fairlead finished");
+        assert_eq!(same(&edited, &block), Ok(false));
+        assert_eq!(same("# Rules\n", &block), Ok(false));
+        assert_eq!(same(&tight, &render("l", &lists(2, 0))), Ok(false));
     }
 
     #[test]

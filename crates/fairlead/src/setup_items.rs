@@ -309,14 +309,29 @@ fn binary(repo: &Path, config: Option<&Config>) -> Item {
     if let Some(first) = wrong.into_iter().next() {
         return open("binary", first, install_command(runner));
     }
+    if let Some(spec) = doctor_version::older_pin(this, &seen) {
+        return open(
+            "binary",
+            format!("package.json pins {spec} and this binary is {this}"),
+            "fairlead migrate --write",
+        );
+    }
+    if runner.is_some() && seen.installed.is_none() {
+        return open(
+            "binary",
+            format!("package.json lists fairlead and node_modules has no copy of it; this binary is {this}"),
+            install_command(runner),
+        );
+    }
     let whence = match (runner, crate::on_path()) {
         (Some(runner), _) => format!(", the project's own copy through `{runner}`"),
         (None, Some(_)) => " on PATH".to_string(),
         (None, None) => ", not on PATH, where the hooks look for it".to_string(),
     };
-    let pinned = match seen.spec {
-        Some(_) => ", matches package.json",
-        None => "",
+    let pinned = match (&seen.spec, doctor_version::pinned_here(this, &seen)) {
+        (Some(_), true) => ", matches package.json".to_string(),
+        (Some(spec), false) => format!(", within package.json's `{spec}`"),
+        (None, _) => String::new(),
     };
     ok("binary", format!("{this}{whence}{pinned}"))
 }
