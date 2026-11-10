@@ -120,7 +120,7 @@ fairlead.toml: tests.unreachd: unknown field `unreachd`, expected one of ...
 | `done.checks` | `"planned"` | The same for the `[[checks]]` the plan selects |
 | `done.always` | `[]` | `[[checks]]` ids `fairlead done` runs for every change |
 | `done.guard` | `true` | Whether `fairlead done` ends with `fairlead guard check` |
-| `done.budget_seconds` | `120` | *Since 0.19.0:* how many seconds of the plan `fairlead done` runs here, nearest tests first; what the change reaches past that is owed to CI. `0` runs the whole plan ([The budget](done.md#the-budget)) |
+| `done.budget_seconds` | `300` | *Since 0.19.0:* how many seconds of the plan `fairlead done` runs here, nearest tests first; what the change reaches past that is owed to CI. `0` runs the whole plan ([The budget](done.md#the-budget)) |
 | `done.cheap_seconds` | `60` | *Since 0.18.0:* a runner or check whose median time is at most this counts as cheap for [CI history](done.md#ci-history) |
 | `done.pre_push` | `false` | *Since 0.18.0:* install the pre-push hook, `fairlead done --pre-push`, with no `[pr]` rules or migration fetch asking for it ([Before a push](done.md#before-a-push)) |
 | `pr` | off | *Since 0.18.0:* rules a change meets before review: `base`, `up_to_date` (default `true`), `branch`, `title`, `ticket` (`pattern`, `in`, `any`), `body_headings`, `labels` (`require`, `require_any`, `forbid`), and `[[pr.files]]` (`path`, `when`, `unless_label`, `why`). Checked by `done`, before a push and by `fairlead pr check` in CI. See [Pull request rules](pr.md) |

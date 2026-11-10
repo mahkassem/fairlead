@@ -41,14 +41,14 @@ tests  = "planned"      # planned | none
 checks = "planned"      # planned | none
 always = ["typecheck"]  # [[checks]] ids that run for every change
 guard  = true
-budget_seconds = 120    # what fits runs here, the rest is owed to CI; 0 runs the whole plan
+budget_seconds = 300    # what fits runs here, the rest is owed to CI; 0 runs the whole plan
 ```
 
 A check `done.always` names needs no `paths` or `modules`, since it always runs.
 
 ## The budget
 
-*Since 0.19.0:* the gate runs what fits in `done.budget_seconds`, 120 by default, and records the rest of what the change reaches as debts for CI. So the gate can always pass on the machine it runs on, and nothing the change reaches is forgotten: it is owed, by runner and count, in the record, the receipt and the pull request.
+*Since 0.19.0:* the gate runs what fits in `done.budget_seconds`, 300 by default, and records the rest of what the change reaches as debts for CI. So the gate can always pass on the machine it runs on, and nothing the change reaches is forgotten: it is owed, by runner and count, in the record, the receipt and the pull request.
 
 The order, nearest the change first:
 
@@ -61,7 +61,7 @@ The order, nearest the change first:
 A test fits when its runner's time for one file, added to what the run has already taken on, stays within the budget. That time is the median over the runner's recent passing steps in `done`'s own record, and the checks' median times count against the budget before any test does. A runner with no recorded time runs its nearest 20 files; that run records the time, so the next one fits the budget from it.
 
 ```text
-done: unit: 41 of 380 reached test files run here; 339 owed to CI before merge: 339 past the 120 s budget
+done: unit: 41 of 380 reached test files run here; 339 owed to CI before merge: 339 past the 300 s budget
 done: passed, 6 steps; owed to CI before merge: unit 339 test files (`fairlead receipt` lists them)
 ```
 

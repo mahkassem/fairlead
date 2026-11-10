@@ -421,7 +421,7 @@ or 0.17.0. `fairlead migrate --write` moves the floor, and moves a lefthook
 `fairlead migrate --write` moves the floor. One thing changes what the
 gate does, with no config change:
 
-- **`fairlead done` runs under a budget**, `done.budget_seconds`, 120 by
+- **`fairlead done` runs under a budget**, `done.budget_seconds`, 300 by
   default. It runs the tests nearest the change until the budget is spent
   and records the rest of what the change reaches as owed to CI, so no
   suite holds the gate until `done --full` and the Stop hook stops sending

@@ -627,7 +627,7 @@ impl Default for Done {
             on_stop: OnStop::Ask,
             cheap_seconds: 60,
             pre_push: false,
-            budget_seconds: 120,
+            budget_seconds: 300,
         }
     }
 }
