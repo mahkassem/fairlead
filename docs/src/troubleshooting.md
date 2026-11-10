@@ -35,7 +35,7 @@ With `profile = "guard"`, `runners`, `proved`, `smoke` and `measure` are left ou
          fix: bun install
 ```
 
-**Cause.** The binary that ran is older than the `fairlead` floor in `fairlead.toml`, or isn't the version `package.json` pins. The usual ways there: a dependency bump nobody installed, a new worktree whose `node_modules` is a copy of an older one, or a global install that comes first on the PATH.
+**Cause.** The binary that ran is older than the `fairlead` floor in `fairlead.toml`, or isn't the version `package.json` pins. The usual ways there: a dependency bump nobody installed, a new worktree whose `node_modules` is a copy of an older one, or a global install that comes first on the PATH. *Since 0.20.1* it is also open when `package.json` pins an older release than the binary that ran (`fix: fairlead migrate --write` moves the pin), and when `package.json` lists fairlead and `node_modules` holds no copy of it.
 
 **Fix.** Install the pinned release the way the repository installs it: its package manager's install, or the installer in [Install](install.md). `fairlead doctor` prints the path of the binary that runs and each version the repository names. For a new release rather than a stale install, follow [Upgrading](migrate.md#upgrade-in-five-steps).
 
@@ -140,7 +140,7 @@ With `profile = "guard"`, `runners`, `proved`, `smoke` and `measure` are left ou
          fix: name 1 to 3 test files under `smoke` on runner `e2e` in fairlead.toml
 ```
 
-**Cause.** A runner whose suite is over 50 files, or which a `[[needs]]` entry covers, names no `smoke` set, or a `smoke` entry names no test file the runner matches, as after a rename (`fairlead config check` warns about that one too). When a change reaches such a suite only through a blanket and the suite doesn't fit the budget, the gate has nothing small to run in its place.
+**Cause.** A runner whose suite is over 50 files and isn't known to fit the budget whole, or which a `[[needs]]` entry covers, names no `smoke` set, or a `smoke` entry names no test file the runner matches, as after a rename (`fairlead config check` warns about that one too). When a change reaches such a suite only through a blanket and the suite doesn't fit the budget, the gate has nothing small to run in its place.
 
 **Fix.** Under that runner in `fairlead.toml`, name 1 to 3 fast test files that stand for the suite, as `smoke = ["e2e/smoke.spec.ts"]` ([The budget](done.md#the-budget)).
 

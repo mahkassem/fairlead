@@ -166,11 +166,19 @@ pub fn classes(
 /// Each runner's seconds for one test file: the median over its recent
 /// passing `done` steps that recorded how many files they named.
 pub fn seconds_per_file(log: &str) -> BTreeMap<String, f64> {
+    let events: Vec<serde_json::Value> = log
+        .lines()
+        .filter(|l| l.contains("\"stage\":\"done\""))
+        .filter_map(|l| serde_json::from_str(l).ok())
+        .collect();
+    per_file_of(&events)
+}
+
+/// The same, from events already read; those of another stage name no
+/// runner step with a file count, so they add nothing.
+pub fn per_file_of(events: &[serde_json::Value]) -> BTreeMap<String, f64> {
     let mut seen: BTreeMap<String, Vec<f64>> = BTreeMap::new();
-    for line in log.lines().filter(|l| l.contains("\"stage\":\"done\"")) {
-        let Ok(event) = serde_json::from_str::<serde_json::Value>(line) else {
-            continue;
-        };
+    for event in events.iter().filter(|e| e["stage"] == "done") {
         for step in event["steps"].as_array().into_iter().flatten() {
             let (Some(id), Some(seconds), Some(files)) = (
                 step["id"].as_str(),

@@ -35,7 +35,7 @@ Use this guide when `fairlead setup` or `fairlead setup --check` prints an `open
 - Fix: `fairlead ci workflow --write`, on a branch. It refuses to replace a workflow it didn't write; add a job to your own instead (`fairlead guide ci`).
 
 ## smoke
-- Open when a runner whose suite is over 50 files, or which a `[[needs]]` entry covers, names no `smoke` set, or a `smoke` entry names no test file the runner matches. Not required.
+- Open when a runner whose suite is over 50 files and isn't known to fit the budget whole, or which a `[[needs]]` entry covers, names no `smoke` set, or a `smoke` entry names no test file the runner matches. Not required.
 - Fix: name 1 to 3 fast, broad test files under that runner's `smoke` in `fairlead.toml`.
 
 ## gate

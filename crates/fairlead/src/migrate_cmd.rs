@@ -432,7 +432,7 @@ pub fn run(args: MigrateArgs, cwd: &Path) -> ExitCode {
             }
         }
         println!(
-            "migrate: {} file(s) updated; `fairlead doctor` checks the result",
+            "migrate: {} file(s) updated; `fairlead setup --check` lists what the setup still needs",
             updates.len()
         );
         return ExitCode::SUCCESS;

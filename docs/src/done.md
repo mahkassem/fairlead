@@ -58,7 +58,7 @@ The order, nearest the change first:
 4. A runner's smoke set, when only a blanket reaches its suite (below).
 5. Tests further along an import chain, shortest chain first.
 
-A test fits when its runner's time for one file, added to what the run has already taken on, stays within the budget. That time is the median over the runner's recent passing steps in `done`'s own record, and the checks' median times count against the budget before any test does. A runner with no recorded time runs its nearest 20 files; that run records the time, so the next one fits the budget from it.
+A test fits when its runner's time for one file, added to what the run has already taken on, stays within the budget. That time is the median over the runner's recent passing steps in `done`'s own record, and the checks' median times count against the budget before any test does. A runner with no recorded time runs its nearest 20 files; that run records the time, so the next one fits the budget from it. *Since 0.20.1* files reached only through a blanket count among those 20, unless the runner names a `smoke` set or its whole suite waits for a later stage (`all_from`); until then such a first run ran none of them.
 
 ```text
 done: unit: 41 of 380 reached test files run here; 339 owed to CI before merge: 339 past the 300 s budget

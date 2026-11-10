@@ -107,10 +107,10 @@ fairlead setup    track: mvp (39 test files, no workflow that tests or deploys, 
   fixed  hooks      Claude Code: edit guard, brief nudge, stop gate, session start
   fixed  git-hook   the commit stage is in lefthook.yml, and lefthook runs it
   fixed  agents     the block is current in AGENTS.md, CLAUDE.md
-  fixed  proved     1 runner ran one test file: vitest 0.0 s
+  fixed  proved     1 runner ran one test file: vitest under 0.1 s
   open   ci         no workflow runs `fairlead ci`
          fix: fairlead ci workflow --write
-  ok     smoke      no runner has over 50 test files or a need
+  ok     smoke      no runner has a need, or over 50 test files that outlast the budget
   open   gate       no passing `fairlead done` on record
          fix: fairlead done
   later  measure    the scorecard needs 10 more gate runs

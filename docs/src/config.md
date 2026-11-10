@@ -140,7 +140,7 @@ fairlead.toml: tests.unreachd: unknown field `unreachd`, expected one of ...
 | `skills.targets` | `["claude", "agents", "cursor"]` | The agents `skills sync` writes for |
 | `skills.routes` | `[]` | `{ skill, paths, modules, always }`: the SKILL.md and the code it applies to. See [Skills](skills.md) |
 | `agents.write` | `"block"` | What `fairlead agents sync` does: `block` keeps the marked block in each file; `never` writes nothing and prints it for a person to copy in. See [AGENTS.md and CLAUDE.md](agents.md). *Since 0.8.0* |
-| `agents.files` | `["AGENTS.md", "CLAUDE.md"]` | The files that carry the block, relative paths inside the repository |
+| `agents.files` | `["AGENTS.md", "CLAUDE.md"]` | The files that carry the block, relative paths inside the repository. A plain list adds to the default; `files = { replace = ["CLAUDE.md"] }` names one file alone |
 | `stages.environments` | `["main"]` | Branches, by name or glob, whose pushes are the merge stage. See [Stages](ci.md#stages). *Since 0.8.0* |
 | `stages.full_label` | `"run-everything"` | A pull request label that makes its runs the full stage |
 | `stages.reuse` | `true` | At merge, skip the ready stage's steps when the pull request passed them on the same tree |

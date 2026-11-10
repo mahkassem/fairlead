@@ -225,7 +225,7 @@ fn a_runner_is_proved_on_its_smallest_test_file_and_the_mvp_track_shows_ci_open_
         "{out}"
     );
     assert!(
-        out.contains("\n  fixed  proved     1 runner ran one test file: vitest 0."),
+        out.contains("\n  fixed  proved     1 runner ran one test file: vitest "),
         "{out}"
     );
     assert!(
@@ -233,7 +233,7 @@ fn a_runner_is_proved_on_its_smallest_test_file_and_the_mvp_track_shows_ci_open_
         "{out}"
     );
     assert!(
-        out.contains("\n  ok     smoke      no runner has over 50 test files or a need\n"),
+        out.contains("\n  ok     smoke      no runner has a need, or over 50 test files that outlast the budget\n"),
         "{out}"
     );
     assert_eq!(read(&dir, "ran.log"), "src/b.test.ts\n");

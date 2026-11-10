@@ -44,6 +44,8 @@ files = ["AGENTS.md", "CLAUDE.md"] # from the repository root
 - **Lessons for every change:** the [lessons](lessons.md) with `always: true`, as `title (id)`, by id. A lesson scoped to paths stays in the brief, which offers it when a change reaches it.
 - **Skills:** every routed [skill](skills.md), as `name: description (path)`, by name.
 
+*Since 0.20.1* a block counts as current when it says the same lines, whatever blank lines or trailing spaces a Markdown formatter added between the markers, and `agents sync` leaves such a block as the formatter wants it.
+
 The block is at most 40 lines, markers included. Past that, the longer list gives up lines first and ends with `… N more` and the command that lists the rest: `fairlead lessons list` or `fairlead brief --all`. The same lessons, skills and config always give the same block, so `--check` in CI fails only when one of them changed and the block wasn't synced.
 
 A lesson or skill file that can't be read is left out and named in a warning.
