@@ -8,6 +8,7 @@ use std::process::Command;
 
 use serde_json::Value;
 
+#[cfg(unix)]
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 /// A clean environment, so a developer's FAIRLEAD_*, CI or git settings
@@ -126,6 +127,7 @@ fn read(dir: &Path, path: &str) -> String {
 const README: &[(&str, &str)] = &[("README.md", "# a project\n")];
 
 /// One runner whose command is a stub: it notes the files it was given.
+#[cfg(unix)]
 const STUB_RUNNER: &str = r#"fairlead = "0.19"
 
 [tests]
@@ -137,6 +139,7 @@ match = ["**/*.test.ts"]
 command = ["sh", "run-tests.sh", "{files}"]
 "#;
 
+#[cfg(unix)]
 fn with_runner(name: &str, config: &str, script: &str) -> PathBuf {
     repo(
         name,
