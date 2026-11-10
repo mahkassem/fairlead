@@ -422,6 +422,10 @@ pub struct Runner {
     /// shows it going red; without it, its median time decides.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub cheap: bool,
+    /// The few test files that stand for the suite when a change reaches it
+    /// only through a blanket: `fairlead done` runs these and owes the rest.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub smoke: Vec<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, JsonSchema)]
@@ -596,6 +600,9 @@ pub struct Done {
     /// Install the pre-push hook, `fairlead done --pre-push`, even with no
     /// `[pr]` rules or migration fetch asking for it.
     pub pre_push: bool,
+    /// How many seconds of tests and checks the gate runs here; what the
+    /// change reaches past that is a debt for CI. 0 runs the whole plan.
+    pub budget_seconds: u32,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, JsonSchema)]
@@ -620,6 +627,7 @@ impl Default for Done {
             on_stop: OnStop::Ask,
             cheap_seconds: 60,
             pre_push: false,
+            budget_seconds: 120,
         }
     }
 }

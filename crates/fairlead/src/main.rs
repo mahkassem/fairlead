@@ -16,6 +16,7 @@ mod ci_workflow;
 mod context_cmd;
 mod coverage_cmd;
 mod doctor_version;
+mod done_budget;
 mod done_cmd;
 mod done_history;
 mod done_needs;

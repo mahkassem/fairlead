@@ -68,6 +68,36 @@ pub struct Event {
     /// isn't met here.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub unmet: Vec<Unmet>,
+    /// A `done` run's budget in seconds, when it ran under one.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub budget_seconds: Option<u32>,
+    /// What a budgeted `done` run reached and didn't run here: owed to CI.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub debts: Vec<Debt>,
+    /// How much of the test suite a `done` run's plan reached and ran.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reach: Option<Reach>,
+}
+
+/// Test files a `done` run reached and left to CI: counts only.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, serde::Deserialize)]
+pub struct Debt {
+    pub step: String,
+    pub files: usize,
+    /// `budget`, `blanket` or `untimed`.
+    pub why: String,
+    /// `merge` or `nightly`: when CI has to have run them.
+    pub due: String,
+}
+
+/// A `done` run's plan in numbers: whether it selected everything, the
+/// test files it reached, the suite's size and how many ran here.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, serde::Deserialize)]
+pub struct Reach {
+    pub all: bool,
+    pub reached: usize,
+    pub suite: usize,
+    pub ran: usize,
 }
 
 /// What one unmet need left out of one step: ids and counts only.
@@ -129,6 +159,9 @@ pub struct Step {
     pub os: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub arch: Option<String>,
+    /// The test files a runner step named, so a later run can tell how long one takes.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub files: Option<usize>,
 }
 
 impl Event {
@@ -156,6 +189,9 @@ impl Event {
             tokens: None,
             waiting: Vec::new(),
             unmet: Vec::new(),
+            budget_seconds: None,
+            debts: Vec::new(),
+            reach: None,
         }
     }
 

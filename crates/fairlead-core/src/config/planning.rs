@@ -29,9 +29,19 @@ pub struct Plan {
     /// default, so configs that don't set it keep their plan ids.
     #[serde(skip_serializing_if = "is_default_share")]
     pub whole_share: f64,
+    /// A `[[graph.edges]]` rule or `run_all` path that reaches at least this
+    /// share of a suite is a blanket: `fairlead done` runs the suite's smoke
+    /// set for it and owes the rest. Left out of the digest at its default.
+    #[serde(skip_serializing_if = "is_default_blanket")]
+    pub blanket_share: f64,
 }
 
 const DEFAULT_SHARE: f64 = 0.5;
+const DEFAULT_BLANKET: f64 = 0.3;
+
+fn is_default_blanket(share: &f64) -> bool {
+    *share == DEFAULT_BLANKET
+}
 
 fn is_default_share(share: &f64) -> bool {
     *share == DEFAULT_SHARE
@@ -87,6 +97,7 @@ impl Default for Plan {
             ]),
             lockfile: LockfileMode::default(),
             whole_share: DEFAULT_SHARE,
+            blanket_share: DEFAULT_BLANKET,
         }
     }
 }
@@ -170,6 +181,13 @@ pub(super) fn validate(config: &Config, problems: &mut Vec<Problem>) {
         problems.push(super::validate::problem(
             "plan.whole_share",
             "is a share of a suite, above 0 and at most 1, such as 0.5",
+        ));
+    }
+    let blanket = config.plan.blanket_share;
+    if !(blanket > 0.0 && blanket <= 1.0) {
+        problems.push(super::validate::problem(
+            "plan.blanket_share",
+            "is a share of a suite, above 0 and at most 1, such as 0.3",
         ));
     }
     for (i, entry) in config.plan.run_all.items().iter().enumerate() {

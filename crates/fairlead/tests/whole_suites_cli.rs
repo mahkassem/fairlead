@@ -173,8 +173,8 @@ fn a_lockfile_change_alone_leaves_the_suite_to_the_schedule() {
 }
 
 #[test]
-fn a_change_reaching_most_of_a_suite_holds_done_until_full() {
-    let config = format!("{RUNNERS}all_from = \"full\"\n");
+fn with_no_budget_a_change_reaching_most_of_a_suite_holds_done_until_full() {
+    let config = format!("{RUNNERS}all_from = \"full\"\n\n[done]\nbudget_seconds = 0\n");
     let dir = repo("most", &config, &[("src/b.ts", "export const b = 2;\n")]);
     let plan = plan_json(&dir, &[]);
     assert_eq!(plan["all"], false);
@@ -328,7 +328,7 @@ fn stop(dir: &Path, session: &str) -> (i32, String) {
 
 #[test]
 fn a_waiting_suite_in_testing_says_what_holds_it_why_and_the_ways_forward() {
-    let config = format!("phase = \"testing\"\n{RUNNERS}");
+    let config = format!("phase = \"testing\"\n{RUNNERS}\n[done]\nbudget_seconds = 0\n");
     let dir = repo("testing", &config, &[("src/b.ts", "export const b = 2;\n")]);
     std::fs::create_dir_all(dir.join(".github/workflows")).unwrap();
     std::fs::write(

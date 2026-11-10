@@ -151,7 +151,7 @@ pub fn apply(
 
 /// The test files a runner step runs: those its argv names, or for a step
 /// that names none, every planned test of its runner under its directory.
-fn tests_of(planned: &Planned, step: &Invocation) -> Vec<String> {
+pub fn tests_of(planned: &Planned, step: &Invocation) -> Vec<String> {
     if step.kind == InvocationKind::Check {
         return Vec::new();
     }
