@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.19.1 (2026-11-10)
+
+Setup defects found by running a first setup on four kinds of repository: new, small, established and legacy.
+
+### Fixed
+
+- `fairlead init` put Playwright specs under the unit runner, since a spec is named like a unit test, so `bun test` or Vitest was handed files it can't run. Init now finds the specs by their import of `@playwright/test`, writes a `playwright` runner for them and an `exclude` on the unit runner, and notes that the runner wants a `smoke` set.
+- `fairlead init` wrote nothing and exited 1 in a repository with no test runner, such as a new project or a legacy one with no tests. It now writes the guard-only setup there, and `fairlead doctor` says when the repository has tests a runner can run.
+- A runner whose command names no `{files}` loaded without a word and ran its whole suite on every change that reached one of its tests. `config check` and `doctor` now warn about it.
+- `fairlead guard check` stopped on git's own error where `guard.migrations.base` isn't in the repository, as before a first push. It now says so in a note and checks the rest; a base named with `--base` that isn't there is an error that says how to fix it.
+- `doctor --score` named a replay of CI history as the first fix for a repository with no hooks, gate or CI. Setup fixes now come first, in the order they're done.
+- `init`'s next steps left out the git hook, the agents file, CI and the gate; it lists them in order. `doctor`'s hint for a project with no `phase` described the gate as it was before the budget.
+
 ## 0.19.0 (2026-11-10)
 
 A gate that fits the machine it runs on. `fairlead done` asked for the whole plan, and a change that reached most of a slow suite held it until `done --full`; where that couldn't run, a need or a quarantine entry let the gate pass on a line of text. Now the gate runs what fits a budget, nearest the change first, and records the rest as owed to CI.

@@ -145,7 +145,7 @@ repositories are on the way
 
 ## What it does
 
-This README documents Fairlead 0.19.0. Each command, by what it's for:
+This README documents Fairlead 0.19.1. Each command, by what it's for:
 
 - **The test plan:** `plan`, `test --explain`, the import graph (`graph`) and
   coverage maps (`coverage import`). *Since 0.13.0:* `graph hubs` lists the
@@ -226,7 +226,10 @@ The [quick start](#quick-start) shows the first few, and the
 
 ## Status
 
-Pre-alpha. The latest release, v0.19.0, gives the done gate a budget: it
+Pre-alpha. The latest release, v0.19.1, fixes what a first setup got
+wrong: Playwright specs get their own runner, a repository with no tests
+yet starts with the guard, and a runner that names no `{files}` is warned
+about. 0.19.0 gave the done gate a budget: it
 runs the tests nearest the change until the budget is spent and records
 what else the change reaches as owed to CI, so the gate fits the machine
 it runs on and no suite holds it. A suite reached only through a blanket
