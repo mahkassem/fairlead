@@ -89,7 +89,17 @@ jobs:
             echo "fairlead@$version isn't on npm yet; waiting for the publish approval"
             sleep 60
           done
-          npx --yes "fairlead@$version" --version | tee version.txt
+          # The registry can answer `npm view` a moment before an install resolves the version.
+          for attempt in $(seq 10); do
+            npx --yes "fairlead@$version" --version > version.txt && break
+            if [[ "$attempt" == 10 ]]; then
+              echo "fairlead@$version never installed from npm"
+              exit 1
+            fi
+            echo "fairlead@$version doesn't install yet; trying again"
+            sleep 15
+          done
+          cat version.txt
       - name: Install from crates.io
         if: matrix.installer == 'cargo'
         shell: bash
