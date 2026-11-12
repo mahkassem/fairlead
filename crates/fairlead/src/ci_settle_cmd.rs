@@ -56,7 +56,7 @@ pub fn run(args: SettleArgs, cwd: &Path) -> Result<ExitCode, String> {
     covers(&plan, &root, cwd)?;
     if let Some(cancelled) = cancelled(args.needs.as_deref())? {
         eprintln!(
-            "fairlead: not settled: the run was cancelled before {cancelled} finished, so nothing it left can count"
+            "fairlead: not settled: the run was cancelled before {cancelled} finished, so nothing it left can count; a newer run that took its place has to collect it (`ci plan --since-green`)"
         );
         return Ok(ExitCode::FAILURE);
     }
@@ -64,9 +64,23 @@ pub fn run(args: SettleArgs, cwd: &Path) -> Result<ExitCode, String> {
     for given in &args.results {
         read_into(&cwd.join(given), &mut results)?;
     }
-    let record = crate::ci_settle::settle(&plan, &results, &BTreeMap::new());
+    let attested = fairlead_core::config::load(cwd, &LoadOptions::from_process(Vec::new()))
+        .map_err(|e| e.to_string())?
+        .config
+        .ci
+        .attested;
+    let http = fairlead_replay::github::Curl::from_env();
+    let jobs = crate::ci_settle_jobs::read(&http, &attested);
+    let record = crate::ci_settle::settle(&plan, &results, &jobs);
     keep(&root, &record, args.out.as_deref().map(|p| cwd.join(p)))?;
-    let body = text(&record, &plan);
+    let mut body = text(&record, &plan);
+    // What waits for the nightly run is only collected if that run is green.
+    if record.waiting.iter().any(|w| w.due == "nightly") {
+        if let Some(line) = crate::ci_settle_jobs::last_night(&http) {
+            body.push_str(&line);
+            body.push('\n');
+        }
+    }
     print!("{body}");
     if args.format == SettleFormat::Github {
         github(&record, &body);
@@ -293,7 +307,10 @@ pub fn text(record: &Record, plan: &Plan) -> String {
     for s in &record.settled {
         let by = match &s.proof {
             Proof::Results => "proven by results".to_string(),
-            Proof::Job { name } => format!("attested by job {name}"),
+            Proof::Job { name } => format!(
+                "attested by job{} {name}, not proven by results",
+                if name.contains(", ") { "s" } else { "" }
+            ),
         };
         let what = match s.files {
             0 => String::new(),

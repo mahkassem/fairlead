@@ -644,6 +644,12 @@ pub struct Ci {
     /// The run ends with `fairlead ci settle`, the merge check: the generated
     /// workflow has each job write its results and adds the job that collects them.
     pub settle: bool,
+    /// Steps a CI job outside `fairlead ci run` covers: a runner or check id
+    /// to the jobs of the same run that run it. The merge check takes the
+    /// step as attested when every one of them succeeded, which is weaker
+    /// than a results file and is printed as such.
+    #[serde(skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub attested: std::collections::BTreeMap<String, Vec<String>>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, JsonSchema)]

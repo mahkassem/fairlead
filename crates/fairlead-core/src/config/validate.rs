@@ -99,7 +99,27 @@ pub fn validate(config: &Config) -> Vec<Problem> {
     super::planning::validate(config, &mut problems);
     super::pr::validate(config, &mut problems);
     agents(config, &mut problems);
+    attested(config, &mut problems);
     problems
+}
+
+/// `ci.attested` maps a runner or check to the CI jobs that run it.
+fn attested(config: &Config, problems: &mut Vec<Problem>) {
+    let runners = config.tests.runners.items().iter().map(|r| r.id.as_str());
+    let checks = config.checks.items().iter().map(|c| c.id.as_str());
+    let ids: BTreeSet<&str> = runners.chain(checks).collect();
+    for (step, jobs) in &config.ci.attested {
+        let key = format!("ci.attested.{step}");
+        if !ids.contains(step.as_str()) {
+            problems.push(problem(
+                key.clone(),
+                format!("no runner or check has id `{step}`"),
+            ));
+        }
+        if jobs.is_empty() || jobs.iter().any(|j| j.trim().is_empty()) {
+            problems.push(problem(key, "names the CI jobs that run the step, by name"));
+        }
+    }
 }
 
 /// The globs `fairlead plan` compiles, which would otherwise fail only once

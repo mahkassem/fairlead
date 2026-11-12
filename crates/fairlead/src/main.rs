@@ -13,6 +13,7 @@ mod ci_ledger;
 mod ci_report;
 mod ci_settle;
 mod ci_settle_cmd;
+mod ci_settle_jobs;
 mod ci_shard;
 mod ci_workflow;
 mod context_cmd;

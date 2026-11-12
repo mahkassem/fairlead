@@ -34,6 +34,34 @@ each file, or a folder of them, such as the one the jobs' artifacts were downloa
   commit, such as the job on the platform where it passes.
 - Results for another plan are left out, and so count for nothing.
 
+## A job that does not go through `fairlead ci run`
+
+Some suites run in a job of their own, with their own command. The stronger way to bring one in is to have that job
+run its step through Fairlead, `fairlead ci run --only e2e --results ...`, and upload the file. Where that is not
+possible, name the job:
+
+```toml
+[ci.attested]
+e2e = ["browser"]
+api = ["api", "api-reach"]
+```
+
+A step with no results file is then taken as attested when every job named for it succeeded in the same workflow
+run. A matrix's legs, `browser (1/2)` and `browser (2/2)`, are all the job `browser`, and each has to succeed. A job
+that was skipped, cancelled, still running or absent from the run settles nothing, so the settle job has to `needs:`
+the jobs it reads, and they have to be in the same workflow.
+
+This is weaker than a results file: a green job says the job ran, not which test files it ran. The check says so
+every time, apart from what results prove:
+
+```text
+  e2e: 12 test files, attested by job browser, not proven by results
+  unit: 214 test files, proven by results
+```
+
+The job needs a token that can read the run's jobs (`actions: read`, with `GITHUB_TOKEN` in its environment).
+Without one nothing is read and nothing is taken on trust.
+
 ## The plan has to be this commit's, and whole
 
 The check does not choose tests again. It takes the plan the run already made and refuses one that could settle green
@@ -59,6 +87,13 @@ fairlead: waiting, not due at this stage:
 A pull request is checked at the ready stage. A step with `from = "merge"` is collected by the run on the push that
 follows the merge, and a suite with `all_from = "full"` by the nightly run, where the plan is everything and every
 step in it has to be green.
+
+When something waits for the nightly run and the job can read the workflow's runs, the check adds how the last one
+ended, since a red night collected nothing:
+
+```text
+fairlead: the last nightly run, on 2026-03-03 at 9c1e0aa, ended failure: what waits for the nightly run is not collected until one is green
+```
 
 ## In a workflow
 
