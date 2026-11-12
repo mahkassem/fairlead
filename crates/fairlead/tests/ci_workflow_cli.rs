@@ -30,11 +30,16 @@ from = "merge"
 
 const WORKFLOW: &str = ".github/workflows/fairlead.yml";
 
-fn fixture() -> String {
-    let path =
-        Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/ci-workflow/fairlead.yml");
+fn fixture_named(name: &str) -> String {
+    let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/fixtures/ci-workflow")
+        .join(name);
     // A Windows checkout gives the fixture CRLF; the generator writes LF everywhere.
     std::fs::read_to_string(path).unwrap().replace("\r\n", "\n")
+}
+
+fn fixture() -> String {
+    fixture_named("fairlead.yml")
 }
 
 fn repo(name: &str) -> PathBuf {
@@ -91,6 +96,48 @@ fn the_workflow_for_a_staged_config_is_the_fixture_and_names_each_gated_jobs_if_
     );
     assert!(!err.contains("run_unit"), "{err}");
     assert!(!dir.join(WORKFLOW).exists());
+}
+
+#[test]
+fn with_settle_on_every_job_uploads_its_results_and_a_last_job_collects_them() {
+    let dir = repo("settle");
+    std::fs::write(
+        dir.join("fairlead.toml"),
+        format!("{CONFIG}\n[ci]\nsettle = true\n"),
+    )
+    .unwrap();
+    let (code, out, err) = workflow(&dir, &[]);
+    assert_eq!(code, 0, "{err}");
+    assert_eq!(unversioned(&out), fixture_named("fairlead-settle.yml"));
+    // Off, the workflow is the one it was: no results, no job, no new trigger.
+    let plain = fixture();
+    for only_with_settle in ["--results", "settle", "merge_group"] {
+        assert!(out.contains(only_with_settle), "{only_with_settle}");
+        assert!(!plain.contains(only_with_settle), "{only_with_settle}");
+    }
+}
+
+#[test]
+fn a_step_named_settle_is_refused_only_where_the_job_exists() {
+    const STEP: &str = r#"
+[[checks]]
+id = "settle"
+command = ["sh", "-c", "exit 0"]
+paths = ["src/**"]
+from = "merge"
+"#;
+    let dir = repo("settle-name");
+    std::fs::write(dir.join("fairlead.toml"), STEP).unwrap();
+    let (code, _, err) = workflow(&dir, &[]);
+    assert_eq!(code, 0, "{err}");
+    std::fs::write(
+        dir.join("fairlead.toml"),
+        format!("{STEP}\n[ci]\nsettle = true\n"),
+    )
+    .unwrap();
+    let (code, _, err) = workflow(&dir, &[]);
+    assert_eq!(code, 2, "{err}");
+    assert!(err.contains("would be the job `settle`"), "{err}");
 }
 
 #[test]

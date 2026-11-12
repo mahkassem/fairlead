@@ -25,6 +25,8 @@ pub const ACTION: &str = "mahkassem/fairlead@3a251540c5c8bfec080a5bdd953d4030ba5
 
 const PLAN_FILE: &str = "fairlead-plan.json";
 const RESERVED: [&str; 2] = ["plan", "checks"];
+/// The job that collects every other job's results, where `ci.settle` is on.
+const SETTLE: &str = "settle";
 
 /// A runner or check that gets a job of its own.
 struct Gated {
@@ -134,7 +136,7 @@ fn gated(config: &Config) -> Result<Vec<Gated>, String> {
             ));
         }
         let job = job_id(id);
-        if RESERVED.contains(&job.as_str()) {
+        if RESERVED.contains(&job.as_str()) || (config.ci.settle && job == SETTLE) {
             return Err(format!(
                 "`{id}` would be the job `{job}`, which the workflow already has; rename it"
             ));
@@ -193,6 +195,10 @@ fn header(out: &mut String, config: &Config) {
             "  schedule:\n    - cron: {}   # the full stage: every whole suite, in UTC",
             scalar(&config.stages_or_default().nightly)
         );
+    }
+    if config.ci.settle {
+        // A required check has to report on a merge queue's commits too, or the queue waits forever.
+        out.push_str("  merge_group:\n");
     }
     out.push_str("  workflow_dispatch:\n\npermissions:\n  contents: read   # each job widens only what it needs\n\njobs:\n");
 }
@@ -258,6 +264,8 @@ struct RunJob<'a> {
     args: String,
     /// Records the passed tree as a commit status, for reuse at merge.
     records: bool,
+    /// Writes its results and uploads them, for the settle job.
+    results: bool,
 }
 
 /// Whether the ready stage records its tree and the merge stage reads it back.
@@ -274,6 +282,7 @@ fn run_job(out: &mut String, j: RunJob) {
         cancel,
         args,
         records,
+        results,
     } = j;
     let _ = writeln!(
         out,
@@ -301,9 +310,36 @@ fn run_job(out: &mut String, j: RunJob) {
     if records {
         out.push_str("        env:\n          GITHUB_TOKEN: ${{ github.token }}\n");
     }
+    let file = format!("fairlead-results-{job}.json");
+    let write = match results {
+        true => format!(" --results \"$RUNNER_TEMP/{file}\""),
+        false => String::new(),
+    };
     let _ = writeln!(
         out,
-        "        run: |\n          fairlead ci run --plan \"$RUNNER_TEMP/{PLAN_FILE}\"{args}"
+        "        run: |\n          fairlead ci run --plan \"$RUNNER_TEMP/{PLAN_FILE}\"{args}{write}"
+    );
+    if results {
+        // A failed run uploads too: "it failed" is a different answer from "no job ran it".
+        let _ = write!(
+            out,
+            "      - uses: {UPLOAD}\n        if: always()\n        with:\n          name: fairlead-results-{job}\n          path: ${{{{ runner.temp }}}}/{file}\n          if-no-files-found: ignore\n          overwrite: true\n"
+        );
+    }
+}
+
+/// The last job: it runs whatever the others did, downloads the plan and
+/// every job's results, and fails when a step the plan holds has no green run.
+fn settle_job(out: &mut String, jobs: &[&str]) {
+    let _ = write!(
+        out,
+        "\n  {SETTLE}:\n    name: {SETTLE}\n    needs: [plan, {}]\n    if: always()   # a skipped job passes a required check; this one always answers\n    runs-on: ubuntu-latest\n    permissions:\n      contents: read   # the history the plan's base is compared in\n    steps:\n      - uses: {CHECKOUT}\n        with:\n          fetch-depth: 0\n          persist-credentials: false\n",
+        jobs.join(", ")
+    );
+    install(out);
+    let _ = write!(
+        out,
+        "      - uses: {DOWNLOAD}\n        with:\n          pattern: fairlead-*\n          path: ${{{{ runner.temp }}}}/fairlead\n      - name: Settle\n        env:\n          NEEDS: ${{{{ toJSON(needs) }}}}\n        run: |\n          fairlead ci settle --plan \"$RUNNER_TEMP/fairlead/fairlead-plan/{PLAN_FILE}\" --results \"$RUNNER_TEMP/fairlead\" --needs \"$NEEDS\" --format github\n"
     );
 }
 
@@ -329,6 +365,7 @@ pub fn render(config: &Config) -> Result<String, String> {
             cancel: true,
             args: except,
             records: reuses(config),
+            results: config.ci.settle,
         },
     );
     for g in &gated {
@@ -342,6 +379,7 @@ pub fn render(config: &Config) -> Result<String, String> {
                 cancel: false,
                 args: format!(" --only {}", g.id),
                 records: false,
+                results: config.ci.settle,
             },
         );
     }
@@ -349,6 +387,9 @@ pub fn render(config: &Config) -> Result<String, String> {
         .chain(gated.iter().map(|g| g.job.as_str()))
         .collect();
     ledger_job(&mut out, &jobs);
+    if config.ci.settle {
+        settle_job(&mut out, &jobs);
+    }
     Ok(out)
 }
 

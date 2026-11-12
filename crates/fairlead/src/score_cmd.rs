@@ -269,6 +269,13 @@ pub fn ci_runs(root: &Path, profile: Profile) -> bool {
     })
 }
 
+/// Whether a workflow runs the merge check, which collects what the gate owes.
+pub fn ci_settles(root: &Path) -> bool {
+    workflows(root)
+        .iter()
+        .any(|text| text.contains("ci settle"))
+}
+
 /// The guard profile has no plan to stage, so a workflow running the guard
 /// earns the whole item.
 fn guard_ci_item(root: &Path) -> Item {
