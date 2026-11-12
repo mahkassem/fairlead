@@ -18,6 +18,7 @@
 - [Import graph](graph.md)
 - [Test plan](plan.md)
 - [Plans in CI](ci.md)
+- [The merge check](settle.md)
 - [Workspaces](workspace.md)
 - [Guard rules](guard.md)
 - [Pull request rules](pr.md)

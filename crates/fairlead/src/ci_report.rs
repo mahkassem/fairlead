@@ -30,6 +30,12 @@ pub struct Results {
     /// The shard `ci run --shard K/N` ran, as `K/N`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub shard: Option<String>,
+    /// The commit the run had checked out.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub head: Option<String>,
+    /// The attempt of the CI run that wrote this, from 1; a re-run's is higher.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub attempt: Option<u32>,
     /// Shards of a sharded plan that sent no results, once merged.
     #[serde(skip)]
     pub missing: Vec<u32>,
@@ -87,6 +93,10 @@ pub fn write_results(
         invocations: ran,
         judged: judged.to_vec(),
         shard: shard.map(str::to_string),
+        head: Some(plan.head.clone()).filter(|h| h != "worktree"),
+        attempt: std::env::var("GITHUB_RUN_ATTEMPT")
+            .ok()
+            .and_then(|a| a.parse().ok()),
         missing: Vec::new(),
     };
     let text = serde_json::to_string_pretty(&results).expect("results serialize") + "\n";

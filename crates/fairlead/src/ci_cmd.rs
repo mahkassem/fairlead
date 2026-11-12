@@ -109,6 +109,10 @@ pub enum CiAction {
     /// branch's red streaks, and keep the ledger for `next`, `resume`,
     /// `brief` and `doctor`.
     Ledger(crate::ci_ledger::LedgerArgs),
+    /// The merge check: every step the commit's plan holds needs a green
+    /// run on that commit, in the results files the jobs wrote. Fails
+    /// naming the test files that have none.
+    Settle(crate::ci_settle_cmd::SettleArgs),
     /// Print a staged GitHub Actions workflow made from the config.
     Workflow {
         /// Write it to `.github/workflows/fairlead.yml` instead, replacing
@@ -185,6 +189,7 @@ pub fn run(action: CiAction, cwd: &Path) -> ExitCode {
             comment,
         ),
         CiAction::Ledger(args) => crate::ci_ledger::run(args, cwd),
+        CiAction::Settle(args) => crate::ci_settle_cmd::run(args, cwd),
         CiAction::Workflow { write, insights } => crate::ci_workflow::run(cwd, write, insights),
     };
     result.unwrap_or_else(|e| {
@@ -193,7 +198,7 @@ pub fn run(action: CiAction, cwd: &Path) -> ExitCode {
     })
 }
 
-fn default_out() -> PathBuf {
+pub(crate) fn default_out() -> PathBuf {
     std::env::var_os("RUNNER_TEMP")
         .map(PathBuf::from)
         .unwrap_or_else(std::env::temp_dir)
