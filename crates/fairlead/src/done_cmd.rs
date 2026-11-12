@@ -93,6 +93,7 @@ fn gate(args: &DoneArgs, cwd: &Path) -> Result<ExitCode, String> {
     }
     let near = narrow.as_ref().unwrap_or(&planned.plan);
     let (steps, mut owed) = within(budget, &planned, near, &suites, steps, &text)?;
+    owed.debts.extend(skips.iter().filter_map(|s| s.debt()));
     if args.dry_run {
         for s in &steps {
             println!("done: ({}) {}", s.cwd, s.argv.join(" "));
@@ -102,7 +103,7 @@ fn gate(args: &DoneArgs, cwd: &Path) -> Result<ExitCode, String> {
     }
     let started = Instant::now();
     let ran = run_steps(&planned, &steps, &root, args.keep_going);
-    let unproved = skips.iter().find(|s| s.proved_in.is_none());
+    let unproved = skips.iter().find(|s| !s.provable());
     let passed = ran.len() == steps.len()
         && ran.iter().all(|s| s.passed || s.quarantined)
         && unproved.is_none();
@@ -228,7 +229,7 @@ fn report(
         environment(skips),
         crate::done_budget::owed_line(&owed.debts)
     );
-    let unproved = skips.iter().find(|s| s.proved_in.is_none());
+    let unproved = skips.iter().find(|s| !s.provable());
     let steps = outcome.steps;
     if outcome.passed && !waiting.is_empty() {
         println!(
@@ -303,6 +304,7 @@ fn environment(skips: &[crate::done_needs::Skip]) -> String {
     let mut needs: Vec<String> = Vec::new();
     for s in skips {
         let line = match &s.proved_in {
+            _ if s.collected => format!("{}: owed to CI", s.need),
             Some(at) => format!("{}: proved in {at}", s.need),
             None => format!("{}: proved nowhere yet", s.need),
         };

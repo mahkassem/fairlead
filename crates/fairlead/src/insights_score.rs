@@ -169,11 +169,16 @@ impl Tally {
             *s.debts.by_why.entry(name(&d["why"])).or_default() += files;
             *s.debts.by_due.entry(name(&d["due"])).or_default() += files;
         }
+        // What a need left as a debt is collected, not waived by text.
+        let owed = |u: &Value| {
+            let why = format!("need {}", name(&u["need"]));
+            (debts.iter()).any(|d| d["step"] == u["step"] && d["why"] == why.as_str())
+        };
         s.waivers.files_proved_in += v["unmet"]
             .as_array()
             .into_iter()
             .flatten()
-            .filter(|u| u["proved"] == true)
+            .filter(|u| u["proved"] == true && !owed(u))
             .map(|u| count(&u["files"]))
             .sum::<usize>();
         s.waivers.steps_quarantined += v["steps"]

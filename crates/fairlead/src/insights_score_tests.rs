@@ -118,9 +118,11 @@ until = "2027-01-01"
             "debts": [
                 {"step": "unit", "files": 30, "why": "budget", "due": "merge"},
                 {"step": "e2e", "files": 12, "why": "blanket", "due": "nightly"},
+                {"step": "api", "files": 7, "why": "need postgres", "due": "merge"},
             ],
             "unmet": [
                 {"need": "smtp", "step": "unit", "files": 4, "proved": true},
+                {"need": "postgres", "step": "api", "files": 7, "proved": true},
                 {"need": "docker", "step": "unit", "files": 9, "proved": false},
             ],
             "steps": [
@@ -134,14 +136,14 @@ until = "2027-01-01"
         json!({"debts": [{"step": "unit", "files": 8, "why": "untimed", "due": "merge"}]}),
     ) + &done("pass", 1.0, json!({}));
     let s = score(&log, "2026-11-01", &config, None);
-    assert_eq!((s.debts.files, s.debts.runs), (50, 2));
+    assert_eq!((s.debts.files, s.debts.runs), (57, 2));
     assert_eq!(
         serde_json::to_value(&s.debts.by_why).unwrap(),
-        json!({"blanket": 12, "budget": 30, "untimed": 8})
+        json!({"blanket": 12, "budget": 30, "need postgres": 7, "untimed": 8})
     );
     assert_eq!(
         serde_json::to_value(&s.debts.by_due).unwrap(),
-        json!({"merge": 38, "nightly": 12})
+        json!({"merge": 45, "nightly": 12})
     );
     assert_eq!(
         s.waivers,
@@ -154,7 +156,7 @@ until = "2027-01-01"
     );
     let text = render(&s);
     assert!(
-        text.contains("  debts    50 test files owed in 2 runs: 30 budget, 12 blanket, 8 untimed; due merge 38, nightly 12\n"),
+        text.contains("  debts    57 test files owed in 2 runs: 30 budget, 12 blanket, 8 untimed, 7 need postgres; due merge 45, nightly 12\n"),
         "{text}"
     );
     assert!(

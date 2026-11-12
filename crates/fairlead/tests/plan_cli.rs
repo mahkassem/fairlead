@@ -431,6 +431,30 @@ fn an_empty_list_over_inherited_items_is_a_warning() {
 }
 
 #[test]
+fn a_need_that_names_proved_in_where_ci_settles_is_a_warning() {
+    let dir = project("collected-need");
+    let need =
+        "[[needs]]\nid = \"db\"\nenv = \"DB_URL\"\ntests = [\"test/**\"]\nproved_in = \"CI\"\n";
+    let runner = "[[tests.runners]]\nid = \"vitest\"\nmatch = [\"**\"]\ncommand = [\"vitest\"]\n\n";
+    write(&dir, "fairlead.toml", &format!("{runner}{need}"));
+    let out = fairlead_in(&dir, &["config", "check"]);
+    let err = String::from_utf8_lossy(&out.stderr);
+    assert!(out.status.success() && !err.contains("proved_in"), "{err}");
+    write(
+        &dir,
+        "fairlead.toml",
+        &format!("{runner}{need}\n[ci]\nsettle = true\n"),
+    );
+    let out = fairlead_in(&dir, &["config", "check"]);
+    assert!(out.status.success());
+    let err = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        err.contains("warning: needs[0].proved_in: `ci.settle` is on"),
+        "{err}"
+    );
+}
+
+#[test]
 fn config_check_warns_about_an_owner_rule_that_names_no_test() {
     let dir = project("idle-owner");
     write(

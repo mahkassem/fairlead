@@ -79,7 +79,7 @@ smoke = ["e2e/smoke.spec.ts"]
 done: e2e: 1 of 44 reached test files run here; 43 owed to CI before merge: 43 reached only through a blanket (a `run_all` path, an unreached file or a wide `[[graph.edges]]` rule)
 ```
 
-- **Debts are due** before merge, or by the nightly run in a project whose `phase` is `early`. This release records and prints them; a CI check that fails a pull request whose debts never ran is planned for the next one. Until then, a debt is paid by the CI that runs the plan on the pull request, as `fairlead ci run` does.
+- **Debts are due** before merge, or by the nightly run in a project whose `phase` is `early`. A debt is paid by the CI that runs the plan on the pull request, as `fairlead ci run` does, and [`fairlead ci settle`](settle.md) is the check that fails a pull request whose debts never ran.
 - **Under a budget the gate names the files it runs**, so a runner's `all_command` isn't used and no suite waits for a later stage: what doesn't fit is owed instead. `fairlead done --full`, `--budget 0` and `done.budget_seconds = 0` run the whole plan as before, with `all_command` and the waiting below.
 - **An unmet [need](#needs)** leaves its files out before the budget is counted, as before.
 - **[The Stop hook](#the-stop-hook)** reads the record as before. A budgeted pass is a pass, debts and all, so `on_stop = "require"` no longer asks an agent for a run its machine can't finish.
@@ -177,11 +177,19 @@ A `command` need runs a command from the config, as `[[checks]]` do, so `doctor`
 - A test invocation that names its files runs without the files the need's `tests` cover, and is left out when none is left. One that runs its whole suite, naming no file, is left out only when the need covers every test it would run; otherwise it runs.
 - A check the need's `checks` names is left out.
 - With `proved_in`, what was left out counts as passed for `done`, `done --check`, `next` and the Stop hook, in any phase, since that place proves it before a merge. Without it, the gate doesn't pass, and says to meet the need or set `proved_in`.
+- With `settle = true` under `[ci]`, what was left out is owed to CI instead, as a debt due before the merge, and the gate passes whether or not the need names `proved_in`: [the merge check](settle.md) fails the pull request when no job ran those files, so no text has to vouch for them. `fairlead config check` then warns about a `proved_in` nothing reads.
 - The gate prints one line for each need and step, and the `done` event and the receipt record which need left what out of which step:
 
 ```text
 done: api: 5 files not run here: need "postgres" not met (localhost:5432 refused); proved in CI (api job). To run them here: Start Postgres on 5432
 done: db-lint: not run here: need "postgres" not met (localhost:5432 refused), and the need names no `proved_in`, so the gate can't pass. Meet it or set its `proved_in` to where these are proved, then run `fairlead done` again
+```
+
+Where the merge check collects them:
+
+```text
+done: api: 5 files not run here: need "postgres" not met (localhost:5432 refused); owed to CI, where the merge check collects it. To run them here: Start Postgres on 5432
+done: passed, 4 steps; your change clean; environment: 1 skipped (postgres: owed to CI); owed to CI before merge: api 5 test files (`fairlead receipt` lists them)
 ```
 
 *Since 0.18.0:* a pass that left steps to `proved_in` ends with the change's verdict apart from the machine's, so the agent can say both in the pull request:
