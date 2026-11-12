@@ -38,6 +38,7 @@ An agent with a shell starts with the first link. The change loop is three comma
 - [Test plan](https://mahkassem.github.io/fairlead/docs/plan.html): which tests and checks a change can affect, and why each is in
 - [Import graph](https://mahkassem.github.io/fairlead/docs/graph.html): the file-level graph the plan walks, and how to inspect it
 - [Plans in CI](https://mahkassem.github.io/fairlead/docs/ci.html): `fairlead ci plan`, `ci run`, `ci report`, stages, the workflow `ci workflow` writes, and the ledger that says whether a red check is the change's own
+- [The merge check](https://mahkassem.github.io/fairlead/docs/settle.html): `fairlead ci settle`, the required check that fails a pull request when a step its plan holds has no green run on that commit
 - [Workspaces](https://mahkassem.github.io/fairlead/docs/workspace.html): a folder of repositories planned side by side
 
 ## Measuring

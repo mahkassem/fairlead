@@ -24,7 +24,7 @@ done: passed, 6 steps; owed to CI before merge: unit 339 test files (`fairlead r
 - `done: passed, N steps`: this tree passed. Any later edit makes a new tree, so run the gate again after one.
 - `owed to CI before merge`: a debt. The gate still passed, and the CI that runs the plan on the pull request pays it. Don't raise the budget or run `fairlead done --full` to clear it unless you were asked to. Put `fairlead receipt --pr` in the pull request, so a reviewer sees what ran here and what is owed.
 - `done: failed <step> in 0.5 s: <why>`: the step's command and output are above the line. Fix the cause and run `fairlead done` again. `could not start (exit 1 before any test ran)` means the runner didn't start, such as a service that isn't up, not that a test failed.
-- `N files not run here: need "postgres" not met … proved in CI`: this machine lacks something the tests need. With `proved in`, the gate passes and that place proves them; say so in the pull request. Without it the gate can't pass until the need is met.
+- `N files not run here: need "postgres" not met … proved in CI`: this machine lacks something the tests need. With `proved in`, the gate passes and that place proves them; say so in the pull request. With `owed to CI, where the merge check collects it`, the gate passes and the pull request's `settle` check fails if no job runs them. With neither, the gate can't pass until the need is met.
 - `done: advice: …`: never fails the gate. Advice is for the pull request's notes or a follow-up, not for this change, unless it is what you were asked to do.
 
 ## The pull request

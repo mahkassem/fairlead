@@ -177,7 +177,7 @@ A `command` need runs a command from the config, as `[[checks]]` do, so `doctor`
 - A test invocation that names its files runs without the files the need's `tests` cover, and is left out when none is left. One that runs its whole suite, naming no file, is left out only when the need covers every test it would run; otherwise it runs.
 - A check the need's `checks` names is left out.
 - With `proved_in`, what was left out counts as passed for `done`, `done --check`, `next` and the Stop hook, in any phase, since that place proves it before a merge. Without it, the gate doesn't pass, and says to meet the need or set `proved_in`.
-- With `settle = true` under `[ci]`, what was left out is owed to CI instead, as a debt due before the merge, and the gate passes whether or not the need names `proved_in`: [the merge check](settle.md) fails the pull request when no job ran those files, so no text has to vouch for them. `fairlead config check` then warns about a `proved_in` nothing reads.
+- *Since 0.21.0:* with `settle = true` under `[ci]`, what was left out is owed to CI instead, as a debt due before the merge, and the gate passes whether or not the need names `proved_in`: [the merge check](settle.md) fails the pull request when no job ran those files, so no text has to vouch for them. `fairlead config check` then warns about a `proved_in` nothing reads.
 - The gate prints one line for each need and step, and the `done` event and the receipt record which need left what out of which step:
 
 ```text

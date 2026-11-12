@@ -1,5 +1,29 @@
 # Changelog
 
+## 0.21.0 (2026-11-12)
+
+Collected: what the done gate owes to CI is collected by a required check, not vouched for by a line of text.
+
+### New
+
+- `fairlead ci settle --plan <plan> --results <file or folder>...` is the merge check. Every step the commit's plan holds needs a green run on that commit, in a results file `fairlead ci run --results` wrote for the same plan. A step no job ran, a shard that never reported and a step whose only run was a held quarantine failure are not settled: the check exits 1 and names the test files nobody ran. A job that an `if:` skipped no longer passes silently.
+- The check takes the plan the run already made and never chooses tests again, so it refuses a plan that could settle green without looking at the whole change, with exit 2: a plan for another commit or for uncommitted changes, one made with `--files`, one whose base is ahead of the change's base on a pull request or a merge queue, and one for an earlier stage than the event is.
+- A newer attempt of a job replaces the older one: a pass does not outlive a later failure of the same step. `--needs '${{ toJSON(needs) }}'` lets the check see a cancelled job and fail. Results files now carry the commit and the run attempt.
+- Steps the stage leaves for later are listed as waiting, with the run that has to collect them (the push after the merge, or the nightly run). When something waits for the nightly run, the check adds how the last one ended.
+- `settle = true` under `[ci]` says the repository's CI ends with the check. `fairlead ci workflow` then has each job write its results and upload them, adds a last job named `settle` that runs whatever the others did, and adds the `merge_group` trigger. `fairlead setup` leaves its `ci` item open while no workflow runs the check. With the key off, the generated workflow is the one it was.
+- `[ci.attested]` names the CI jobs that run a step with their own command, such as `e2e = ["browser"]`. A step with no results file is taken as attested when every job named for it succeeded in the same workflow run, a matrix's legs included, and the check prints it apart from what results prove. A skipped, cancelled, running or absent job settles nothing, and neither does a job listing that can't be read.
+- `--out` writes the check's record as JSON, and the checkout keeps the newest twenty under its git folder.
+- A new docs page, "The merge check", and a section in `fairlead guide ci`.
+
+### Changed
+
+- With `ci.settle` on, what an unmet `[[needs]]` entry leaves out of `fairlead done` is owed to CI, as a debt due before the merge, and the gate passes whether or not the need names `proved_in`. `fairlead config check` warns about a need's `proved_in` then, since it no longer decides anything, and `insights --score` counts those files as debts. Without the key nothing changes.
+
+### Not in this release
+
+- No config key is deprecated or rewritten. `phase`, `done --full`, a quarantine entry's `proved_in` and `done.on_stop` work as they did.
+- The check does not read the branch's protection rules, so it cannot say whether the `settle` job is required. Mark it as required by hand.
+
 ## 0.20.2 (2026-11-10)
 
 A mistake of Fairlead's reaches its makers the day it happens, without anything private going with it.

@@ -7,7 +7,7 @@ namespace Fairlead\Composer;
 final class Version
 {
     /** The release this launcher shipped with; scripts/docs_check.py holds it to Cargo.toml. */
-    public const STAMPED = '0.20.2';
+    public const STAMPED = '0.21.0';
 
     // Semantic versioning's own grammar, without build metadata, which no release tag carries.
     // Anchored with \z so the version can go into a URL path as it is.

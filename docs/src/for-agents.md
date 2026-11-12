@@ -168,7 +168,7 @@ done: passed, 6 steps; owed to CI before merge: unit 339 test files (`fairlead r
 - `done: passed, N steps`: this tree passed. Any later edit makes a new tree, so run the gate again after one.
 - `owed to CI before merge`: a debt. The gate still passed, and the CI that runs the plan on the pull request pays it. Don't raise the budget or run `fairlead done --full` to clear it unless you were asked to. Put `fairlead receipt --pr` in the pull request, so a reviewer sees what ran here and what is owed.
 - `done: failed <step> in 0.5 s: <why>`: the step's command and output are above the line. Fix the cause and run `fairlead done` again. `could not start (exit 1 before any test ran)` means the runner didn't start, such as a service that isn't up, not that a test failed.
-- `N files not run here: need "postgres" not met … proved in CI`: this machine lacks something the tests need. With `proved in`, the gate passes and that place proves them; say so in the pull request. Without it the gate can't pass until the need is met.
+- `N files not run here: need "postgres" not met … proved in CI`: this machine lacks something the tests need. With `proved in`, the gate passes and that place proves them; say so in the pull request. With `owed to CI, where the merge check collects it`, the gate passes and the pull request's `settle` check fails if no job runs them. With neither, the gate can't pass until the need is met.
 - `done: advice: …`: never fails the gate. Advice is for the pull request's notes or a follow-up, not for this change, unless it is what you were asked to do.
 
 ### The pull request
@@ -204,6 +204,7 @@ fairlead ci workflow --write        # write it to .github/workflows/fairlead.yml
 fairlead ci plan --format github    # in a job: plan the commit the job checked out
 fairlead ci run --plan <path>       # in a job: run that plan's tests and checks
 fairlead ci report --plan <path>    # in a job: the run's summary
+fairlead ci settle --plan <path> --results <dir>   # in the last job: fail when a planned step has no green run
 fairlead ci ledger                  # on your machine: judge each failure of HEAD's CI runs
 ```
 
@@ -220,6 +221,15 @@ fairlead ci ledger                  # on your machine: judge each failure of HEA
 - `ci plan` exits 2 when there is no merge base: the clone is shallow. Fetch the history; it never plans nothing instead.
 - `ci run` exits non-zero when any invocation fails. `ci report` names each failed one with the command that runs it again.
 - A debt `fairlead done` recorded, `owed to CI before merge`, is paid here: the job that runs the plan on the pull request runs those tests.
+- `ci settle` is the check that collects those debts. It exits 1 when a step the commit's plan holds has no green run on that commit, and names the test files nobody ran; 2 when the plan is not this commit's or not whole. It never chooses tests again.
+
+### The merge check
+
+- Set `settle = true` under `[ci]`, then run `fairlead ci workflow --write`: each job writes its results and uploads them, and a last job named `settle` collects them. In a workflow you wrote, add that job by hand; the docs page "The merge check" has it.
+- A person marks the `settle` job as a required check under the branch's protection rules. Don't change branch rules yourself; say that it is left to do.
+- `not settled: e2e: no job ran it`: a job was skipped, cancelled or never started. Find why that job did not run; don't remove the step from the config to make the check pass.
+- `attested by job X, not proven by results`: the config's `[ci.attested]` names a job for that step, and the job succeeded in this run. It is weaker than a results file, and the check says so each time.
+- With the key on, what an unmet `[[needs]]` entry leaves out of `fairlead done` is owed to CI, and the gate passes without `proved_in`.
 
 ### Is this red mine?
 

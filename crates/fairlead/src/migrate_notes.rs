@@ -338,6 +338,13 @@ pub const RELEASES: &[(&str, &[Note])] = &[
             applies: always,
         }],
     ),
+    (
+        "0.21.0",
+        &[Note {
+            text: "`fairlead ci settle` is the merge check: it fails a pull request when a step the commit's plan holds has no green run on that commit. To adopt it, set `settle = true` under `[ci]`, run `fairlead ci workflow --write` (or add the `settle` job to your own workflow), name under `[ci.attested]` the jobs that run a suite with their own command, and mark the job as a required check. With the key on, what an unmet need leaves out of `fairlead done` is owed to CI and a need's `proved_in` can be removed (see The merge check).",
+            applies: always,
+        }],
+    ),
 ];
 
 /// Config tables and keys by the release that added them. The top-level
@@ -392,6 +399,8 @@ pub const SINCE: &[(&str, &str)] = &[
     ("done.budget_seconds", "0.19"),
     ("tests.runners.smoke", "0.19"),
     ("plan.blanket_share", "0.19"),
+    ("ci.settle", "0.21"),
+    ("ci.attested", "0.21"),
 ];
 
 /// Top-level tables every released config format has had.
