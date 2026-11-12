@@ -1,7 +1,8 @@
 //! `[[needs]]` in the done gate (#259): a planned test or check whose need
-//! isn't met on this machine isn't run here. A need that names `proved_in`
-//! lets the gate pass without them, since that place proves them before a
-//! merge; one that doesn't keeps the gate open until it's met or says where.
+//! isn't met on this machine isn't run here. Where `ci.settle` is on they
+//! are owed to CI, and the merge check collects them. Elsewhere a need that
+//! names `proved_in` lets the gate pass without them, and one that doesn't
+//! keeps the gate open until it's met or says where.
 
 use std::collections::BTreeMap;
 use std::path::Path;
@@ -23,9 +24,27 @@ pub struct Skip {
     pub saw: String,
     pub proved_in: Option<String>,
     pub hint: Option<String>,
+    /// `ci.settle` is on: the merge check collects what was left out.
+    pub collected: bool,
 }
 
 impl Skip {
+    /// Whether the gate may pass without what was left out: CI collects
+    /// it, or the need says where it is proved.
+    pub fn provable(&self) -> bool {
+        self.collected || self.proved_in.is_some()
+    }
+
+    /// The debt this leaves, where CI collects it: its test files, owed before the merge.
+    pub fn debt(&self) -> Option<fairlead_guard::events::Debt> {
+        (self.collected && self.files > 0).then(|| fairlead_guard::events::Debt {
+            step: self.step.clone(),
+            files: self.files,
+            why: format!("need {}", self.need),
+            due: "merge".to_string(),
+        })
+    }
+
     /// One line: what wasn't run, the need and what its check saw, and
     /// where it's proved or what to do.
     pub fn line(&self) -> String {
@@ -38,6 +57,12 @@ impl Skip {
             "{}: {what}: need \"{}\" not met ({})",
             self.step, self.need, self.saw
         );
+        if self.collected {
+            let here = (self.hint.as_ref())
+                .map(|h| format!(". To run them here: {h}"))
+                .unwrap_or_default();
+            return format!("{head}; owed to CI, where the merge check collects it{here}");
+        }
         match (&self.proved_in, &self.hint) {
             (Some(at), Some(hint)) => format!("{head}; proved in {at}. To run them here: {hint}"),
             (Some(at), None) => format!("{head}; proved in {at}"),
@@ -53,7 +78,7 @@ impl Skip {
             need: self.need.clone(),
             step: self.step.clone(),
             files: self.files,
-            proved: self.proved_in.is_some(),
+            proved: self.provable(),
         }
     }
 }
@@ -99,6 +124,7 @@ pub fn apply(
         saw: saw.to_string(),
         proved_in: needs[i].proved_in.clone(),
         hint: needs[i].hint.clone(),
+        collected: planned.config.ci.settle,
     };
     let cover = |path: &str| {
         unmet
@@ -207,6 +233,7 @@ mod tests {
             saw: "localhost:5432 refused".into(),
             proved_in: Some("CI (api job)".into()),
             hint: Some("docker compose up -d db".into()),
+            collected: false,
         };
         assert_eq!(
             s.line(),
@@ -214,6 +241,20 @@ mod tests {
         );
         s.proved_in = None;
         assert!(s.line().ends_with("Meet it (docker compose up -d db) or set its `proved_in` to where these are proved, then run `fairlead done` again"));
+        assert!(!s.provable() && s.debt().is_none());
+        // Where CI collects it, the text is not what lets the gate pass.
+        s.collected = true;
+        assert_eq!(
+            s.line(),
+            "api: 5 files not run here: need \"postgres\" not met (localhost:5432 refused); owed to CI, where the merge check collects it. To run them here: docker compose up -d db"
+        );
+        assert!(s.provable() && s.record().proved);
+        let debt = s.debt().unwrap();
+        assert_eq!((debt.step.as_str(), debt.files), ("api", 5));
+        assert_eq!(
+            (debt.why.as_str(), debt.due.as_str()),
+            ("need postgres", "merge")
+        );
         assert_eq!(
             repo_path("api", "test/a.test.ts").as_deref(),
             Some("api/test/a.test.ts")

@@ -20,6 +20,16 @@ fairlead: not settled: 1 step on 4f1c2ab with no green run
 
 It exits 0 when everything is settled, 1 when a step is not, and 2 when the plan is not one it can judge.
 
+## What the gate owes
+
+- The test files past the gate's time budget, and those a blanket rule reached beyond its smoke set
+  ([Budget](done.md#the-budget)).
+- With `settle = true` under `[ci]`, the tests and checks an unmet [`[[needs]]`](done.md#needs) entry left out. The
+  gate passes without them and without `proved_in`, because this check fails the pull request when no job ran them.
+
+The check does not read the gate's record. It holds CI to the commit's whole plan, which covers every debt a gate
+on any machine could have left.
+
 ## What counts as a green run
 
 A results file that `fairlead ci run --results` wrote, for the same plan, holding the step as passed. Give the check

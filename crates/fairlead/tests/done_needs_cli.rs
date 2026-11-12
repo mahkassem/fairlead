@@ -224,3 +224,33 @@ fn an_unmet_need_with_no_proved_in_keeps_the_gate_open_and_says_what_to_do() {
     assert_eq!(out.trim(), format!("done: not passed for this tree: {why}"));
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn where_ci_settles_an_unmet_need_is_owed_to_ci_and_the_gate_passes_without_proved_in() {
+    let port = closed_port();
+    let unproved =
+        "tests = [\"api/**\"]\nchecks = [\"db-lint\"]\nhint = \"Start Postgres on 5432\"\n\n[ci]\nsettle = true";
+    let dir = repo("collected", &config(port, unproved));
+    let (code, out) = done(&dir, &[]);
+    assert_eq!(code, 0, "{out}");
+    assert!(
+        out.contains("api: 2 files not run here: need \"postgres\" not met"),
+        "{out}"
+    );
+    assert!(
+        out.contains("owed to CI, where the merge check collects it. To run them here: Start Postgres on 5432"),
+        "{out}"
+    );
+    assert!(out.contains("(postgres: owed to CI)"), "{out}");
+    assert!(
+        out.contains("owed to CI before merge: api 2 test files"),
+        "{out}"
+    );
+    let (code, receipt) = run(&dir, env!("CARGO_BIN_EXE_fairlead"), &["receipt"]);
+    assert_eq!(code, 0, "{receipt}");
+    assert!(
+        receipt.contains("api: 2 test files to CI before merge (2 need postgres)"),
+        "{receipt}"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}

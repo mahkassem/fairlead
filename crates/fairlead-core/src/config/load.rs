@@ -267,6 +267,7 @@ fn load_from(
         merge(&mut merged, value, &label, "", &mut origins);
     }
     let config = typed("merged config", merged.clone())?;
+    collected_needs(&config, &mut warnings);
     let problems = validate(&config);
     Ok(Loaded {
         config,
@@ -413,6 +414,25 @@ fn replacement(value: &Value) -> Option<&Vec<Value>> {
     match value {
         Value::Object(map) if map.len() == 1 => map.get("replace").and_then(Value::as_array),
         _ => None,
+    }
+}
+
+/// Where the merge check collects what an unmet need leaves out, the need's
+/// `proved_in` no longer decides anything, though it reads as if it did.
+fn collected_needs(config: &Config, out: &mut Vec<Problem>) {
+    if !config.ci.settle {
+        return;
+    }
+    for (at, need) in config.needs.items().iter().enumerate() {
+        if need.proved_in.is_some() {
+            out.push(Problem {
+                key: format!("needs[{at}].proved_in"),
+                message: format!(
+                    "`ci.settle` is on, so the merge check collects what need `{}` leaves out and `proved_in` no longer lets the gate pass; it can be removed",
+                    need.id
+                ),
+            });
+        }
     }
 }
 
