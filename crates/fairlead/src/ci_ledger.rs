@@ -149,7 +149,7 @@ pub fn cache_dir(root: &Path) -> Option<PathBuf> {
 /// Ledgers kept, newest first; older ones are removed.
 const KEPT: usize = 20;
 
-fn prune(dir: &Path) {
+pub(crate) fn prune(dir: &Path) {
     let Ok(entries) = std::fs::read_dir(dir) else {
         return;
     };

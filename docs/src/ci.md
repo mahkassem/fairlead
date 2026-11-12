@@ -298,6 +298,19 @@ comment = false    # also keep a pull request comment up to date
 escapes = "report" # or "fail": `ci report` exits 1 on an escape `ci run --judge` found; or "file": a GitHub issue per escape
 ```
 
+## `fairlead ci settle`
+
+The merge check: every step the commit's plan holds needs a green run on that commit, in a results file some job
+wrote with `ci run --results`. It fails naming the test files nobody ran, so a job that `if:` skipped, a shard that
+never started and a re-run that failed are caught where today they pass silently. It reads the plan the run made and
+the jobs' results files:
+
+```sh
+fairlead ci settle --plan "$RUNNER_TEMP/fairlead-plan.json" --results results/ --format github
+```
+
+[The merge check](settle.md) says what counts as a green run, which plans it refuses and how to wire the job.
+
 ## Is this red mine? `fairlead ci ledger`
 
 *Since 0.18.0:* when agents write most pull requests, the time goes less into running tests than into deciding whether a red check is the change's fault: explaining "already red on main" in the pull request, rerunning identical code until it passes, and missing a scheduled suite that has been red for weeks. `fairlead ci ledger` answers that from CI's own history.
