@@ -522,6 +522,37 @@ fn track_overrides_the_detected_one_and_the_header_says_why_that_one_was_detecte
     assert!(err.contains("new, mvp, ongoing, legacy"), "{err}");
 }
 
+#[cfg(unix)]
+#[test]
+fn ci_settle_on_with_no_job_running_the_check_leaves_ci_open() {
+    let config = format!("{STUB_RUNNER}\n[ci]\nsettle = true\n");
+    let plans = "jobs:\n  plan:\n    steps:\n      - run: fairlead ci plan --format github\n";
+    let dir = repo(
+        "settle-key",
+        &[
+            ("fairlead.toml", config.as_str()),
+            (".github/workflows/ci.yml", plans),
+        ],
+    );
+    let (_, out, _) = setup(&dir, &["--check"]);
+    assert!(
+        out.contains(
+            "\n  open   ci         `ci.settle` is on, and no workflow runs `fairlead ci settle`"
+        ),
+        "{out}"
+    );
+    assert!(out.contains("fix: fairlead ci workflow --write"), "{out}");
+    let settles = format!(
+        "{plans}  settle:\n    steps:\n      - run: fairlead ci settle --results results\n"
+    );
+    std::fs::write(dir.join(".github/workflows/ci.yml"), settles).unwrap();
+    let (_, out, _) = setup(&dir, &["--check"]);
+    assert!(
+        out.contains("\n  ok     ci         a workflow runs `fairlead ci`, and `fairlead ci settle` collects what the gate owes\n"),
+        "{out}"
+    );
+}
+
 #[test]
 fn outside_a_git_repository_setup_says_so_and_writes_nothing() {
     let dir = std::env::temp_dir().join(format!("fairlead-setup-nogit-{}", std::process::id()));

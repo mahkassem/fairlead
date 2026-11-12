@@ -641,6 +641,9 @@ pub struct Ci {
     pub comment: bool,
     /// What a failing test the merge's plan left out does, once `ci run --judge` finds it.
     pub escapes: Escapes,
+    /// The run ends with `fairlead ci settle`, the merge check: the generated
+    /// workflow has each job write its results and adds the job that collects them.
+    pub settle: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, JsonSchema)]

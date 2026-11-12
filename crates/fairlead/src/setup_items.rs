@@ -143,7 +143,7 @@ pub fn check_in(tree: &Tree, loaded: Option<&Loaded>, track: Track) -> Vec<Item>
     if let (Some(c), Some(s)) = (planned, &suites) {
         items.push(proved(c, s, &crate::setup_prove::read(&repo)));
     }
-    items.push(config.map_or_else(|| later("ci", WAITS), |c| ci(&repo, c.profile, track)));
+    items.push(config.map_or_else(|| later("ci", WAITS), |c| ci(&repo, c, track)));
     if let (Some(c), Some(s)) = (planned, &suites) {
         let per_file = crate::done_budget::per_file_of(&events);
         items.push(smoke(c, s, &per_file));
@@ -613,7 +613,19 @@ fn agents(root: &Path, config: &Config) -> Item {
     }
 }
 
-fn ci(repo: &Path, profile: Profile, track: Track) -> Item {
+fn ci(repo: &Path, config: &Config, track: Track) -> Item {
+    let profile = config.profile;
+    // The key says CI collects what the gate owes; with no job doing it, nothing does.
+    if config.ci.settle && profile == Profile::Full && !score_cmd::ci_settles(repo) {
+        return open(
+            "ci",
+            format!(
+                "`ci.settle` is on, and no workflow runs `fairlead ci settle`, so what the gate owes is never collected (for a workflow of your own: {})",
+                crate::ci_settle_cmd::PAGE
+            ),
+            "fairlead ci workflow --write",
+        );
+    }
     let (what, fix) = match profile {
         Profile::Full => ("`fairlead ci`", "fairlead ci workflow --write"),
         Profile::Guard => (
@@ -622,7 +634,11 @@ fn ci(repo: &Path, profile: Profile, track: Track) -> Item {
         ),
     };
     if score_cmd::ci_runs(repo, profile) {
-        return ok("ci", format!("a workflow runs {what}"));
+        let settles = match config.ci.settle {
+            true => ", and `fairlead ci settle` collects what the gate owes",
+            false => "",
+        };
+        return ok("ci", format!("a workflow runs {what}{settles}"));
     }
     match track {
         Track::New | Track::Legacy => later(

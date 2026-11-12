@@ -62,7 +62,13 @@ step in it has to be green.
 
 ## In a workflow
 
-Every job that runs part of the plan writes a results file and uploads it. One last job downloads them and settles:
+With `settle = true` under `[ci]`, `fairlead ci workflow --write` does this for the workflow it generates: each job
+writes its results and uploads them, a last job named `settle` collects them, and the workflow also runs on a merge
+queue, where a required check has to report or the queue waits forever. `fairlead setup` then leaves its `ci` item
+open for as long as no workflow runs the check.
+
+In a workflow of your own, every job that runs part of the plan writes a results file and uploads it. One last job
+downloads them and settles:
 
 ```yaml
 settle:
