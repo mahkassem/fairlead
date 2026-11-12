@@ -145,7 +145,7 @@ repositories are on the way
 
 ## What it does
 
-This README documents Fairlead 0.20.2. Each command, by what it's for:
+This README documents Fairlead 0.21.0. Each command, by what it's for:
 
 - **Setting a repository up:** `setup` and `guide`. *Since 0.20.0:* `setup`
   writes a first config when there is none, installs the agent hooks and the
@@ -179,6 +179,11 @@ This README documents Fairlead 0.20.2. Each command, by what it's for:
   *Since 0.18.0:* `ci ledger` judges each failure of a run as own, inherited,
   flaky or infra, `ci report --ledger` says it once, and the workflow
   `ci workflow` writes runs it when a job fails.
+  *Since 0.21.0:* `ci settle` is the merge check. It fails a pull request
+  when a step the commit's plan holds has no green run on that commit, and
+  names the test files nobody ran. With `settle = true` under `[ci]`, the
+  generated workflow ends with it, and what an unmet need leaves out of the
+  done gate is owed to CI.
 - **Rules as the agent works:** `guard check`, the hooks `hooks install` adds,
   and `doctor`. *Since 0.18.0:* a commit may not add a file named like a secret
   (`.env`, `*.jks`, `*.pem` and the like) with no config at all; gitleaks
@@ -242,11 +247,15 @@ The [quick start](#quick-start) shows the first few, and the
 
 ## Status
 
-Pre-alpha. The latest release, v0.20.2, makes a mistake of Fairlead's easy
-to report: every refusal says how to check it, and `fairlead report` drafts
-a report with nothing private in it for the project's owner to send. The
-release before it fixed what a first run on eight repositories got wrong,
-and the one before that made a first setup one command:
+Pre-alpha. The latest release, v0.21.0, adds the merge check:
+`fairlead ci settle` fails a pull request when a step the commit's plan
+holds has no green run on that commit, so what the done gate owes to CI is
+collected by a check, not vouched for by a line of text. The release
+before it made a mistake of Fairlead's easy to report: every refusal says
+how to check it, and `fairlead report` drafts a report with nothing private
+in it for the project's owner to send. The one before that fixed what a
+first run on eight repositories got wrong, and the one before that made a
+first setup one command:
 `fairlead setup` applies what is local, then lists what is left with one
 fix for each, ordered for the kind of repository it finds (new, mvp,
 ongoing or legacy), and `fairlead guide` prints the guide an agent needs

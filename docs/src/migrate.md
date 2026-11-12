@@ -489,6 +489,26 @@ and how to report it. `fairlead report` drafts the report for the
 project's owner to review and send, with nothing private in it
 ([Report a mistake](report.md)).
 
+### To 0.21.0
+
+Migrate updates nothing in your files, and nothing changes until you ask
+for it. 0.21.0 adds the merge check, `fairlead ci settle`: it fails a pull
+request when a step the commit's plan holds has no green run on that
+commit ([The merge check](settle.md)). To adopt it:
+
+1. Set `settle = true` under `[ci]`.
+2. Run `fairlead ci workflow --write`, or in a workflow of your own have
+   each job pass `--results` to `fairlead ci run`, upload the file, and add
+   the `settle` job the page shows.
+3. For a suite that runs in a job of its own, with its own command, name
+   the job under `[ci.attested]`.
+4. Mark the `settle` job as a required check under the branch's rules.
+
+With the key on, what an unmet `[[needs]]` entry leaves out of
+`fairlead done` is owed to CI, and the gate passes without `proved_in`.
+`fairlead config check` then warns about each need that still names one;
+remove it when you like. A `[[quarantine]]` entry keeps its `proved_in`.
+
 ## Going back to an older release
 
 Install the older release, then run its `hooks uninstall` and

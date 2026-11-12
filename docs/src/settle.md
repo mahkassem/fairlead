@@ -1,6 +1,6 @@
 # The merge check
 
-`fairlead done` proves what fits its time budget on the machine where the work happens. Every other test the change
+*Since 0.21.0.* `fairlead done` proves what fits its time budget on the machine where the work happens. Every other test the change
 reaches is owed to CI. `fairlead ci settle` is the check that collects what is owed: it fails when a step the commit's
 plan holds has no green run on that commit, and names the test files nobody ran.
 
