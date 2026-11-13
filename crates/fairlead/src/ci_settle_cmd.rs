@@ -88,7 +88,8 @@ pub fn run(args: SettleArgs, cwd: &Path) -> Result<ExitCode, String> {
     if record.passed() {
         return Ok(ExitCode::SUCCESS);
     }
-    eprintln!("fairlead: {}", crate::report_cmd::MISTAKE);
+    // On the list's own stream, so a CI log shows it after the list.
+    println!("fairlead: {}", crate::report_cmd::MISTAKE);
     Ok(ExitCode::FAILURE)
 }
 
@@ -323,6 +324,7 @@ pub fn text(record: &Record, plan: &Plan) -> String {
         for w in &record.waiting {
             let when = match w.due.as_str() {
                 "nightly" => "due at the nightly run",
+                "ready" => "due when the pull request is marked ready",
                 _ => "due after the merge, on the push run",
             };
             let what = match w.files {

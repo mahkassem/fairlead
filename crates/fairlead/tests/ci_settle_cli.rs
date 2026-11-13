@@ -381,8 +381,25 @@ fn a_later_stages_steps_wait_and_an_earlier_stages_plan_is_refused() {
         text.contains("e2e: 1 test file, due after the merge, on the push run"),
         "{text}"
     );
-    // A draft's plan on a pull request that is ready leaves the ready stage out.
+    // On a draft, what the ready stage runs waits for the pull request to be ready.
+    let draft = event(&dir, &base, true);
+    let on_draft = [
+        ("GITHUB_EVENT_NAME", "pull_request"),
+        ("GITHUB_EVENT_PATH", draft.as_str()),
+    ];
     plan(&dir, &["--stage", "draft"]);
+    let (code, text) = fairlead_with(&dir, &["ci", "settle", "--plan", "plan.json"], &on_draft);
+    assert_eq!(code, 0, "{text}");
+    assert!(
+        text.contains("unit: 2 test files, due when the pull request is marked ready"),
+        "{text}"
+    );
+    // A draft's plan on a pull request that is ready leaves the ready stage out.
+    let path = event(&dir, &base, false);
+    let env = [
+        ("GITHUB_EVENT_NAME", "pull_request"),
+        ("GITHUB_EVENT_PATH", path.as_str()),
+    ];
     let (code, text) = fairlead_with(&dir, &["ci", "settle", "--plan", "plan.json"], &env);
     assert_eq!(code, 2, "{text}");
     assert!(

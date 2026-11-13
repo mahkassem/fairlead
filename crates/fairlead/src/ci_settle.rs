@@ -67,7 +67,7 @@ pub struct Unsettled {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Waiting {
     pub id: String,
-    /// `merge` or `nightly`: the run that has to collect it.
+    /// `ready`, `merge` or `nightly`: the run that has to collect it.
     pub due: String,
     pub files: usize,
 }
@@ -244,6 +244,7 @@ pub fn settle(plan: &Plan, results: &[Results], jobs: &BTreeMap<String, Vec<Job>
             id: d.id.clone(),
             due: match d.from {
                 CiStage::Full => "nightly".to_string(),
+                CiStage::Ready => "ready".to_string(),
                 _ => "merge".to_string(),
             },
             files: match d.kind {

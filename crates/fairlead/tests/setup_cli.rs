@@ -300,6 +300,17 @@ fn a_runner_is_proved_on_its_smallest_test_file_and_the_mvp_track_shows_ci_open_
 
 #[cfg(unix)]
 #[test]
+fn the_check_says_an_unproved_runner_is_fixed_by_the_run_without_the_flag() {
+    let dir = with_runner("unproved", STUB_RUNNER, "exit 0\n");
+    let (_, out, _) = setup(&dir, &["--check"]);
+    assert!(
+        out.contains("hasn't run a test file here: vitest\n         fix: fairlead setup (without `--check`, which only lists)\n"),
+        "{out}"
+    );
+}
+
+#[cfg(unix)]
+#[test]
 fn a_failed_test_is_open_with_why_and_a_runner_that_cannot_start_here_is_later() {
     let failing = "echo '1 failed'\necho 'error: expected 1 to be 2' >&2\nexit 1\n";
     let dir = with_runner("failed", STUB_RUNNER, failing);

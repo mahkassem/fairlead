@@ -261,8 +261,20 @@ fn an_edit_names_its_skill_once_per_session_and_a_skill_load_is_a_use() {
         "{note}"
     );
     assert!(
+        note.contains("Load it with the Skill tool (`forms`) before editing further."),
+        "Claude Code loads its own skill by name, the one load that is counted: {note}"
+    );
+    assert!(
         !note.contains("`money`"),
         "only the skill whose scope names the file: {note}"
+    );
+    let other = hook(
+        &dir,
+        json!({"session_id": "s9", "cwd": dir, "hook_event_name": "AfterTool", "tool_name": "write_file", "tool_input": {"file_path": dir.join("src/forms/form.ts")}}),
+    );
+    assert!(
+        other.contains("Load it before editing further (.claude/skills/forms/SKILL.md)."),
+        "an agent with no Skill tool is given the file: {other}"
     );
     assert_eq!(edit("s1").trim(), "", "said once per session");
     assert!(
