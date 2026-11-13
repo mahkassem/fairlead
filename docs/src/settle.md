@@ -94,6 +94,8 @@ fairlead: waiting, not due at this stage:
   api: 41 test files, due at the nightly run
 ```
 
+*Since 0.21.1:* on a draft pull request, a step the ready stage runs reads `due when the pull request is marked ready`.
+
 A pull request is checked at the ready stage. A step with `from = "merge"` is collected by the run on the push that
 follows the merge, and a suite with `all_from = "full"` by the nightly run, where the plan is everything and every
 step in it has to be green.

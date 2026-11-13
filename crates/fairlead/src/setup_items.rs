@@ -504,7 +504,11 @@ fn proved(config: &Config, suites: &Suites, record: &crate::setup_prove::Record)
             },
             unproved.join(", ")
         );
-        return open("proved", text, "fairlead setup");
+        return open(
+            "proved",
+            text,
+            "fairlead setup (without `--check`, which only lists)",
+        );
     }
     if let Some(p) = known.iter().find(|p| p.passed.is_none()) {
         return later("proved", format!("{} can't run here: {}", p.runner, why(p)));

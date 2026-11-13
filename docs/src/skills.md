@@ -36,7 +36,7 @@ The brief's skills row lists `skills.cap` (8) skills, each with its description 
 
 The `PostToolUse` hook `fairlead hooks install` adds does two more things when routes exist:
 
-- **After an edit**, it names the skill whose scope covers the edited file, with its description, once per skill per session.
+- **After an edit**, it names the skill whose scope covers the edited file, with its description, once per skill per session. *Since 0.21.1:* in Claude Code, for a skill under `.claude/skills/`, the note says to load it with the `Skill` tool by name; elsewhere it gives the file.
 - **When a skill is loaded**, through Claude Code's `Skill` tool or a Gemini CLI `read_file` of a SKILL.md, it records a `use` event in `.git/fairlead/events.jsonl`. Each brief records an `offer` event with what it listed. Together they give routing a hit rate: what was offered, what was used, and what was used without being offered; `fairlead skills report` reads it.
 
 Codex has no hook that sees a file being read, so a skill it loads isn't seen; its use is unmeasured rather than counted as a miss.
@@ -137,6 +137,8 @@ Each column counts sessions:
 - **unused:** it was offered and never used.
 
 The hit rate is the share of sessions with a skill offered in which an offered skill was used after its offer. A brief made with no session is counted apart, since no use can be set against it.
+
+In Claude Code a use is a `Skill` tool call. A `Read` of the SKILL.md is not seen, because the hook does not run on reads, where it would start on every file an agent opens. Until 0.21.1 the note after an edit gave the file's path, which invites a read, so a hit rate measured before that release undercounts the skills that were used.
 
 Lessons reach the agent in the brief's text, and nothing records an agent reading one, so the report gives lessons' offers only. Codex's hooks see edits but not reads: a session whose events carry its `apply_patch` tool is listed as unmeasured, its offers count, and its skills are never counted as unused. With `.codex/hooks.json` installed, the report names Codex as unmeasured.
 

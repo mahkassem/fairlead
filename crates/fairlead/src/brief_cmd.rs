@@ -731,6 +731,8 @@ pub fn nudge() -> ExitCode {
 }
 
 const READS: [&str; 3] = ["Read", "read_file", "read_many_files"];
+/// The edit tools only Claude Code sends.
+const CLAUDE_EDITS: [&str; 3] = ["Edit", "Write", "MultiEdit"];
 
 fn nudge_for(call: &serde_json::Value) -> Option<String> {
     let session = call["session_id"].as_str()?;
@@ -804,9 +806,18 @@ fn nudge_for(call: &serde_json::Value) -> Option<String> {
             } else {
                 format!(": {}", s.description)
             };
+            // Claude Code loads a skill under its own folder by name, and only
+            // that load is counted as a use: a read of the file is not seen.
+            let how = match CLAUDE_EDITS.contains(&tool) && s.path.starts_with(".claude/skills/") {
+                true => format!(
+                    "Load it with the Skill tool (`{}`) before editing further.",
+                    s.name
+                ),
+                false => format!("Load it before editing further ({}).", s.path),
+            };
             notes.push(format!(
-                "fairlead: the `{}` skill applies to {rel}{about} Load it before editing further ({}).",
-                s.name, s.path
+                "fairlead: the `{}` skill applies to {rel}{about} {how}",
+                s.name
             ));
         }
     }
