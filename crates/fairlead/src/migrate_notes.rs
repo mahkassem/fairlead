@@ -345,6 +345,13 @@ pub const RELEASES: &[(&str, &[Note])] = &[
             applies: always,
         }],
     ),
+    (
+        "0.21.1",
+        &[Note {
+            text: "Nothing to change in your files. The note after an edit now tells Claude Code to load a routed skill with its `Skill` tool, the load `fairlead skills report` counts; a hit rate measured before this release undercounts.",
+            applies: always,
+        }],
+    ),
 ];
 
 /// Config tables and keys by the release that added them. The top-level

@@ -509,6 +509,15 @@ With the key on, what an unmet `[[needs]]` entry leaves out of
 `fairlead config check` then warns about each need that still names one;
 remove it when you like. A `[[quarantine]]` entry keeps its `proved_in`.
 
+### To 0.21.1
+
+Migrate updates nothing in your files. 0.21.1 fixes four lines that misled
+on 0.21.0's first live runs. One changes a number you may be watching: the
+note after an edit now tells Claude Code to load a routed skill with its
+`Skill` tool, the load `fairlead skills report` counts, where it gave the
+file to read. A hit rate measured before this release undercounts
+([Skills](skills.md#measuring-routing-skills-report)).
+
 ## Going back to an older release
 
 Install the older release, then run its `hooks uninstall` and
