@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.21.1 (2026-11-13)
+
+What the first live runs of 0.21.0 showed.
+
+### Fixed
+
+- A skill's hit rate undercounted. After an edit in Claude Code the note gave the skill's file, an agent read it, and a read is not seen by the hook, so `fairlead skills report` and `fairlead insights` counted a skill that was used as offered and unused. For a skill under `.claude/skills/` the note now says to load it with the `Skill` tool by name, the load that is counted. A hit rate measured before this release reads lower than what happened.
+- `fairlead setup --check` printed `fix: fairlead setup` under an unproved runner, which read as "run this list again". It now says `fairlead setup (without --check, which only lists)`.
+- `fairlead ci settle` printed its hint in the middle of the list in a CI log. The hint now follows the list, on the same stream.
+- A step the ready stage runs, waiting on a draft pull request, read `due after the merge, on the push run`. It now reads `due when the pull request is marked ready`, and the record's `due` is `ready`.
+
 ## 0.21.0 (2026-11-12)
 
 Collected: what the done gate owes to CI is collected by a required check, not vouched for by a line of text.

@@ -145,7 +145,7 @@ repositories are on the way
 
 ## What it does
 
-This README documents Fairlead 0.21.0. Each command, by what it's for:
+This README documents Fairlead 0.21.1. Each command, by what it's for:
 
 - **Setting a repository up:** `setup` and `guide`. *Since 0.20.0:* `setup`
   writes a first config when there is none, installs the agent hooks and the
@@ -247,11 +247,13 @@ The [quick start](#quick-start) shows the first few, and the
 
 ## Status
 
-Pre-alpha. The latest release, v0.21.0, adds the merge check:
-`fairlead ci settle` fails a pull request when a step the commit's plan
-holds has no green run on that commit, so what the done gate owes to CI is
-collected by a check, not vouched for by a line of text. The release
-before it made a mistake of Fairlead's easy to report: every refusal says
+Pre-alpha. The latest release, v0.21.1, fixes what the first live runs of
+the one before it showed: a skill offer now names the tool whose use is
+counted, and three lines that misled read plainly. That release added the
+merge check: `fairlead ci settle` fails a pull request when a step the
+commit's plan holds has no green run on that commit, so what the done gate
+owes to CI is collected by a check, not vouched for by a line of text. The
+release before it made a mistake of Fairlead's easy to report: every refusal says
 how to check it, and `fairlead report` drafts a report with nothing private
 in it for the project's owner to send. The one before that fixed what a
 first run on eight repositories got wrong, and the one before that made a
