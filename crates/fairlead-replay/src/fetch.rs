@@ -20,6 +20,8 @@ const PER_PAGE: usize = 100;
 /// GitHub stops adding annotations past a per-step limit; a job with this
 /// many may be missing some.
 const ANNOTATION_CAP: usize = 10;
+/// How many runs pass between two lines of progress.
+const EVERY: usize = 25;
 /// The events recorded unless others are asked for.
 pub const EVENTS: [&str; 2] = ["pull_request", "merge_group"];
 /// Every event a row can come from.
@@ -514,7 +516,12 @@ pub fn fetch(http: &dyn Http, opts: &Options, seen: &BTreeSet<(u64, u32)>) -> (V
             Ok(r) => r,
             Err(e) => return (rows, Stop::Error(e)),
         };
-        for run in listed {
+        let total = listed.len();
+        for (at, run) in listed.into_iter().enumerate() {
+            // A long fetch is silent otherwise, and a wait reads as a hang.
+            if at > 0 && at % EVERY == 0 {
+                eprintln!("fetch: {at} of {total} {event} runs read");
+            }
             let id = run.get("id").and_then(Value::as_u64).unwrap_or(0);
             let attempts = run.get("run_attempt").and_then(Value::as_u64).unwrap_or(1) as u32;
             for attempt in 1..=attempts {

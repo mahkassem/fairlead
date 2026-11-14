@@ -59,6 +59,21 @@ impl Curl {
         }
     }
 
+    /// As `from_env`, and with no token there, the one `gh auth token` prints.
+    pub fn from_env_or_gh() -> Curl {
+        let mut http = Curl::from_env();
+        if http.token.is_none() {
+            http.token = std::process::Command::new("gh")
+                .args(["auth", "token"])
+                .output()
+                .ok()
+                .filter(|o| o.status.success())
+                .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
+                .filter(|t| !t.is_empty());
+        }
+        http
+    }
+
     /// Headers, then body, for `url`; the token only for the API host.
     fn request(&self, url: &str, with_token: bool) -> Result<(u16, String, String), String> {
         self.request_with(url, with_token, None)
