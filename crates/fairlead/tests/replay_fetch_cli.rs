@@ -1,5 +1,7 @@
 //! `fairlead replay fetch` and its token: with none at all a refusal says so,
 //! and the one `gh auth token` prints is used when the environment has none.
+//! Unix only: the stand-in for `gh` is a shell script on the PATH.
+#![cfg(unix)]
 
 use std::io::{BufRead, BufReader, Write};
 use std::net::TcpListener;
@@ -56,16 +58,12 @@ fn fetch(dir: &Path, api: &str, path: &Path) -> (i32, String) {
     .env("PATH", path)
     .env("HOME", dir)
     .env("GITHUB_API_URL", api);
-    if let Some(root) = std::env::var_os("SYSTEMROOT") {
-        cmd.env("SYSTEMROOT", root);
-    }
     let out = cmd.output().unwrap();
     let text =
         String::from_utf8_lossy(&out.stdout).into_owned() + &String::from_utf8_lossy(&out.stderr);
     (out.status.code().unwrap_or(-1), text)
 }
 
-#[cfg(unix)]
 #[test]
 fn a_refusal_with_no_token_says_so_and_a_token_from_gh_is_used() {
     use std::os::unix::fs::PermissionsExt;
