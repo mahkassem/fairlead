@@ -166,16 +166,7 @@ pub(crate) fn prune(dir: &Path) {
 
 /// The token from the environment, else from `gh auth token`.
 fn http() -> Result<Curl, String> {
-    let mut http = Curl::from_env();
-    if http.token.is_none() {
-        http.token = std::process::Command::new("gh")
-            .args(["auth", "token"])
-            .output()
-            .ok()
-            .filter(|o| o.status.success())
-            .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
-            .filter(|t| !t.is_empty());
-    }
+    let http = Curl::from_env_or_gh();
     if http.token.is_none() {
         return Err("ledger: no GITHUB_TOKEN or GH_TOKEN, and `gh auth token` gave none".into());
     }

@@ -160,7 +160,7 @@ fn run_fetch(
         .iter()
         .map(|r| (r.run_id, r.attempt))
         .collect();
-    let http = fairlead_replay::github::Curl::from_env();
+    let http = fairlead_replay::github::Curl::from_env_or_gh();
     let opts = fairlead_replay::fetch::Options {
         repo,
         since,
@@ -178,11 +178,17 @@ fn run_fetch(
         Stop::Limit => println!("fetch partial: {added} new rows in {at}; run again to continue"),
         Stop::Error(e) => {
             println!("fetch stopped: {added} new rows in {at}");
-            return Err(e);
+            // GitHub answers 404, not 401, for a private repository it was asked about with no token.
+            return Err(match http.token {
+                Some(_) => e,
+                None => format!("{e}\n{NO_TOKEN}"),
+            });
         }
     }
     Ok(())
 }
+
+const NO_TOKEN: &str = "no token was sent: set GITHUB_TOKEN or GH_TOKEN, or sign in with `gh auth login`. GitHub answers 404 for a private repository asked about without one";
 
 struct Output {
     json: bool,

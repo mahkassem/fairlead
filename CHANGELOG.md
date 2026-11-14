@@ -10,6 +10,8 @@ What the first live runs of 0.21.0 showed.
 - `fairlead setup --check` printed `fix: fairlead setup` under an unproved runner, which read as "run this list again". It now says `fairlead setup (without --check, which only lists)`.
 - `fairlead ci settle` printed its hint in the middle of the list in a CI log. The hint now follows the list, on the same stream.
 - A step the ready stage runs, waiting on a draft pull request, read `due after the merge, on the push run`. It now reads `due when the pull request is marked ready`, and the record's `due` is `ready`.
+- `fairlead replay fetch` with no `GITHUB_TOKEN` or `GH_TOKEN` asked GitHub with no token, and a private repository answered 404 with nothing to say why. It now uses the token `gh auth token` prints, as `fairlead ci ledger` does, and a refusal with no token at all says that none was sent and how to set one.
+- `fairlead replay fetch` printed nothing until it ended, so a long fetch read as a hang. Every 25 runs it now prints how many of the listed runs it has read.
 
 ## 0.21.0 (2026-11-12)
 
