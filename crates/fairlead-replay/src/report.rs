@@ -330,6 +330,13 @@ pub fn text(r: &Report) -> String {
         pct(r.recall),
         pct(r.strict_recall)
     );
+    let unwatched: usize = r.unwatched.values().sum();
+    if gate == "not met" && unwatched > judged {
+        let _ = writeln!(
+            out,
+            "  {unwatched} failed jobs are named by no rule, so their failures are not counted: name them under `[[replay.failures]]`, or under `ignore` in `[replay]` when a job runs no test (listed below)"
+        );
+    }
     if !r.quarantine.is_empty()
         || !r.inherited_groups.is_empty()
         || !r.waves.is_empty()

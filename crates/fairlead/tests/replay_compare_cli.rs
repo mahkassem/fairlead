@@ -86,21 +86,19 @@ fn fixture(name: &str, config: Option<&str>) -> Fixture {
     Fixture { dir, repo, data }
 }
 
-/// Replays with `config` written beside the clone, returning stdout and
-/// the JSON report.
-fn replay(fx: &Fixture, config: &str, extra: &[&str]) -> (String, serde_json::Value) {
+/// Replays the fixture's rows against `clone`, with `config` written beside it.
+fn replay_at(fx: &Fixture, clone: &Path, config: &str, extra: &[&str]) -> std::process::Output {
     let path = fx.dir.join("trial.toml");
     std::fs::write(&path, config).unwrap();
-    let json = fx.dir.join("report.json");
     let mut cmd = Command::new(env!("CARGO_BIN_EXE_fairlead"));
     cmd.args(["replay", "run", "--quiet", "--data"])
         .arg(&fx.data)
         .arg("--clone")
-        .arg(&fx.repo)
+        .arg(clone)
         .arg("--config")
         .arg(&path)
         .arg("--json-out")
-        .arg(&json)
+        .arg(fx.dir.join("report.json"))
         .args(extra)
         .current_dir(&fx.dir)
         .env_clear();
@@ -109,12 +107,19 @@ fn replay(fx: &Fixture, config: &str, extra: &[&str]) -> (String, serde_json::Va
             cmd.env(keep, value);
         }
     }
-    let out = cmd.output().unwrap();
+    cmd.output().unwrap()
+}
+
+/// Replays with `config` written beside the clone, returning stdout and
+/// the JSON report.
+fn replay(fx: &Fixture, config: &str, extra: &[&str]) -> (String, serde_json::Value) {
+    let out = replay_at(fx, &fx.repo, config, extra);
     assert!(
         out.status.success(),
         "{}",
         String::from_utf8_lossy(&out.stderr)
     );
+    let json = fx.dir.join("report.json");
     let report = serde_json::from_str(&std::fs::read_to_string(json).unwrap()).unwrap();
     (String::from_utf8_lossy(&out.stdout).into_owned(), report)
 }
@@ -227,4 +232,43 @@ fn no_compare_leaves_the_report_as_it_was() {
     assert!(!text.contains("compared with"), "{text}");
     assert!(json.get("comparison").is_none());
     assert_eq!(json["recall"], 0.5);
+}
+
+#[test]
+fn a_clone_that_holds_none_of_the_recorded_commits_is_refused() {
+    let fx = fixture("other-clone", Some(&committed()));
+    let other = fx.dir.join("other");
+    std::fs::create_dir_all(&other).unwrap();
+    git(&other, &["init", "-q", "-b", "main"]);
+    git(
+        &other,
+        &["commit", "-q", "--allow-empty", "-m", "another history"],
+    );
+    let out = replay_at(&fx, &other, &trial(), &[]);
+    assert_eq!(out.status.code(), Some(2), "{out:?}");
+    let said = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        said.contains("holds none of the 2 commits the dataset records for example/repo"),
+        "{said}"
+    );
+    assert!(
+        said.contains("Pass example/repo's checkout to `--clone`"),
+        "{said}"
+    );
+    assert!(!fx.dir.join("report.json").exists(), "no report of nothing");
+}
+
+#[test]
+fn failed_jobs_no_rule_names_lead_the_report_when_nothing_is_attributed() {
+    let fx = fixture("unwatched", Some(&committed()));
+    let renamed = trial().replace("job = \"^test$\"", "job = \"^checks$\"");
+    let (text, _) = replay(&fx, &renamed, &[]);
+    let lead = text
+        .find("2 failed jobs are named by no rule")
+        .expect(&text);
+    let list = text.find("unwatched failed jobs").expect(&text);
+    assert!(lead < list, "{text}");
+    assert!(text.contains("under `ignore` in `[replay]`"), "{text}");
+    let (text, _) = replay(&fx, &trial(), &[]);
+    assert!(!text.contains("named by no rule"), "{text}");
 }

@@ -80,7 +80,18 @@ fn with_retry_or_refused<T>(
 ) -> Result<Reply<T>, String> {
     let mut attempt = 0;
     loop {
-        let reply = call()?;
+        let reply = match call() {
+            Ok(reply) => reply,
+            // curl ran and the transfer failed: a timeout or a dropped connection.
+            Err(e) if e.contains("curl: (") && attempt < RETRIES => {
+                attempt += 1;
+                let wait = SERVER_ERROR_WAIT * u64::from(attempt);
+                eprintln!("fetch: {what} did not arrive ({e}); retrying in {wait} s");
+                http.pause(wait);
+                continue;
+            }
+            Err(e) => return Err(e),
+        };
         if matches!(reply.status, 500 | 502 | 503 | 504) && attempt < RETRIES {
             attempt += 1;
             let wait = SERVER_ERROR_WAIT * u64::from(attempt);
@@ -98,12 +109,19 @@ fn with_retry_or_refused<T>(
         if refused_ok && !limited && reply.status == 403 {
             return Ok(reply);
         }
-        if !limited || reply.remaining == Some(0) || attempt >= RETRIES {
-            let why = if reply.message.is_empty() {
-                "no message"
-            } else {
-                &reply.message
-            };
+        let why = if reply.message.is_empty() {
+            "no message"
+        } else {
+            &reply.message
+        };
+        if limited && reply.remaining == Some(0) {
+            return Err(format!(
+                "GitHub refused {what} with {} ({why}): this token's hourly budget is spent{}. Rows so far are kept, and the same command continues from them",
+                reply.status,
+                reply.reset.map(resets_at).unwrap_or_default()
+            ));
+        }
+        if !limited || attempt >= RETRIES {
             return Err(format!(
                 "GitHub refused {what} with {} ({why}); rows so far are kept",
                 reply.status
@@ -117,6 +135,16 @@ fn with_retry_or_refused<T>(
         );
         http.pause(wait);
     }
+}
+
+/// `, and refills at 14:05 UTC`, from the reset header's seconds since the epoch.
+fn resets_at(epoch: u64) -> String {
+    let minutes = epoch % 86_400 / 60;
+    format!(
+        ", and refills at {:02}:{:02} UTC",
+        minutes / 60,
+        minutes % 60
+    )
 }
 
 fn request(http: &dyn Http, path: &str, gone_ok: bool) -> Result<Value, String> {
@@ -168,6 +196,8 @@ fn git(clone: &Path, args: &[&str]) -> Option<String> {
     let (key, value) = crate::git::NO_LAZY_FETCH;
     let out = Command::new("git")
         .env(key, value)
+        // A fetch from a remote that wants a login fails; it never asks.
+        .env("GIT_TERMINAL_PROMPT", "0")
         .arg("-C")
         .arg(clone)
         .args(args)
@@ -309,6 +339,69 @@ fn push_pull_and_base(
 }
 
 /// The base branch's first-parent commit when the run started.
+/// Whether a remote URL names `repo`, as `owner/name` with or without `.git`.
+fn names(url: &str, repo: &str) -> bool {
+    let url = url.trim_end_matches('/').to_ascii_lowercase();
+    let url = url.strip_suffix(".git").unwrap_or(&url);
+    let repo = repo.to_ascii_lowercase();
+    url.strip_suffix(&repo)
+        .is_some_and(|rest| rest.ends_with('/') || rest.ends_with(':'))
+}
+
+/// Refuses a clone of some other repository: every base would be read from
+/// the wrong history, and nothing downstream could tell. A clone no remote
+/// of which names the repository still passes when it holds the first run's
+/// head, as a mirror or a renamed repository does.
+fn clone_is_of(opts: &Options, run: &Value) -> Result<(), String> {
+    let Some(clone) = opts.clone else {
+        return Ok(());
+    };
+    let remotes = git(clone, &["remote", "-v"]).unwrap_or_default();
+    let urls: BTreeSet<&str> = remotes
+        .lines()
+        .filter_map(|l| l.split_whitespace().nth(1))
+        .collect();
+    if urls.iter().any(|url| names(url, opts.repo)) {
+        return Ok(());
+    }
+    let sha = str_of(run, "head_sha");
+    let held = !sha.is_empty()
+        && (git(clone, &["cat-file", "-e", &format!("{sha}^{{commit}}")]).is_some()
+            || git(clone, &["fetch", "-q", "origin", "--end-of-options", sha]).is_some());
+    if held {
+        return Ok(());
+    }
+    let found = match urls.is_empty() {
+        true => "it has no remote".to_string(),
+        false => format!(
+            "its remotes are {}",
+            urls.iter()
+                .copied()
+                .map(without_login)
+                .collect::<Vec<_>>()
+                .join(", ")
+        ),
+    };
+    Err(format!(
+        "`{}` isn't a checkout of {}: {found}, and it doesn't hold {}, the head of run {}. Base commits would be read from the wrong history; pass that repository's checkout to `--clone`",
+        clone.display(),
+        opts.repo,
+        sha.get(..9).unwrap_or(sha),
+        run.get("id").and_then(Value::as_u64).unwrap_or(0)
+    ))
+}
+
+/// A remote URL without the `user:token@` some carry.
+fn without_login(url: &str) -> String {
+    match url.split_once("://") {
+        Some((scheme, rest)) => match rest.split_once('@') {
+            Some((login, host)) if !login.contains('/') => format!("{scheme}://{host}"),
+            _ => url.to_string(),
+        },
+        None => url.to_string(),
+    }
+}
+
 fn base_at(clone: &Path, branch: &str, created_at: &str) -> Option<String> {
     git(
         clone,
@@ -477,6 +570,23 @@ fn today() -> String {
 /// with it, so a partial fetch is never lost.
 pub fn fetch(http: &dyn Http, opts: &Options, seen: &BTreeSet<(u64, u32)>) -> (Vec<Row>, Stop) {
     let mut rows = Vec::new();
+    let stop = fetch_into(http, opts, seen, &mut |row| {
+        rows.push(row);
+        Ok(())
+    });
+    (rows, stop)
+}
+
+/// `fetch`, handing each row to `keep` as soon as it is read, so a fetch
+/// that is killed has lost nothing it had finished.
+pub fn fetch_into(
+    http: &dyn Http,
+    opts: &Options,
+    seen: &BTreeSet<(u64, u32)>,
+    keep: &mut dyn FnMut(Row) -> Result<(), String>,
+) -> Stop {
+    let mut kept = 0usize;
+    let mut clone_checked = false;
     let mut seen = seen.clone();
     let mut lookups = Lookups::default();
     let events: Vec<&str> = if opts.events.is_empty() {
@@ -486,13 +596,10 @@ pub fn fetch(http: &dyn Http, opts: &Options, seen: &BTreeSet<(u64, u32)>) -> (V
     };
     for event in events {
         if !KNOWN_EVENTS.contains(&event) {
-            return (
-                rows,
-                Stop::Error(format!(
-                    "`{event}` isn't an event replay records; use {}",
-                    KNOWN_EVENTS.join(", ")
-                )),
-            );
+            return Stop::Error(format!(
+                "`{event}` isn't an event replay records; use {}",
+                KNOWN_EVENTS.join(", ")
+            ));
         }
         // Only the default branch's pushes and schedules: that's where a
         // merged change lands.
@@ -500,21 +607,18 @@ pub fn fetch(http: &dyn Http, opts: &Options, seen: &BTreeSet<(u64, u32)>) -> (V
             match lookups.branch(http, opts.repo) {
                 Ok(Some(b)) if plain_ref(&b) => b,
                 Ok(_) => {
-                    return (
-                        rows,
-                        Stop::Error(format!(
-                            "the repository has no default branch to read `{event}` runs from"
-                        )),
-                    )
+                    return Stop::Error(format!(
+                        "the repository has no default branch to read `{event}` runs from"
+                    ))
                 }
-                Err(e) => return (rows, Stop::Error(e)),
+                Err(e) => return Stop::Error(e),
             }
         } else {
             String::new()
         };
         let listed = match runs(http, opts, event, &branch) {
             Ok(r) => r,
-            Err(e) => return (rows, Stop::Error(e)),
+            Err(e) => return Stop::Error(e),
         };
         let total = listed.len();
         for (at, run) in listed.into_iter().enumerate() {
@@ -529,17 +633,27 @@ pub fn fetch(http: &dyn Http, opts: &Options, seen: &BTreeSet<(u64, u32)>) -> (V
                 if !seen.insert((id, attempt)) {
                     continue;
                 }
-                if opts.limit.is_some_and(|l| rows.len() >= l) {
-                    return (rows, Stop::Limit);
+                if opts.limit.is_some_and(|l| kept >= l) {
+                    return Stop::Limit;
                 }
-                match row_of(http, opts, &run, event, attempt, &mut lookups) {
-                    Ok(row) => rows.push(row),
-                    Err(e) => return (rows, Stop::Error(e)),
+                if !clone_checked {
+                    clone_checked = true;
+                    if let Err(e) = clone_is_of(opts, &run) {
+                        return Stop::Error(e);
+                    }
                 }
+                let row = match row_of(http, opts, &run, event, attempt, &mut lookups) {
+                    Ok(row) => row,
+                    Err(e) => return Stop::Error(e),
+                };
+                if let Err(e) = keep(row) {
+                    return Stop::Error(e);
+                }
+                kept += 1;
             }
         }
     }
-    (rows, Stop::Complete)
+    Stop::Complete
 }
 
 /// Every job of one attempt of a run, failed ones with what extraction reads.
