@@ -145,7 +145,7 @@ repositories are on the way
 
 ## What it does
 
-This README documents Fairlead 0.21.1. Each command, by what it's for:
+This README documents Fairlead 0.21.2. Each command, by what it's for:
 
 - **Setting a repository up:** `setup` and `guide`. *Since 0.20.0:* `setup`
   writes a first config when there is none, installs the agent hooks and the
@@ -247,9 +247,12 @@ The [quick start](#quick-start) shows the first few, and the
 
 ## Status
 
-Pre-alpha. The latest release, v0.21.1, fixes what the first live runs of
-the one before it showed: a skill offer now names the tool whose use is
-counted, and three lines that misled read plainly. That release added the
+Pre-alpha. The latest release, v0.21.2, makes a replay one that finishes:
+`fairlead replay fetch` keeps each row as it reads it, retries a transfer
+that failed, and refuses a clone of some other repository, whose history it
+would have read bases from. The one before it fixed what the first live
+runs of 0.21.0 showed: a skill offer names the tool whose use is counted,
+and three lines that misled read plainly. 0.21.0 added the
 merge check: `fairlead ci settle` fails a pull request when a step the
 commit's plan holds has no green run on that commit, so what the done gate
 owes to CI is collected by a check, not vouched for by a line of text. The

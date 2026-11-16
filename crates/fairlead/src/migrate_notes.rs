@@ -352,6 +352,13 @@ pub const RELEASES: &[(&str, &[Note])] = &[
             applies: always,
         }],
     ),
+    (
+        "0.21.2",
+        &[Note {
+            text: "Nothing to change in your files. `fairlead replay fetch` now refuses a `--clone` that isn't a checkout of `--repo`, and `fairlead replay run` one that holds none of the recorded commits: a scheduled replay that ran from the wrong folder stops with exit code 2 where it used to report every run unavailable. A workflow that saves the dataset should do it in a step that runs `if: always()`, since each row is now kept as it is read.",
+            applies: always,
+        }],
+    ),
 ];
 
 /// Config tables and keys by the release that added them. The top-level

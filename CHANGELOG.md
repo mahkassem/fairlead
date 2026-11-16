@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.21.2 (2026-11-16)
+
+A replay that finishes, and two gaps in the merge check. No new flag or config key.
+
+### Fixed
+
+- `fairlead replay fetch` held every row until it ended, so a fetch killed by a job's time limit kept nothing. Each row is now written as it is read. Part of a row left by a kill is dropped on the next read and fetched again, and a whole last row with no line end is kept.
+- A transfer that failed in transit (curl's timeout, a dropped connection) stopped the fetch. It is retried after 5, 10 and 15 seconds, as a server error is.
+- A spent hourly API budget stopped the fetch with GitHub's message alone. The message now says when the budget refills (`refills at 14:05 UTC`) and that the same command continues from the rows kept.
+- `fairlead replay fetch` read each row's base commit from `--clone` whatever repository it was a checkout of, so a fetch run from the wrong folder recorded bases from another history and said nothing. A clone is now refused before a row is read unless a remote of it names `--repo`, in any spelling of the URL, or it holds the first listed run's head, as a mirror does. The refusal lists the clone's remotes without any login they carry.
+- `fairlead replay run` against a clone that held none of the recorded commits printed a report of every run unavailable. It now stops with exit code 2 and names the repository the dataset was recorded for.
+- The replay report listed failed jobs no rule names at the end, where a report of nothing attributed hid them. When the gate isn't met and more failed jobs are unwatched than failures were attributed, a line under the totals says so first.
+- `fairlead ci settle` read the first hundred jobs of a run, so in a wide matrix a job named under `[ci.attested]` past them read as `absent from this run` although it was green. Every page of the listing is read.
+- The gate's pass line gave every owed step the first one's due date. Steps due at different times are named under their own: `owed to CI before merge: api 240; by the nightly run: e2e 119 test files`.
+
 ## 0.21.1 (2026-11-13)
 
 What the first live runs of 0.21.0 showed.

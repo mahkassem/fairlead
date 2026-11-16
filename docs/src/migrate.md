@@ -518,6 +518,18 @@ note after an edit now tells Claude Code to load a routed skill with its
 file to read. A hit rate measured before this release undercounts
 ([Skills](skills.md#measuring-routing-skills-report)).
 
+### To 0.21.2
+
+Migrate updates nothing in your files. 0.21.2 makes `fairlead replay` safe
+to leave to a schedule. One change can stop a job that ran before:
+`replay fetch` refuses a `--clone` that isn't a checkout of `--repo`, and
+`replay run` one that holds none of the recorded commits, both with exit
+code 2, where a replay from the wrong folder used to report every run
+unavailable. Each row is kept as it is read, so a workflow that saves the
+dataset should do it in a step that runs `if: always()`: a fetch that ran
+out of time or API budget then moves the next one forward
+([Replay](replay.md#replay-fetch)).
+
 ## Going back to an older release
 
 Install the older release, then run its `hooks uninstall` and
