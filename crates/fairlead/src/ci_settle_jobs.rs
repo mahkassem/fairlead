@@ -37,14 +37,33 @@ pub fn conclusion(jobs: &Value, name: &str) -> String {
     }
 }
 
-/// The run's jobs, at their newest attempt.
+/// A listing page holds this many jobs at most, and a wide matrix has more.
+const PAGE: usize = 100;
+/// More pages than any run has; a listing that never ends stops here.
+const PAGES: usize = 50;
+
+/// The run's jobs, at their newest attempt, from every page of the listing.
 fn listing(http: &dyn Http) -> Result<Value, String> {
-    let repo = var("GITHUB_REPOSITORY")?;
-    let run = var("GITHUB_RUN_ID")?;
-    get(
-        http,
-        &format!("/repos/{repo}/actions/runs/{run}/jobs?per_page=100&filter=latest"),
-    )
+    every_page(http, &var("GITHUB_REPOSITORY")?, &var("GITHUB_RUN_ID")?)
+}
+
+fn every_page(http: &dyn Http, repo: &str, run: &str) -> Result<Value, String> {
+    let mut all = Vec::new();
+    for page in 1..=PAGES {
+        let body = get(
+            http,
+            &format!(
+                "/repos/{repo}/actions/runs/{run}/jobs?per_page={PAGE}&filter=latest&page={page}"
+            ),
+        )?;
+        let jobs = body["jobs"].as_array().cloned().unwrap_or_default();
+        let last = jobs.len() < PAGE;
+        all.extend(jobs);
+        if last {
+            break;
+        }
+    }
+    Ok(serde_json::json!({ "jobs": all }))
 }
 
 /// Each attested step's jobs with what they concluded in this run. A
@@ -106,6 +125,7 @@ pub fn last_night(http: &dyn Http) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use fairlead_replay::github::Reply;
     use serde_json::json;
 
     #[test]
@@ -123,5 +143,33 @@ mod tests {
         assert_eq!(conclusion(&jobs, "slow"), "still running");
         assert_eq!(conclusion(&jobs, "gated"), "skipped");
         assert_eq!(conclusion(&jobs, "e2e"), "absent from this run");
+    }
+
+    /// A run of 230 jobs, listed a page at a time.
+    struct Wide;
+
+    impl Http for Wide {
+        fn get_json(&self, path: &str) -> Result<Reply<Value>, String> {
+            let page: usize = (path.rsplit("page=").next())
+                .and_then(|n| n.parse().ok())
+                .expect("the listing names its page");
+            let jobs: Vec<Value> = ((page - 1) * PAGE..(page * PAGE).min(230))
+                .map(|n| json!({"name": format!("shard ({n})"), "conclusion": "success"}))
+                .chain((page == 3).then(|| json!({"name": "last", "conclusion": "failure"})))
+                .collect();
+            Ok(Reply::new(200, json!({ "jobs": jobs })))
+        }
+
+        fn get_log(&self, _: &str, _: u64) -> Result<Reply<Option<String>>, String> {
+            unreachable!("a job listing reads no log")
+        }
+    }
+
+    #[test]
+    fn a_job_past_the_first_page_of_the_listing_is_read() {
+        let jobs = every_page(&Wide, "o/r", "7").unwrap();
+        assert_eq!(jobs["jobs"].as_array().unwrap().len(), 231);
+        assert_eq!(conclusion(&jobs, "shard"), "success");
+        assert_eq!(conclusion(&jobs, "last"), "failure");
     }
 }

@@ -81,4 +81,13 @@ fn the_pass_line_sums_what_each_runner_owes() {
     );
     let nightly = [debt("unit", 5, "untimed", "nightly")];
     assert!(owed_line(&nightly).contains("by the nightly run"));
+    let mixed = [
+        debt("e2e", 119, "blanket", "nightly"),
+        debt("api", 240, "budget", "merge"),
+        debt("e2e", 3, "budget", "merge"),
+    ];
+    assert_eq!(
+        owed_line(&mixed),
+        "; owed to CI by the nightly run: e2e 119; before merge: api 240, e2e 3 test files (`fairlead receipt` lists them)"
+    );
 }
