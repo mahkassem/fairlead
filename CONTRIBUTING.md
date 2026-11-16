@@ -12,6 +12,10 @@ Thanks for helping. A few rules keep the project small and trustworthy.
   `dist generate`; never edit it by hand. When Dependabot bumps an action that
   `release.yml` uses, update `[dist.github-action-commits]` in
   `dist-workspace.toml` to the same SHA and regenerate, or the `dist` job fails.
+- **On a small disk:** a debug target folder reaches about 6 GB, up to half of
+  it incremental state. With little free space (a cloud sandbox, an agent's
+  container) set `CARGO_INCREMENTAL=0`, share one `CARGO_TARGET_DIR` between
+  worktrees, and build them one after another.
 - **Tests:** anything with a branch, a loop or a rule gets a test. Integration
   tests drive the built binary (`tests/`).
 - **A faster edit loop (optional):** [blaze](https://github.com/indexable-inc/ra-jit)
