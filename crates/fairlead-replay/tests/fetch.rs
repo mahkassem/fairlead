@@ -3,7 +3,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Mutex;
 
-use fairlead_replay::fetch::{fetch, merge_queue_branch, Options, Stop};
+use fairlead_replay::fetch::{fetch, fetch_into, merge_queue_branch, Options, Stop};
 use fairlead_replay::github::{Http, Reply};
 use serde_json::{json, Value};
 
@@ -15,6 +15,8 @@ struct Recorded {
     /// `log:<job id>` answers that job's log.
     once: Mutex<Vec<(String, Reply<Value>)>>,
     paused: Mutex<Vec<u64>>,
+    /// Paths whose next request fails in transit, with curl's words.
+    dropped: Mutex<Vec<(String, String)>>,
     logs: BTreeMap<u64, String>,
     asked: Mutex<Vec<String>>,
 }
@@ -23,6 +25,11 @@ impl Http for Recorded {
     fn get_json(&self, path: &str) -> Result<Reply<Value>, String> {
         self.asked.lock().unwrap().push(path.to_string());
         let key = path.split('?').next().unwrap();
+        let mut dropped = self.dropped.lock().unwrap();
+        if let Some(i) = dropped.iter().position(|(p, _)| p == key) {
+            return Err(dropped.remove(i).1);
+        }
+        drop(dropped);
         if let Some(reply) = self.take_once(key) {
             return Ok(reply);
         }
@@ -53,6 +60,7 @@ impl Http for Recorded {
                 message: reply.message,
                 retry_after: reply.retry_after,
                 remaining: reply.remaining,
+                reset: reply.reset,
             });
         }
         Ok(match self.logs.get(&job_id) {
@@ -127,6 +135,7 @@ fn api() -> Recorded {
         status: BTreeMap::new(),
         once: Mutex::new(Vec::new()),
         paused: Mutex::new(Vec::new()),
+        dropped: Mutex::new(Vec::new()),
         logs,
         asked: Mutex::new(Vec::new()),
     }
@@ -581,4 +590,202 @@ fn a_token_that_cannot_read_annotations_records_the_runs_without_them() {
         http.paused.lock().unwrap().is_empty(),
         "no wait for a refusal"
     );
+}
+
+#[test]
+fn a_transfer_that_fails_is_retried_and_one_curl_never_ran_is_not() {
+    let http = api();
+    let jobs = "/repos/o/r/actions/runs/11/attempts/1/jobs";
+    let timed_out = "curl https://api.github.com: curl: (28) Operation timed out";
+    http.dropped
+        .lock()
+        .unwrap()
+        .push((jobs.into(), timed_out.into()));
+    let (rows, stop) = fetch(&http, &opts(None), &BTreeSet::new());
+    assert_eq!((rows.len(), stop), (2, Stop::Complete));
+    assert_eq!(*http.paused.lock().unwrap(), [5]);
+    let absent = api();
+    absent
+        .dropped
+        .lock()
+        .unwrap()
+        .push((jobs.into(), "couldn't run curl: not found".into()));
+    let (rows, stop) = fetch(&absent, &opts(None), &BTreeSet::new());
+    assert!(rows.is_empty());
+    assert!(matches!(stop, Stop::Error(e) if e.contains("couldn't run curl")));
+    assert!(absent.paused.lock().unwrap().is_empty());
+}
+
+#[test]
+fn an_exhausted_budget_says_when_it_refills_and_that_the_rows_are_kept() {
+    let http = api();
+    http.answer_once(
+        "/repos/o/r/actions/runs/11/attempts/2/jobs",
+        Reply {
+            remaining: Some(0),
+            // Five past two in the afternoon, UTC.
+            reset: Some(1_790_085_900),
+            message: "API rate limit exceeded for installation".into(),
+            ..Reply::new(403, Value::Null)
+        },
+    );
+    let (rows, stop) = fetch(&http, &opts(None), &BTreeSet::new());
+    assert_eq!(rows.len(), 1, "the row read before the refusal comes back");
+    let Stop::Error(e) = stop else {
+        panic!("the fetch stops")
+    };
+    assert!(
+        e.contains("hourly budget is spent, and refills at 14:05 UTC"),
+        "{e}"
+    );
+    assert!(e.contains("the same command continues from them"), "{e}");
+}
+
+#[test]
+fn each_row_is_handed_over_before_the_next_is_asked_for() {
+    let http = api();
+    let mut asked_at = Vec::new();
+    let stop = fetch_into(&http, &opts(None), &BTreeSet::new(), &mut |row| {
+        asked_at.push((row.run_id, row.attempt, http.asked.lock().unwrap().len()));
+        Ok(())
+    });
+    assert_eq!(stop, Stop::Complete);
+    assert_eq!(asked_at.len(), 2);
+    assert!(asked_at[0].2 < asked_at[1].2, "{asked_at:?}");
+    let full = api();
+    let mut kept = 0;
+    let stop = fetch_into(&full, &opts(None), &BTreeSet::new(), &mut |_| {
+        kept += 1;
+        Err("the disk is full".into())
+    });
+    assert_eq!((kept, stop), (1, Stop::Error("the disk is full".into())));
+}
+
+fn git(dir: &std::path::Path, args: &[&str]) {
+    let ok = std::process::Command::new("git")
+        .arg("-C")
+        .arg(dir)
+        .args(args)
+        .output()
+        .unwrap()
+        .status
+        .success();
+    assert!(ok, "git {args:?}");
+}
+
+/// A folder of its own under the system's, removed when the test is done.
+struct Folder(std::path::PathBuf);
+
+impl Folder {
+    fn path(&self) -> &std::path::Path {
+        &self.0
+    }
+}
+
+impl Drop for Folder {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.0);
+    }
+}
+
+fn clone_with_remote(name: &str, url: Option<&str>) -> Folder {
+    let dir = std::env::temp_dir().join(format!("fairlead-fetch-{name}-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    git(&dir, &["init", "-q"]);
+    if let Some(url) = url {
+        git(&dir, &["remote", "add", "origin", url]);
+    }
+    Folder(dir)
+}
+
+/// The remotes are on a port that refuses at once, so looking for the run's
+/// head never leaves the machine.
+#[test]
+fn a_clone_of_another_repository_is_refused_before_a_row_is_read() {
+    for url in [
+        Some("https://x-access-token:secret@localhost:1/o/another.git"),
+        None,
+    ] {
+        let clone = clone_with_remote("other", url);
+        let http = api();
+        let options = Options {
+            clone: Some(clone.path()),
+            ..opts(None)
+        };
+        let (rows, stop) = fetch(&http, &options, &BTreeSet::new());
+        assert!(rows.is_empty());
+        let Stop::Error(e) = stop else {
+            panic!("the fetch stops")
+        };
+        assert!(e.contains("isn't a checkout of o/r"), "{e}");
+        assert!(e.contains("it doesn't hold aaa, the head of run 11"), "{e}");
+        assert!(!e.contains("secret"), "{e}");
+        match url {
+            Some(_) => assert!(e.contains("https://localhost:1/o/another.git"), "{e}"),
+            None => assert!(e.contains("it has no remote"), "{e}"),
+        }
+        let asked = http.asked.lock().unwrap();
+        assert!(asked.iter().all(|p| !p.contains("/jobs")), "{asked:?}");
+    }
+}
+
+#[test]
+fn a_clone_whose_remote_names_the_repository_is_read_in_any_spelling() {
+    for url in [
+        "https://github.com/O/R.git",
+        "git@github.com:o/r.git",
+        "https://github.com/o/r/",
+        "ssh://git@github.com/o/r",
+    ] {
+        let clone = clone_with_remote("named", Some(url));
+        let options = Options {
+            clone: Some(clone.path()),
+            ..opts(None)
+        };
+        let (rows, stop) = fetch(&api(), &options, &BTreeSet::new());
+        assert_eq!((rows.len(), stop), (2, Stop::Complete), "{url}");
+    }
+    // `o/r` must end the path: `o/rr` and `oo/r` are other repositories.
+    for url in ["https://localhost:1/oo/r.git", "https://localhost:1/o/rr"] {
+        let clone = clone_with_remote("alike", Some(url));
+        let options = Options {
+            clone: Some(clone.path()),
+            ..opts(None)
+        };
+        let (_, stop) = fetch(&api(), &options, &BTreeSet::new());
+        assert!(matches!(stop, Stop::Error(_)), "{url}");
+    }
+}
+
+#[test]
+fn a_mirror_that_holds_the_run_head_is_read_whatever_its_remote_is_called() {
+    let clone = clone_with_remote("mirror", Some("https://git.example.com/mirrors/thing.git"));
+    let identity = ["-c", "user.name=t", "-c", "user.email=t@example.com"];
+    let commit = [
+        &identity[..],
+        &["commit", "-q", "--allow-empty", "-m", "one"],
+    ]
+    .concat();
+    git(clone.path(), &commit);
+    let out = std::process::Command::new("git")
+        .arg("-C")
+        .arg(clone.path())
+        .args(["rev-parse", "HEAD"])
+        .output()
+        .unwrap();
+    let head = String::from_utf8_lossy(&out.stdout).trim().to_string();
+    let mut http = api();
+    http.responses.insert(
+        "/repos/o/r/actions/runs".into(),
+        json!({ "total_count": 1, "workflow_runs": [
+            { "id": 11, "name": "ci", "head_sha": head, "head_branch": "feature", "run_attempt": 1, "created_at": "2026-09-20T10:00:00Z" }
+        ]}),
+    );
+    let options = Options {
+        clone: Some(clone.path()),
+        ..opts(None)
+    };
+    let (rows, stop) = fetch(&http, &options, &BTreeSet::new());
+    assert_eq!((rows.len(), stop), (1, Stop::Complete));
 }

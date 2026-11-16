@@ -257,7 +257,8 @@ pub fn read(path: &Path) -> Result<Vec<Row>, String> {
     let Ok(text) = std::fs::read_to_string(path) else {
         return Ok(Vec::new());
     };
-    text.lines()
+    text[..text.len() - cut_tail(&text)]
+        .lines()
         .enumerate()
         .filter(|(_, l)| !l.trim().is_empty())
         .map(|(i, l)| {
@@ -266,27 +267,75 @@ pub fn read(path: &Path) -> Result<Vec<Row>, String> {
         .collect()
 }
 
+/// How many bytes at the end are part of a row: a fetch killed while
+/// writing leaves them after the last line end, and that row is fetched
+/// again rather than read. A whole row with no line end after it stays.
+fn cut_tail(text: &str) -> usize {
+    let tail = text.rfind('\n').map_or(text, |at| &text[at + 1..]);
+    match tail.trim().is_empty() || serde_json::from_str::<Row>(tail).is_ok() {
+        true => 0,
+        false => tail.len(),
+    }
+}
+
 /// Appends the rows not already present by (run, attempt); returns how many.
 pub fn append(path: &Path, rows: &[Row]) -> Result<usize, String> {
     let mut existing: BTreeSet<(u64, u32)> =
         read(path)?.iter().map(|r| (r.run_id, r.attempt)).collect();
-    let fresh: Vec<&Row> = rows
-        .iter()
-        .filter(|r| existing.insert((r.run_id, r.attempt)))
-        .collect();
-    if let Some(dir) = path.parent().filter(|d| !d.as_os_str().is_empty()) {
-        std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
+    let mut writer = Writer::open(path)?;
+    for row in rows {
+        if existing.insert((row.run_id, row.attempt)) {
+            writer.write(row)?;
+        }
     }
-    let mut file = std::fs::OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(path)
-        .map_err(|e| format!("could not open {}: {e}", path.display()))?;
-    for row in &fresh {
+    Ok(writer.written)
+}
+
+/// The dataset open for appending, one row a line, each written whole
+/// before the next is asked for.
+pub struct Writer {
+    file: std::fs::File,
+    pub written: usize,
+}
+
+impl Writer {
+    pub fn open(path: &Path) -> Result<Writer, String> {
+        if let Some(dir) = path.parent().filter(|d| !d.as_os_str().is_empty()) {
+            std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
+        }
+        let failed = |e: std::io::Error| format!("could not open {}: {e}", path.display());
+        // Part of a row left by a killed fetch would join the next row's line,
+        // and so would a last row with no line end.
+        if let Ok(text) = std::fs::read_to_string(path) {
+            let cut = cut_tail(&text);
+            let ended = text.is_empty() || text.ends_with('\n');
+            let mut file = std::fs::OpenOptions::new()
+                .append(true)
+                .open(path)
+                .map_err(failed)?;
+            match (cut, ended) {
+                (0, true) => {}
+                (0, false) => file.write_all(b"\n").map_err(failed)?,
+                _ => file.set_len((text.len() - cut) as u64).map_err(failed)?,
+            }
+        }
+        let file = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(path)
+            .map_err(failed)?;
+        Ok(Writer { file, written: 0 })
+    }
+
+    pub fn write(&mut self, row: &Row) -> Result<(), String> {
         let line = serde_json::to_string(row).expect("row serializes");
-        writeln!(file, "{line}").map_err(|e| e.to_string())?;
+        // One write for the line and its end, so a kill never leaves half a row.
+        self.file
+            .write_all(format!("{line}\n").as_bytes())
+            .map_err(|e| e.to_string())?;
+        self.written += 1;
+        Ok(())
     }
-    Ok(fresh.len())
 }
 
 #[cfg(test)]
@@ -308,6 +357,26 @@ mod tests {
             seconds: None,
             jobs: Vec::new(),
         }
+    }
+
+    #[test]
+    fn part_of_a_row_left_by_a_killed_fetch_is_dropped_and_written_over() {
+        let dir = std::env::temp_dir().join(format!("fairlead-dataset-cut-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let path = dir.join("runs.jsonl");
+        append(&path, &[row(1, 1)]).unwrap();
+        let whole = std::fs::read_to_string(&path).unwrap();
+        std::fs::write(&path, format!("{whole}{}", &whole[..whole.len() / 2])).unwrap();
+        assert_eq!(read(&path).unwrap().len(), 1, "the half row is not read");
+        assert_eq!(append(&path, &[row(1, 1), row(2, 1)]).unwrap(), 1);
+        let ids: Vec<u64> = read(&path).unwrap().iter().map(|r| r.run_id).collect();
+        assert_eq!(ids, [1, 2]);
+        // A whole last row with no line end stays, and the next starts its own line.
+        std::fs::write(&path, whole.trim_end()).unwrap();
+        assert_eq!(append(&path, &[row(3, 1)]).unwrap(), 1);
+        let ids: Vec<u64> = read(&path).unwrap().iter().map(|r| r.run_id).collect();
+        assert_eq!(ids, [1, 3]);
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

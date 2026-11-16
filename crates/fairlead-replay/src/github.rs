@@ -16,6 +16,8 @@ pub struct Reply<T> {
     pub message: String,
     pub retry_after: Option<u64>,
     pub remaining: Option<u64>,
+    /// When the hourly budget refills, in seconds since the epoch.
+    pub reset: Option<u64>,
 }
 
 impl<T> Reply<T> {
@@ -26,6 +28,7 @@ impl<T> Reply<T> {
             message: String::new(),
             retry_after: None,
             remaining: None,
+            reset: None,
         }
     }
 }
@@ -189,6 +192,7 @@ fn reply<T>(status: u16, head: &str, raw: &str, body: T) -> Reply<T> {
         message,
         retry_after: header(head, "retry-after").and_then(|v| v.parse().ok()),
         remaining: header(head, "x-ratelimit-remaining").and_then(|v| v.parse().ok()),
+        reset: header(head, "x-ratelimit-reset").and_then(|v| v.parse().ok()),
     }
 }
 

@@ -170,8 +170,10 @@ fn run_fetch(
         until: None,
         events,
     };
-    let (rows, stop) = fairlead_replay::fetch::fetch(&http, &opts, &seen);
-    let added = dataset::append(data, &rows)?;
+    let mut writer = dataset::Writer::open(data)?;
+    let stop =
+        fairlead_replay::fetch::fetch_into(&http, &opts, &seen, &mut |row| writer.write(&row));
+    let added = writer.written;
     let at = data.display();
     match stop {
         Stop::Complete => println!("fetch complete: {added} new rows in {at}"),
@@ -270,11 +272,20 @@ fn run_replay(
         let missing = fairlead_replay::git::fetch_missing(&clone, &shas);
         eprintln!("{} recorded commits, {missing} still missing", shas.len());
     }
-    let start = rows
+    let found = rows
         .iter()
-        .find(|r| fairlead_replay::git::has_commit(&clone, &r.head_sha))
-        .map(|r| r.head_sha.clone())
-        .unwrap_or_else(|| "HEAD".into());
+        .find(|r| fairlead_replay::git::has_commit(&clone, &r.head_sha));
+    let Some(start) = found.map(|r| r.head_sha.clone()) else {
+        return Err(format!(
+            "`{}` holds none of the {} commits the dataset records for {repo}: it is a checkout of another repository, or one that never fetched them. Pass {repo}'s checkout to `--clone`{}",
+            clone.display(),
+            rows.len(),
+            match output.fetch_missing {
+                true => "",
+                false => ", and `--fetch-missing` to fetch what it lacks",
+            }
+        ));
+    };
     let replayer = Replayer {
         clone: &clone,
         worktree: Worktree::open(&clone, &wt_path, &start)?,
