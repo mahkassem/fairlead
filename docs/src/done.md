@@ -65,6 +65,8 @@ done: unit: 41 of 380 reached test files run here; 339 owed to CI before merge: 
 done: passed, 6 steps; owed to CI before merge: unit 339 test files (`fairlead receipt` lists them)
 ```
 
+*Since 0.21.2:* steps owed at different times are named under their own, `owed to CI before merge: api 240; by the nightly run: e2e 119 test files`, where the line used to give every step the first one's.
+
 **A blanket** is what reaches a test when no file does: a `plan.run_all` path, the widening for a changed file nothing reaches, or `[[graph.edges]]` rules that reach `plan.blanket_share` (0.3) or more of a runner's suite. A suite reached only that way runs whole when all of it fits what's left of the budget. Otherwise the gate runs the runner's `smoke` set, the few files that stand for the suite, and owes the rest:
 
 ```toml

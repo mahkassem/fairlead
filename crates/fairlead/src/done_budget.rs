@@ -465,20 +465,33 @@ fn lines(
 }
 
 /// The pass line's account of what is owed: "; owed to CI before merge:
-/// api 251, e2e 119 test files (`fairlead receipt` lists them)".
+/// api 251, e2e 119 test files (`fairlead receipt` lists them)". Steps due
+/// at different times are named under their own: "before merge: api 251;
+/// by the nightly run: e2e 119".
 pub fn owed_line(debts: &[Debt]) -> String {
     if debts.is_empty() {
         return String::new();
     }
-    let mut by_step: BTreeMap<&str, usize> = BTreeMap::new();
+    let mut dues: Vec<&str> = Vec::new();
     for d in debts {
-        *by_step.entry(d.step.as_str()).or_insert(0) += d.files;
+        if !dues.contains(&when(&d.due)) {
+            dues.push(when(&d.due));
+        }
     }
-    let parts: Vec<String> = by_step.iter().map(|(s, n)| format!("{s} {n}")).collect();
+    let groups: Vec<String> = dues
+        .into_iter()
+        .map(|due| {
+            let mut by_step: BTreeMap<&str, usize> = BTreeMap::new();
+            for d in debts.iter().filter(|d| when(&d.due) == due) {
+                *by_step.entry(d.step.as_str()).or_insert(0) += d.files;
+            }
+            let parts: Vec<String> = by_step.iter().map(|(s, n)| format!("{s} {n}")).collect();
+            format!("{due}: {}", parts.join(", "))
+        })
+        .collect();
     format!(
-        "; owed to CI {}: {} test files (`fairlead receipt` lists them)",
-        when(&debts[0].due),
-        parts.join(", ")
+        "; owed to CI {} test files (`fairlead receipt` lists them)",
+        groups.join("; ")
     )
 }
 
