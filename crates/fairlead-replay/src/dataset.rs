@@ -309,14 +309,20 @@ impl Writer {
         if let Ok(text) = std::fs::read_to_string(path) {
             let cut = cut_tail(&text);
             let ended = text.is_empty() || text.ends_with('\n');
-            let mut file = std::fs::OpenOptions::new()
-                .append(true)
-                .open(path)
-                .map_err(failed)?;
+            // Cutting needs a handle open for writing: one open to append may not shorten the file.
+            let open = |append: bool| {
+                (std::fs::OpenOptions::new()
+                    .write(true)
+                    .append(append)
+                    .open(path))
+                .map_err(failed)
+            };
             match (cut, ended) {
                 (0, true) => {}
-                (0, false) => file.write_all(b"\n").map_err(failed)?,
-                _ => file.set_len((text.len() - cut) as u64).map_err(failed)?,
+                (0, false) => open(true)?.write_all(b"\n").map_err(failed)?,
+                _ => open(false)?
+                    .set_len((text.len() - cut) as u64)
+                    .map_err(failed)?,
             }
         }
         let file = std::fs::OpenOptions::new()
