@@ -57,7 +57,7 @@ api = ["api", "api-reach"]
 ```
 
 A step with no results file is then taken as attested when every job named for it succeeded in the same workflow
-run. A matrix's legs, `browser (1/2)` and `browser (2/2)`, are all the job `browser`, and each has to succeed. *Since 0.22.0:* every page of the run's job listing is read, where a job past the first hundred used to read as absent from the run. A job
+run. A matrix's legs, `browser (1/2)` and `browser (2/2)`, are all the job `browser`, and each has to succeed. *Since 0.21.2:* every page of the run's job listing is read, where a job past the first hundred used to read as absent from the run. A job
 that was skipped, cancelled, still running or absent from the run settles nothing, so the settle job has to `needs:`
 the jobs it reads, and they have to be in the same workflow.
 
