@@ -2,28 +2,28 @@
 
 Replay results on public repositories, written by the `bench` workflow. See [Replay](replay.md) for what each measure means; the configs are in `bench/`.
 
-Planned with Fairlead 0.21.1 at `7f7c49ee9e2f`.
+Planned with Fairlead 0.21.2 at `d14d5a1a643d`.
 
 ## Effect-TS/effect
 
-Window 2026-06-15 to 2026-09-12; dataset `bench/data/Effect-TS_effect.jsonl`, 3975 run attempts from 2026-06-22 to 2026-09-12. Fetch: `fetch partial: 300 new rows in out/data.jsonl; run again to continue`.
+Window 2026-06-15 to 2026-09-12; dataset `bench/data/Effect-TS_effect.jsonl`, 4275 run attempts from 2026-06-22 to 2026-09-12. Fetch: `fetch partial: 300 new rows in out/data.jsonl; run again to continue`.
 
 | Measure | Value |
 | --- | --- |
-| Runs replayed | 626 |
-| Attributed failures (gate 30) | 1558 (met) |
-| Recall | 99.1% |
-| Recall with quarantined tests counted (raw) | 97.9% (n=1674) |
-| Recall with them left out (adjusted) | 99.1% (n=1558) |
+| Runs replayed | 657 |
+| Attributed failures (gate 30) | 1669 (met) |
+| Recall | 99.2% |
+| Recall with quarantined tests counted (raw) | 98.0% (n=1785) |
+| Recall with them left out (adjusted) | 99.2% (n=1669) |
 | Strict recall (unconfirmed as misses) | 99.0% |
-| Hits: selected, run everything, checks | 530, 705, 309 |
+| Hits: selected, run everything, checks | 551, 788, 316 |
 | Misses | 14 |
-| Flaky, unconfirmed, unattributed | 186, 2, 67 |
-| Unavailable, errors, ignored | 0, 0, 12 |
-| Test files selected: median, p90 | 7.5%, 100.0% |
-| Plans that selected everything | 18.0% |
-| Plan time: first (cold), median, p90 | 1.74 s, 0.16 s, 0.48 s |
-| Recall on `pull_request` runs (strict) | 99.1% (99.0%) |
+| Flaky, unconfirmed, unattributed | 200, 2, 78 |
+| Unavailable, errors, ignored | 0, 0, 14 |
+| Test files selected: median, p90 | 8.0%, 100.0% |
+| Plans that selected everything | 19.7% |
+| Plan time: first (cold), median, p90 | 1.76 s, 0.17 s, 0.49 s |
+| Recall on `pull_request` runs (strict) | 99.2% (99.0%) |
 
 Quarantined tests (declared in the bench config, applied only while the data bears them out):
 
@@ -36,16 +36,16 @@ Quarantined tests (declared in the bench config, applied only while the data bea
 
 Plans that selected everything, by cause:
 
-- `unreached packages/**`: 24
+- `unreached packages/**`: 27
+- `run-all tsconfig.packages.json`: 20
+- `run-all package.json`: 19
+- `run-all .github/**`: 18
 - `run-all tsconfig.base.json`: 18
-- `run-all tsconfig.packages.json`: 18
-- `run-all package.json`: 16
-- `run-all .github/**`: 13
 - `run-all packages/**`: 5
 - `run-all vitest.config.ts`: 5
+- `unreached ai-docs/**`: 5
 - `unreached .agents/**`: 4
-- `run-all pnpm-workspace.yaml`: 2
-- `unreached .vscode/**`: 2
+- `run-all pnpm-lock.yaml`: 2
 
 Failed jobs no rule watches:
 
@@ -73,29 +73,29 @@ Misses:
 
 ## pnpm/pnpm
 
-Window 2026-06-15 to 2026-09-12; dataset `bench/data/pnpm_pnpm.jsonl`, 4600 run attempts from 2026-06-25 to 2026-09-12. Fetch: `fetch partial: 300 new rows in out/data.jsonl; run again to continue`.
+Window 2026-06-15 to 2026-09-12; dataset `bench/data/pnpm_pnpm.jsonl`, 4900 run attempts from 2026-06-25 to 2026-09-12. Fetch: `fetch partial: 300 new rows in out/data.jsonl; run again to continue`.
 
 | Measure | Value |
 | --- | --- |
-| Runs replayed | 557 |
-| Attributed failures (gate 30) | 635 (met) |
+| Runs replayed | 567 |
+| Attributed failures (gate 30) | 642 (met) |
 | Recall | 100.0% |
 | Strict recall (unconfirmed as misses) | 100.0% |
-| Hits: selected, run everything, checks | 95, 539, 1 |
+| Hits: selected, run everything, checks | 95, 546, 1 |
 | Misses | 0 |
-| Flaky, unconfirmed, unattributed | 144, 0, 263 |
-| Unavailable, errors, ignored | 0, 0, 605 |
+| Flaky, unconfirmed, unattributed | 148, 0, 265 |
+| Unavailable, errors, ignored | 0, 0, 616 |
 | Test files selected: median, p90 | 100.0%, 100.0% |
-| Plans that selected everything | 85.1% |
-| Plan time: first (cold), median, p90 | 0.96 s, 0.32 s, 0.37 s |
+| Plans that selected everything | 85.3% |
+| Plan time: first (cold), median, p90 | 0.97 s, 0.31 s, 0.38 s |
 | Recall on `pull_request` runs (strict) | 100.0% (100.0%) |
 
 Plans that selected everything, by cause:
 
-- `unreached pnpm/**`: 186
-- `run-all pnpm-lock.yaml`: 132
+- `unreached pnpm/**`: 189
+- `run-all pnpm-lock.yaml`: 135
 - `unreached Cargo.lock`: 34
-- `run-all .github/**`: 29
+- `run-all .github/**`: 32
 - `unreached pacquet/**`: 19
 - `unreached .gitignore`: 14
 - `unreached cspell.json`: 14
@@ -105,41 +105,41 @@ Plans that selected everything, by cause:
 
 ## vitest-dev/vitest
 
-Window 2026-08-12 to 2026-11-09; dataset `bench/data/vitest-dev_vitest.jsonl`, 2811 run attempts from 2026-06-21 to 2026-11-09. Fetch: `fetch partial: 300 new rows in out/data.jsonl; run again to continue`.
+Window 2026-08-23 to 2026-11-20; dataset `bench/data/vitest-dev_vitest.jsonl`, 3111 run attempts from 2026-06-21 to 2026-11-20. Fetch: `fetch partial: 300 new rows in out/data.jsonl; run again to continue`.
 
 | Measure | Value |
 | --- | --- |
-| Runs replayed | 1039 |
-| Attributed failures (gate 30) | 874 (met) |
-| Recall | 99.5% |
-| Recall with quarantined tests counted (raw) | 97.1% (n=1414) |
-| Recall with them left out (adjusted) | 99.5% (n=874) |
+| Runs replayed | 951 |
+| Attributed failures (gate 30) | 901 (met) |
+| Recall | 99.6% |
+| Recall with quarantined tests counted (raw) | 97.2% (n=1475) |
+| Recall with them left out (adjusted) | 99.6% (n=901) |
 | Strict recall (unconfirmed as misses) | 99.3% |
-| Hits: selected, run everything, checks | 678, 101, 91 |
+| Hits: selected, run everything, checks | 681, 126, 90 |
 | Misses | 4 |
-| Flaky, unconfirmed, unattributed | 126, 2, 1139 |
-| Unavailable, errors, ignored | 0, 0, 1652 |
+| Flaky, unconfirmed, unattributed | 135, 2, 820 |
+| Unavailable, errors, ignored | 0, 0, 1676 |
 | Test files selected: median, p90 | 98.4%, 100.0% |
-| Plans that selected everything | 27.0% |
-| Plan time: first (cold), median, p90 | 0.67 s, 0.11 s, 0.20 s |
-| Recall on `pull_request` runs (strict) | 99.5% (99.3%) |
+| Plans that selected everything | 31.5% |
+| Plan time: first (cold), median, p90 | 0.48 s, 0.11 s, 0.20 s |
+| Recall on `pull_request` runs (strict) | 99.6% (99.3%) |
 
 Quarantined tests (declared in the bench config, applied only while the data bears them out):
 
-- `test/typescript/test/typechecker.test.ts` in jobs `^Test: unit, node-24, windows-latest$`: stale, 0 failures absorbed (0 would-be hits, 0 would-be misses), 0 pull requests, until 2026-12-31. Fails only on the Windows unit job (its out-of-memory crash and missing-command cases): 60 failures across 36 pull requests from June to August 2026, while the same job passed 356 times and no other job ever failed it.
+- `test/typescript/test/typechecker.test.ts` in jobs `^Test: unit, node-24, windows-latest$`: unverified, 0 failures absorbed (0 would-be hits, 0 would-be misses), 2 pull requests, until 2026-12-31. Fails only on the Windows unit job (its out-of-memory crash and missing-command cases): 60 failures across 36 pull requests from June to August 2026, while the same job passed 356 times and no other job ever failed it.
 
 Plans that selected everything, by cause:
 
-- `run-all .github/**`: 146
-- `run-all package.json`: 43
-- `run-all pnpm-lock.yaml`: 25
-- `run-all pnpm-workspace.yaml`: 22
+- `run-all .github/**`: 138
+- `run-all pnpm-lock.yaml`: 46
+- `run-all package.json`: 44
+- `run-all pnpm-workspace.yaml`: 28
 - `unreached .gitattributes`: 14
 - `run-all test/**`: 8
-- `unreached eslint.config.js`: 4
 - `unreached .gitignore`: 3
 - `unreached test/**`: 2
 - `run-all packages/**`: 1
+- `unreached .github/**`: 1
 
 Failed jobs no rule watches:
 
